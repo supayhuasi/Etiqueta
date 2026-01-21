@@ -14,26 +14,26 @@ SELECT
     p.codigo_barra,
     p.numero_orden,
     h.estado_id,
-    DATEDIFF(NOW(), h.fecha_estado) AS dias_en_estado,
+    DATEDIFF(NOW(), h.fecha) AS dias_en_estado,
 
     CASE
-        WHEN h.estado_id = 1 AND DATEDIFF(NOW(), h.fecha_estado) > 20 THEN 'rojo'
-        WHEN h.estado_id = 1 AND DATEDIFF(NOW(), h.fecha_estado) > 15 THEN 'amarillo'
-        WHEN h.estado_id = 2 AND DATEDIFF(NOW(), h.fecha_estado) > 15 THEN 'rojo'
-        WHEN h.estado_id = 2 AND DATEDIFF(NOW(), h.fecha_estado) > 10 THEN 'amarillo'
+        WHEN h.estado_id = 1 AND DATEDIFF(NOW(), h.fecha) > 20 THEN 'rojo'
+        WHEN h.estado_id = 1 AND DATEDIFF(NOW(), h.fecha) > 15 THEN 'amarillo'
+        WHEN h.estado_id = 2 AND DATEDIFF(NOW(), h.fecha) > 15 THEN 'rojo'
+        WHEN h.estado_id = 2 AND DATEDIFF(NOW(), h.fecha) > 10 THEN 'amarillo'
         ELSE 'verde'
     END AS semaforo
 
 FROM productos p
-JOIN historial_estados h 
+JOIN historial_estados h
   ON h.producto_id = p.id
 JOIN (
-    SELECT producto_id, MAX(fecha_estado) AS ultima_fecha
+    SELECT producto_id, MAX(fecha) AS ultima_fecha
     FROM historial_estados
     GROUP BY producto_id
-) ult 
-  ON ult.producto_id = h.producto_id 
- AND ult.ultima_fecha = h.fecha_estado
+) ult
+  ON ult.producto_id = h.producto_id
+ AND ult.ultima_fecha = h.fecha
 
 WHERE h.estado_id < 4
 ORDER BY
@@ -50,9 +50,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // ==========================
 $kpis = ['verde'=>0, 'amarillo'=>0, 'rojo'=>0];
 foreach ($productos as $p) {
-    if (isset($kpis[$p['semaforo']])) {
-        $kpis[$p['semaforo']]++;
-    }
+    $kpis[$p['semaforo']]++;
 }
 
 // ==========================
