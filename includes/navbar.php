@@ -26,6 +26,9 @@ if (!isset($_SESSION)) {
         <li class="nav-item">
           <a class="nav-link" href="scan.php">Escaneo</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" href="dashboard.php">📊 Dashboard</a>
+        </li>
 
         <?php if ($_SESSION['rol'] === 'admin'): ?>
         <li class="nav-item dropdown">
