@@ -81,7 +81,7 @@ function badgeColor($s) {
 
 <body class="bg-light">
 
-<?php require_once 'navbar.php'; ?>
+<?php require_once 'includes/navbar.php'; ?>
 
 <div class="container-fluid p-4">
 
