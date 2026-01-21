@@ -65,7 +65,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 
 <body>
-    <?php include 'includes/navbar.php'; ?>
     <div class="scanner-container text-center">
         <h1 class="mb-5">📦 Escanear cortina / toldo</h1>
 
