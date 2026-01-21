@@ -89,7 +89,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <thead class="table-dark">
                 <tr>
                     <th>Código</th>
-                    <th>Orden</th>
+                    <th>Cliente</th>
                     <th>Tipo</th>
                     <th>Medidas</th>
                     <th>Estado</th>

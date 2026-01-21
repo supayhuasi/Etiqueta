@@ -126,7 +126,7 @@ function badgeColor($s) {
 <table class="table table-hover align-middle">
 <thead class="table-dark">
 <tr>
-    <th>Orden</th>
+    <th>Cliente</th>
     <th>Estado</th>
     <th>Días</th>
     <th>Semáforo</th>

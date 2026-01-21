@@ -1,7 +1,8 @@
-<?php require 'config.php';
+<?php
+require 'config.php';
 
-$telas = $pdo->query("SELECT * FROM telas WHERE activo=1")->fetchAll();
-$colores = $pdo->query("SELECT * FROM colores WHERE activo=1")->fetchAll();
+$telas = $pdo->query("SELECT * FROM telas WHERE activo = 1 ORDER BY nombre")->fetchAll();
+$colores = $pdo->query("SELECT * FROM colores WHERE activo = 1 ORDER BY nombre")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -13,66 +14,86 @@ $colores = $pdo->query("SELECT * FROM colores WHERE activo=1")->fetchAll();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
-    <div class="container mt-5">
-        <div class="row">
-            <div class="col-md-6">
-                <h2 class="mb-4">Nuevo Producto</h2>
 
-                <form action="guardar.php" method="post">
-                    <div class="mb-3">
-                        <label for="tipo" class="form-label">Tipo</label>
-                        <select class="form-select" id="tipo" name="tipo" required>
-                            <option value="roller">Roller</option>
-                            <option value="toldo">Toldo</option>
-                        </select>
-                    </div>
+<?php include __DIR__ . '/includes/navbar.php'; ?>
 
-                    <div class="mb-3">
-                        <label for="numero_orden" class="form-label">Número Orden</label>
-                        <input class="form-control" id="numero_orden" name="numero_orden" required>
-                    </div>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
 
-                    <div class="mb-3">
+            <h2 class="mb-4">➕ Nuevo Producto</h2>
+
+            <form action="guardar.php" method="post">
+
+                <!-- TIPO -->
+                <div class="mb-3">
+                    <label for="tipo" class="form-label">Tipo</label>
+                    <select class="form-select" id="tipo" name="tipo" required>
+                        <option value="">Seleccione tipo</option>
+                        <option value="Roller">Roller</option>
+                        <option value="Toldo">Toldo</option>
+                        <option value="Banda Vertical">Banda Vertical</option>
+                        <option value="Panel Oriental">Panel Oriental</option>
+                        <option value="Mosquitero">Mosquitero</option>
+                    </select>
+                </div>
+
+                <!-- ORDEN -->
+                <div class="mb-3">
+                    <label for="numero_orden" class="form-label">Cliente</label>
+                    <input type="text" class="form-control" id="numero_orden" name="numero_orden" required>
+                </div>
+
+                <!-- MEDIDAS -->
+                <div class="row">
+                    <div class="col">
                         <label for="ancho_cm" class="form-label">Ancho (cm)</label>
-                        <input class="form-control" type="number" id="ancho_cm" name="ancho_cm" required>
+                        <input type="number" class="form-control" id="ancho_cm" name="ancho_cm" required>
                     </div>
-
-                    <div class="mb-3">
+                    <div class="col">
                         <label for="alto_cm" class="form-label">Alto (cm)</label>
-                        <input class="form-control" type="number" id="alto_cm" name="alto_cm" required>
+                        <input type="number" class="form-control" id="alto_cm" name="alto_cm" required>
                     </div>
+                </div>
 
-                    <div class="mb-3">
-                        <label for="tela_id" class="form-label">Tela</label>
-                        <select class="form-select" id="tela_id" name="tela_id">
-                            <option value="">--</option>
-                            <?php foreach ($telas as $t): ?>
-                                <option value="<?= $t['id'] ?>"><?= $t['nombre'] ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                <!-- TELA -->
+                <div class="mb-3 mt-3">
+                    <label for="tela_id" class="form-label">Tela</label>
+                    <select class="form-select" id="tela_id" name="tela_id">
+                        <option value="">-- Sin tela --</option>
+                        <?php foreach ($telas as $t): ?>
+                            <option value="<?= $t['id'] ?>">
+                                <?= htmlspecialchars($t['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-                    <div class="mb-3">
-                        <label for="color_id" class="form-label">Color</label>
-                        <select class="form-select" id="color_id" name="color_id">
-                            <option value="">--</option>
-                            <?php foreach ($colores as $c): ?>
-                                <option value="<?= $c['id'] ?>"><?= $c['nombre'] ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                <!-- COLOR -->
+                <div class="mb-3">
+                    <label for="color_id" class="form-label">Color</label>
+                    <select class="form-select" id="color_id" name="color_id">
+                        <option value="">-- Sin color --</option>
+                        <?php foreach ($colores as $c): ?>
+                            <option value="<?= $c['id'] ?>">
+                                <?= htmlspecialchars($c['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-primary" type="submit">💾 Guardar</button>
-                    </div>
-                </form>
+                <!-- BOTONES -->
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" type="submit">💾 Guardar</button>
+                    <a href="index.php" class="btn btn-secondary">⬅️ Volver</a>
+                </div>
 
-                <a href="index.php" class="btn btn-secondary mt-3">⬅️ Volver</a>
-            </div>
+            </form>
+
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
