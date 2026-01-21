@@ -36,7 +36,7 @@ $pdf->AddPage();
 // --------------------
 $logoPath = __DIR__ . '/logo.png';
 if (file_exists($logoPath)) {
-    $pdf->Image($logoPath, 6, 4, 50);
+    $pdf->Image($logoPath, 6, 10, 20);
 }
 
 // --------------------
