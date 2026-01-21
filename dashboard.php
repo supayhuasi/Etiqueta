@@ -57,10 +57,10 @@ foreach ($productos as $p) {
 // FUNCIONES
 // ==========================
 function estadoNombre($id) {
-    if ($id == 1) return 'Producción';
-    if ($id == 2) return 'Cortado';
-    if ($id == 3) return 'Armado';
-    if ($id == 4) return 'Entregado';
+    if ($id == 1) return 'PENDIENTE';
+    if ($id == 2) return 'EN PRODUCCIÓN';
+    if ($id == 3) return 'LISTO';
+    if ($id == 4) return 'ENTREGADO';
     return 'Desconocido';
 }
 
