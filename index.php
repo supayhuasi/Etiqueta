@@ -127,15 +127,25 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?= htmlspecialchars($p['estado']) ?>
                         </span>
                     </td>
-                    <td>
-                        <a href="editar.php?id=<?= $p['id'] ?>" class="btn btn-sm btn-primary">✏️</a>
-                        <a href="eliminar.php?id=<?= $p['id'] ?>"
-                           class="btn btn-sm btn-danger"
-                           onclick="return confirm('¿Eliminar producto?')">🗑️</a>
-                        <a href="imprimir.php?id=<?= $p['id'] ?>"
-                           target="_blank"
-                           class="btn btn-sm btn-secondary">🖨️</a>
-                    </td>
+                   <td>
+    <a href="editar.php?id=<?= $p['id'] ?>" class="btn btn-sm btn-primary">✏️</a>
+
+    <a href="eliminar.php?id=<?= $p['id'] ?>"
+       class="btn btn-sm btn-danger"
+       onclick="return confirm('¿Eliminar producto?')">🗑️</a>
+
+    <a href="imprimir.php?id=<?= $p['id'] ?>"
+       target="_blank"
+       class="btn btn-sm btn-secondary">🖨️</a>
+
+    <?php if ($p['estado_id'] != 5): ?>
+        <a href="mandar_stock.php?id=<?= $p['id'] ?>"
+           class="btn btn-sm btn-success"
+           onclick="return confirm('¿Mandar este producto a stock?')">
+           📦 Stock
+        </a>
+    <?php endif; ?>
+</td>
                 </tr>
 
             <?php endforeach; ?>
