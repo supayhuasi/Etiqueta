@@ -13,7 +13,7 @@ try {
     $pdo->beginTransaction();
     
     // Eliminar primero del historial_estados (relación secundaria)
-    $stmt1 = $pdo->prepare("DELETE FROM historial_estados WHERE productoid = ?");
+    $stmt1 = $pdo->prepare("DELETE FROM historial_estados WHERE producto_id = ?");
     $stmt1->execute([$id]);
     
     // Luego eliminar del productos (relación principal)
