@@ -49,13 +49,22 @@ if (!isset($_SESSION)) {
 
       </ul>
 
-      <span class="navbar-text text-white me-3">
-        <?= $_SESSION['user']['usuario'] ?>
-      </span>
+      <div class="d-flex align-items-center gap-3">
+        <span class="navbar-text text-white">
+          <?= $_SESSION['user']['usuario'] ?>
+        </span>
 
-      <a href="auth/logout.php" class="btn btn-outline-light btn-sm">
-        Salir
-      </a>
+        <div class="dropdown">
+          <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            ⚙️ Opciones
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="cambiar_clave.php">🔑 Cambiar Contraseña</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="auth/logout.php">🚪 Salir</a></li>
+          </ul>
+        </div>
+      </div>
 
     </div>
   </div>
