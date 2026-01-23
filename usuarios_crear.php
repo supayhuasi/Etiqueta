@@ -10,23 +10,35 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 $msg = '';
 
+// Obtener roles disponibles
+$stmt = $pdo->query("SELECT * FROM roles ORDER BY nombre");
+$roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usuario = trim($_POST['usuario']);
+    $nombre  = trim($_POST['nombre']);
     $pass    = $_POST['password'];
-    $rol     = $_POST['rol'];
+    $rol_id  = intval($_POST['rol_id']);
 
-    if ($usuario && $pass) {
+    if ($usuario && $pass && $rol_id) {
         $hash = password_hash($pass, PASSWORD_BCRYPT);
 
         try {
-            $stmt = $pdo->prepare("
-                INSERT INTO usuarios (usuario, password, rol)
-                VALUES (?, ?, ?)
-            ");
-            $stmt->execute([$usuario, $hash, $rol]);
-            $msg = '<div class="alert alert-success">Usuario creado correctamente</div>';
+            // Verificar si el usuario ya existe
+            $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE usuario = ?");
+            $stmt->execute([$usuario]);
+            if ($stmt->rowCount() > 0) {
+                $msg = '<div class="alert alert-danger">El usuario ya existe</div>';
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO usuarios (usuario, password, nombre, rol_id, activo)
+                    VALUES (?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([$usuario, $hash, $nombre, $rol_id]);
+                $msg = '<div class="alert alert-success">Usuario creado correctamente</div>';
+            }
         } catch (PDOException $e) {
-            $msg = '<div class="alert alert-danger">El usuario ya existe</div>';
+            $msg = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
     } else {
         $msg = '<div class="alert alert-warning">Completá todos los campos</div>';
@@ -58,15 +70,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="mb-3">
+          <label class="form-label">Nombre</label>
+          <input type="text" name="nombre" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
           <label class="form-label">Contraseña</label>
           <input type="password" name="password" class="form-control" required>
         </div>
 
         <div class="mb-3">
           <label class="form-label">Rol</label>
-          <select name="rol" class="form-select">
-            <option value="operario">Operario</option>
-            <option value="admin">Administrador</option>
+          <select name="rol_id" class="form-select" required>
+            <option value="">Seleccionar rol...</option>
+            <?php foreach ($roles as $r): ?>
+              <option value="<?= $r['id'] ?>"><?= htmlspecialchars($r['nombre']) ?></option>
+            <?php endforeach; ?>
           </select>
         </div>
 
