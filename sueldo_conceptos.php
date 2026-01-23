@@ -104,13 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Error: " . $e->getMessage();
     }
 }
-        
-        header("Location: sueldo_conceptos.php?id=$id&success=Concepto agregado");
-        exit;
-    } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
-    }
-}
 ?>
 
 <div class="container mt-4">

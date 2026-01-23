@@ -137,8 +137,6 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                                 <?php endif; ?>
                             <?php endforeach; ?>
                         <?php endif; ?>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
                         
                         <tr class="table-light border-top border-bottom fw-bold">
                             <td>TOTAL A PAGAR</td>
