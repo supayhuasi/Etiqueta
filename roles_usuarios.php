@@ -2,9 +2,30 @@
 require 'config.php';
 require 'includes/header.php';
 
+// Verificar sesión y rol
+if (!isset($_SESSION['user']) || !isset($_SESSION['rol'])) {
+    die("
+        <div class='container mt-5'>
+            <div class='alert alert-danger'>
+                <h4>Sesión no válida</h4>
+                <p>No se encontraron datos de sesión. Por favor <a href='auth/login.php'>inicia sesión</a> nuevamente.</p>
+                <p><small>Si el problema persiste, ve a <a href='debug_rol.php'>debug_rol.php</a> para verificar tu rol.</small></p>
+            </div>
+        </div>
+    ");
+}
+
 // Solo admins pueden acceder
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado - Se requiere rol de administrador");
+if ($_SESSION['rol'] !== 'admin') {
+    die("
+        <div class='container mt-5'>
+            <div class='alert alert-danger'>
+                <h4>Acceso denegado</h4>
+                <p>Se requiere rol de administrador. Tu rol actual es: <strong>" . htmlspecialchars($_SESSION['rol']) . "</strong></p>
+                <p><a href='debug_rol.php'>Ver información de rol</a></p>
+            </div>
+        </div>
+    ");
 }
 
 // Obtener lista de usuarios
