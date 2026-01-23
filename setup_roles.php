@@ -12,37 +12,50 @@ try {
         )
     ");
 
-    // Agregar columna rol_id a usuarios si no existe
-    $pdo->exec("
-        ALTER TABLE usuarios 
-        ADD COLUMN rol_id INT DEFAULT 2 AFTER password,
-        ADD CONSTRAINT fk_usuarios_roles 
-        FOREIGN KEY (rol_id) REFERENCES roles(id)
-    ");
-
-    // Insertar roles por defecto
+    // Insertar roles por defecto si no existen
     $stmt = $pdo->query("SELECT COUNT(*) FROM roles");
     if ($stmt->fetchColumn() == 0) {
         $pdo->exec("
             INSERT INTO roles (nombre, descripcion) VALUES
-            (1, 'admin', 'Administrador del sistema'),
-            (2, 'usuario', 'Usuario regular'),
-            (3, 'operario', 'Operario de producción')
+            ('admin', 'Administrador del sistema'),
+            ('usuario', 'Usuario regular'),
+            ('operario', 'Operario de producción')
         ");
+        echo "✓ Roles creados<br>";
     }
 
-    echo "✓ Tabla de roles creada exitosamente<br>";
-    echo "✓ Columna rol_id agregada a usuarios<br>";
-    echo "✓ Roles por defecto insertados<br>";
-    echo "<br><a href='index.php'>← Volver al inicio</a>";
+    // Intentar agregar columna rol_id a usuarios si no existe
+    $stmt = $pdo->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'usuarios' AND COLUMN_NAME = 'rol_id'");
+    if ($stmt->rowCount() == 0) {
+        // Si la columna no existe, agregarla
+        $pdo->exec("ALTER TABLE usuarios ADD COLUMN rol_id INT");
+        echo "✓ Columna rol_id agregada<br>";
+    }
+
+    // Asignar rol por defecto (usuario) a los usuarios sin rol
+    $pdo->exec("UPDATE usuarios SET rol_id = 2 WHERE rol_id IS NULL");
+    echo "✓ Roles por defecto asignados<br>";
+
+    // Agregar la foreign key si no existe
+    $stmt = $pdo->query("
+        SELECT CONSTRAINT_NAME 
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+        WHERE TABLE_NAME = 'usuarios' AND COLUMN_NAME = 'rol_id' AND REFERENCED_TABLE_NAME = 'roles'
+    ");
+    
+    if ($stmt->rowCount() == 0) {
+        $pdo->exec("
+            ALTER TABLE usuarios 
+            ADD CONSTRAINT fk_usuarios_roles 
+            FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE SET NULL
+        ");
+        echo "✓ Foreign key creada<br>";
+    }
+
+    echo "<br>✓ Configuración completada exitosamente<br>";
+    echo "<a href='index.php'>← Volver al inicio</a>";
 
 } catch (PDOException $e) {
-    // Si la columna ya existe, ignora el error
-    if (strpos($e->getMessage(), 'Duplicate column name') !== false) {
-        echo "✓ La tabla ya estaba configurada correctamente<br>";
-        echo "<a href='index.php'>← Volver al inicio</a>";
-    } else {
-        echo "Error: " . $e->getMessage();
-    }
+    echo "Error: " . $e->getMessage() . "<br>";
+    echo "<pre>" . $e->getTraceAsString() . "</pre>";
 }
-?>
