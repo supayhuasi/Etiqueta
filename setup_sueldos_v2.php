@@ -34,7 +34,7 @@ try {
     $columns = $pdo->query("SHOW COLUMNS FROM sueldo_conceptos")->fetchAll(PDO::FETCH_COLUMN);
     
     if (!in_array('mes', $columns)) {
-        $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN mes VARCHAR(7) DEFAULT DATE_FORMAT(CURDATE(), '%Y-%m')");
+        $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN mes VARCHAR(7)");
     }
     
     if (!in_array('formula', $columns)) {
