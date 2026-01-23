@@ -2,9 +2,10 @@
 require 'config.php';
 require 'includes/header.php';
 
-// Solo admins
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado");
+// Verificar si existe sesión
+if (!isset($_SESSION['user'])) {
+    header("Location: auth/login.php");
+    exit;
 }
 
 // Obtener lista de empleados
