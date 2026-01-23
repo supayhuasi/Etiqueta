@@ -3,6 +3,7 @@ require 'config.php';
 require 'includes/header.php';
 
 $id = $_GET['id'] ?? 0;
+$mes = $_GET['mes'] ?? date('Y-m');
 
 // Obtener datos del empleado
 $stmt = $pdo->prepare("SELECT * FROM empleados WHERE id = ?");
@@ -13,16 +14,32 @@ if (!$empleado) {
     die("Empleado no encontrado");
 }
 
-// Obtener conceptos del empleado
+// Obtener conceptos del empleado para el mes especificado
 $stmt = $pdo->prepare("
-    SELECT sc.monto, c.nombre, c.tipo 
+    SELECT sc.*, c.nombre, c.tipo 
     FROM sueldo_conceptos sc
     JOIN conceptos c ON sc.concepto_id = c.id
-    WHERE sc.empleado_id = ?
+    WHERE sc.empleado_id = ? AND sc.mes = ?
     ORDER BY c.tipo DESC, c.nombre
 ");
-$stmt->execute([$id]);
+$stmt->execute([$id, $mes]);
 $conceptos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Función para evaluar fórmulas
+function evaluarFormula($formula, $sueldo_base) {
+    if (!$formula) return null;
+    
+    // Reemplazar variables
+    $formula = str_replace('sueldo_base', $sueldo_base, $formula);
+    
+    // Evaluar la fórmula de forma segura
+    try {
+        $resultado = @eval("return " . $formula . ";");
+        return $resultado !== false ? $resultado : null;
+    } catch (Exception $e) {
+        return null;
+    }
+}
 
 // Calcular totales
 $sueldo_base = $empleado['sueldo_base'];
@@ -30,10 +47,20 @@ $descuentos = 0;
 $bonificaciones = 0;
 
 foreach ($conceptos as $c) {
+    $monto = $c['monto'];
+    
+    // Si hay fórmula, calcularla
+    if ($c['formula']) {
+        $monto = evaluarFormula($c['formula'], $sueldo_base);
+    } elseif ($c['es_porcentaje']) {
+        // Si es porcentaje, calcular del sueldo base
+        $monto = ($sueldo_base * $c['monto']) / 100;
+    }
+    
     if ($c['tipo'] === 'descuento') {
-        $descuentos += $c['monto'];
+        $descuentos += $monto;
     } else {
-        $bonificaciones += $c['monto'];
+        $bonificaciones += $monto;
     }
 }
 
@@ -45,7 +72,7 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
         <div class="col-md-8 offset-md-2">
             <div class="card">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">Recibo de Sueldo</h4>
+                    <h4 class="mb-0">Recibo de Sueldo - <?= date('F Y', strtotime($mes . '-01')) ?></h4>
                 </div>
                 <div class="card-body">
                     <!-- Encabezado -->
@@ -55,7 +82,8 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                             <p class="text-muted">ID: #<?= $empleado['id'] ?></p>
                         </div>
                         <div class="col-md-6 text-end">
-                            <p><strong>Fecha:</strong> <?= date('d/m/Y') ?></p>
+                            <p><strong>Mes:</strong> <?= date('F Y', strtotime($mes . '-01')) ?></p>
+                            <p><strong>Generado:</strong> <?= date('d/m/Y') ?></p>
                         </div>
                     </div>
                     
@@ -72,10 +100,18 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                             </tr>
                             <?php foreach ($conceptos as $c): ?>
                                 <?php if ($c['tipo'] === 'bonificacion'): ?>
-                                <tr>
-                                    <td class="ps-4"><?= htmlspecialchars($c['nombre']) ?></td>
-                                    <td class="text-end">+ $<?= number_format($c['monto'], 2, ',', '.') ?></td>
-                                </tr>
+                                    <?php
+                                    $monto = $c['monto'];
+                                    if ($c['formula']) {
+                                        $monto = evaluarFormula($c['formula'], $sueldo_base);
+                                    } elseif ($c['es_porcentaje']) {
+                                        $monto = ($sueldo_base * $c['monto']) / 100;
+                                    }
+                                    ?>
+                                    <tr>
+                                        <td class="ps-4"><?= htmlspecialchars($c['nombre']) ?></td>
+                                        <td class="text-end">+ $<?= number_format($monto, 2, ',', '.') ?></td>
+                                    </tr>
                                 <?php endif; ?>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -86,11 +122,21 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                             </tr>
                             <?php foreach ($conceptos as $c): ?>
                                 <?php if ($c['tipo'] === 'descuento'): ?>
-                                <tr>
-                                    <td class="ps-4"><?= htmlspecialchars($c['nombre']) ?></td>
-                                    <td class="text-end">- $<?= number_format($c['monto'], 2, ',', '.') ?></td>
-                                </tr>
+                                    <?php
+                                    $monto = $c['monto'];
+                                    if ($c['formula']) {
+                                        $monto = evaluarFormula($c['formula'], $sueldo_base);
+                                    } elseif ($c['es_porcentaje']) {
+                                        $monto = ($sueldo_base * $c['monto']) / 100;
+                                    }
+                                    ?>
+                                    <tr>
+                                        <td class="ps-4"><?= htmlspecialchars($c['nombre']) ?></td>
+                                        <td class="text-end">- $<?= number_format($monto, 2, ',', '.') ?></td>
+                                    </tr>
                                 <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                             <?php endforeach; ?>
                         <?php endif; ?>
                         
