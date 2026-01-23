@@ -3,8 +3,8 @@ require 'config.php';
 require 'includes/header.php';
 
 // Solo admins pueden acceder
-if ($_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado");
+if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
+    die("Acceso denegado - Se requiere rol de administrador");
 }
 
 // Obtener lista de usuarios

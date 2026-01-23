@@ -30,7 +30,7 @@ if (!isset($_SESSION)) {
           <a class="nav-link" href="dashboard.php">📊 Dashboard</a>
         </li>
 
-        <?php if ($_SESSION['rol'] === 'admin'): ?>
+        <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
             Usuarios
@@ -38,6 +38,7 @@ if (!isset($_SESSION)) {
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="usuarios_lista.php">Listar</a></li>
             <li><a class="dropdown-item" href="usuarios_crear.php">Crear</a></li>
+            <li><a class="dropdown-item" href="roles_usuarios.php">Roles</a></li>
           </ul>
         </li>
 
