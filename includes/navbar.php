@@ -40,6 +40,10 @@ if (!isset($_SESSION)) {
             <li><a class="dropdown-item" href="usuarios_crear.php">Crear</a></li>
           </ul>
         </li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="sueldos.php">💰 Sueldos</a>
+        </li>
         <?php endif; ?>
 
       </ul>
