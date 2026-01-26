@@ -4,7 +4,7 @@ require 'config.php';
 require 'includes/header.php';
 
 // Solo admins
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] === 'admin') {
+if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'){
     die("Acceso denegado");
 }
 
