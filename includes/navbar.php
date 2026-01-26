@@ -45,6 +45,10 @@ if (!isset($_SESSION)) {
         <li class="nav-item">
           <a class="nav-link" href="sueldos.php">💰 Sueldos</a>
         </li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="cheques.php">🏦 Cheques</a>
+        </li>
         <?php endif; ?>
 
       </ul>
