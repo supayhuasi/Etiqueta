@@ -16,7 +16,18 @@ if (empty($carrito)) {
 // Calcular totales
 $subtotal = 0;
 foreach ($carrito as $item) {
-    $subtotal += $item['precio'] * $item['cantidad'];
+    $precio_item = $item['precio'];
+    
+    // Sumar costos adicionales de atributos
+    if (isset($item['atributos']) && is_array($item['atributos'])) {
+        foreach ($item['atributos'] as $attr) {
+            if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                $precio_item += $attr['costo_adicional'];
+            }
+        }
+    }
+    
+    $subtotal += $precio_item * $item['cantidad'];
 }
 $envio = $subtotal > 0 ? 500 : 0;
 $total = $subtotal + $envio;
@@ -78,19 +89,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Agregar items al pedido
             foreach ($carrito as $item) {
+                $precio_final = $item['precio'];
+                $atributos_json = '';
+                
+                // Sumar costos adicionales de atributos
+                if (isset($item['atributos']) && is_array($item['atributos'])) {
+                    $atributos_json = json_encode($item['atributos']);
+                    foreach ($item['atributos'] as $attr) {
+                        if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                            $precio_final += $attr['costo_adicional'];
+                        }
+                    }
+                }
+                
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_pedido_items (pedido_id, producto_id, cantidad, precio_unitario, alto_cm, ancho_cm, subtotal)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_pedido_items (pedido_id, producto_id, cantidad, precio_unitario, alto_cm, ancho_cm, subtotal, atributos)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $subtotal_item = $item['precio'] * $item['cantidad'];
+                $subtotal_item = $precio_final * $item['cantidad'];
                 $stmt->execute([
                     $pedido_id, 
                     $item['id'], 
                     $item['cantidad'], 
-                    $item['precio'], 
+                    $precio_final, 
                     $item['alto'] > 0 ? $item['alto'] : null,
                     $item['ancho'] > 0 ? $item['ancho'] : null,
-                    $subtotal_item
+                    $subtotal_item,
+                    $atributos_json
                 ]);
             }
             
@@ -210,7 +235,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="card-body">
                     <div class="cart-item" style="padding: 0;">
-                        <?php foreach ($carrito as $item): ?>
+                        <?php foreach ($carrito as $item): 
+                            $precio_item = $item['precio'];
+                            $costo_atributos = 0;
+                            
+                            if (isset($item['atributos']) && is_array($item['atributos'])) {
+                                foreach ($item['atributos'] as $attr) {
+                                    if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                                        $costo_atributos += $attr['costo_adicional'];
+                                    }
+                                }
+                            }
+                            $precio_item += $costo_atributos;
+                        ?>
                             <div class="mb-3 pb-3" style="border-bottom: 1px solid #dee2e6;">
                                 <div class="d-flex justify-content-between">
                                     <strong><?= htmlspecialchars($item['nombre']) ?></strong>
@@ -219,9 +256,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php if ($item['alto'] > 0 && $item['ancho'] > 0): ?>
                                     <small class="text-muted"><?= $item['alto'] ?>cm x <?= $item['ancho'] ?>cm</small><br>
                                 <?php endif; ?>
-                                <small>$<?= number_format($item['precio'], 2, ',', '.') ?> c/u</small>
+                                <?php if (isset($item['atributos']) && is_array($item['atributos']) && count($item['atributos']) > 0): ?>
+                                    <small class="text-muted d-block mb-2">
+                                        <?php foreach ($item['atributos'] as $attr): ?>
+                                            <div><?= htmlspecialchars($attr['nombre']) ?>: <?= htmlspecialchars($attr['valor']) ?>
+                                                <?php if ($attr['costo_adicional'] > 0): ?>
+                                                    <span class="badge bg-success">+$<?= number_format($attr['costo_adicional'], 2, ',', '.') ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </small>
+                                <?php endif; ?>
+                                <small>$<?= number_format($item['precio'], 2, ',', '.') ?> c/u <?php if ($costo_atributos > 0): ?> <span class="text-success">(+$<?= number_format($costo_atributos, 2, ',', '.') ?> atributos)</span><?php endif; ?></small>
                                 <div class="text-end mt-2">
-                                    <strong>$<?= number_format($item['precio'] * $item['cantidad'], 2, ',', '.') ?></strong>
+                                    <strong>$<?= number_format($precio_item * $item['cantidad'], 2, ',', '.') ?></strong>
                                 </div>
                             </div>
                         <?php endforeach; ?>

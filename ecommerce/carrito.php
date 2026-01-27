@@ -30,7 +30,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_cantidad']
 // Calcular totales
 $subtotal = 0;
 foreach ($carrito as $item) {
-    $subtotal += $item['precio'] * $item['cantidad'];
+    $precio_item = $item['precio'];
+    
+    // Sumar costos adicionales de atributos
+    if (isset($item['atributos']) && is_array($item['atributos'])) {
+        foreach ($item['atributos'] as $attr) {
+            if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                $precio_item += $attr['costo_adicional'];
+            }
+        }
+    }
+    
+    $subtotal += $precio_item * $item['cantidad'];
 }
 $envio = $subtotal > 0 ? 500 : 0; // Envío fijo
 $total = $subtotal + $envio;
@@ -64,7 +75,19 @@ $total = $subtotal + $envio;
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($carrito as $item_key => $item): ?>
+                                        <?php foreach ($carrito as $item_key => $item): 
+                                            $precio_item = $item['precio'];
+                                            $costo_atributos = 0;
+                                            
+                                            if (isset($item['atributos']) && is_array($item['atributos'])) {
+                                                foreach ($item['atributos'] as $attr) {
+                                                    if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                                                        $costo_atributos += $attr['costo_adicional'];
+                                                    }
+                                                }
+                                            }
+                                            $precio_item += $costo_atributos;
+                                        ?>
                                             <tr>
                                                 <td>
                                                     <a href="producto.php?id=<?= $item['id'] ?>" class="text-decoration-none">
@@ -73,12 +96,23 @@ $total = $subtotal + $envio;
                                                     <?php if ($item['alto'] > 0 && $item['ancho'] > 0): ?>
                                                         <br><small class="text-muted"><?= $item['alto'] ?>cm x <?= $item['ancho'] ?>cm</small>
                                                     <?php endif; ?>
+                                                    <?php if (isset($item['atributos']) && is_array($item['atributos']) && count($item['atributos']) > 0): ?>
+                                                        <br><small class="text-muted">
+                                                            <?php foreach ($item['atributos'] as $attr): ?>
+                                                                <div><?= htmlspecialchars($attr['nombre']) ?>: <?= htmlspecialchars($attr['valor']) ?>
+                                                                    <?php if ($attr['costo_adicional'] > 0): ?>
+                                                                        <span class="badge bg-success">+$<?= number_format($attr['costo_adicional'], 2, ',', '.') ?></span>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            <?php endforeach; ?>
+                                                        </small>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td>$<?= number_format($item['precio'], 2, ',', '.') ?></td>
                                                 <td>
                                                     <input type="number" class="form-control" style="width: 80px;" name="cantidades[<?= $item_key ?>]" value="<?= $item['cantidad'] ?>" min="1">
                                                 </td>
-                                                <td><strong>$<?= number_format($item['precio'] * $item['cantidad'], 2, ',', '.') ?></strong></td>
+                                                <td><strong>$<?= number_format($precio_item * $item['cantidad'], 2, ',', '.') ?></strong></td>
                                                 <td>
                                                     <button type="submit" name="eliminar" value="<?= $item_key ?>" class="btn btn-sm btn-danger">🗑️</button>
                                                 </td>
