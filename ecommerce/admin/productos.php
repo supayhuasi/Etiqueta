@@ -92,6 +92,7 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </td>
                         <td>
                             <a href="productos_crear.php?id=<?= $prod['id'] ?>" class="btn btn-sm btn-warning">Editar</a>
+                            <a href="productos_imagenes.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-secondary" title="Galería">🖼️</a>
                             <a href="productos_eliminar.php?id=<?= $prod['id'] ?>" class="btn btn-sm btn-danger">Eliminar</a>
                             <?php if ($prod['tipo_precio'] === 'variable'): ?>
                                 <a href="matriz_precios.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-info">Matriz</a>

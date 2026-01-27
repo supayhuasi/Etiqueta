@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nombre'] ?? '';
     $descripcion = $_POST['descripcion'] ?? '';
     $icono = $_POST['icono'] ?? '';
+    $parent_id = !empty($_POST['parent_id']) ? intval($_POST['parent_id']) : null;
     $orden = intval($_POST['orden'] ?? 0);
     $activo = isset($_POST['activo']) ? 1 : 0;
     
@@ -25,24 +26,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             if ($id > 0) {
-                $stmt = $pdo->prepare("
-                    UPDATE ecommerce_categorias 
-                    SET nombre = ?, descripcion = ?, icono = ?, orden = ?, activo = ?
-                    WHERE id = ?
-                ");
-                $stmt->execute([$nombre, $descripcion, $icono, $orden, $activo, $id]);
-                $mensaje = "Categoría actualizada";
+                // Validar que no se asigne una subcategoría como padre de sí misma
+                if ($parent_id === $id) {
+                    $error = "Una categoría no puede ser padre de sí misma";
+                } else {
+                    $stmt = $pdo->prepare("
+                        UPDATE ecommerce_categorias 
+                        SET nombre = ?, descripcion = ?, icono = ?, parent_id = ?, orden = ?, activo = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$nombre, $descripcion, $icono, $parent_id, $orden, $activo, $id]);
+                    $mensaje = "Categoría actualizada";
+                }
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_categorias (nombre, descripcion, icono, orden, activo)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_categorias (nombre, descripcion, icono, parent_id, orden, activo)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$nombre, $descripcion, $icono, $orden, $activo]);
+                $stmt->execute([$nombre, $descripcion, $icono, $parent_id, $orden, $activo]);
                 $mensaje = "Categoría creada";
             }
             
-            header("Location: categorias.php");
-            exit;
+            if (isset($mensaje)) {
+                header("Location: categorias.php");
+                exit;
+            }
         } catch (Exception $e) {
             $error = "Error: " . $e->getMessage();
         }
@@ -67,6 +75,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-3">
                 <label for="descripcion" class="form-label">Descripción</label>
                 <textarea class="form-control" id="descripcion" name="descripcion" rows="3"><?= htmlspecialchars($categoria['descripcion'] ?? '') ?></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="parent_id" class="form-label">Categoría Padre (para subcategorías)</label>
+                <select class="form-select" id="parent_id" name="parent_id">
+                    <option value="">-- Sin categoría padre --</option>
+                    <?php
+                    $stmt = $pdo->query("
+                        SELECT id, nombre FROM ecommerce_categorias 
+                        WHERE activo = 1 AND id != " . ($id > 0 ? $id : 0) . "
+                        ORDER BY nombre
+                    ");
+                    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $cat):
+                    ?>
+                        <option value="<?= $cat['id'] ?>" <?= ($categoria['parent_id'] ?? 0) == $cat['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($cat['nombre']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <small class="text-muted">Selecciona una categoría padre si esta es una subcategoría</small>
             </div>
 
             <div class="row">

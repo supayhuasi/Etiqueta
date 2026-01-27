@@ -31,48 +31,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Falta completar campos obligatorios";
     } else {
         try {
-            // Procesar imagen
-            $imagen = $producto['imagen'] ?? null;
-            if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] == 0) {
-                $tipos_permitidos = ['jpg', 'jpeg', 'png', 'gif'];
-                $ext = strtolower(pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION));
-                
-                if (!in_array($ext, $tipos_permitidos)) {
-                    $error = "Tipo de imagen no permitido";
-                } else if ($_FILES['imagen']['size'] > 5242880) {
-                    $error = "La imagen es muy grande (máx 5MB)";
-                } else {
-                    $imagen = "prod_" . time() . "." . $ext;
-                    if (!move_uploaded_file($_FILES['imagen']['tmp_name'], "../uploads/" . $imagen)) {
-                        $error = "Error al subir la imagen";
-                        $imagen = $producto['imagen'] ?? null;
-                    }
-                }
+            if ($id > 0) {
+                $stmt = $pdo->prepare("
+                    UPDATE ecommerce_productos 
+                    SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
+                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $id]);
+                $mensaje = "Producto actualizado";
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo]);
+                $producto_id = $pdo->lastInsertId();
+                $mensaje = "Producto creado";
             }
             
-            if (!isset($error)) {
-                if ($id > 0) {
-                    $stmt = $pdo->prepare("
-                        UPDATE ecommerce_productos 
-                        SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
-                            precio_base = ?, tipo_precio = ?, imagen = ?, orden = ?, activo = ?
-                        WHERE id = ?
-                    ");
-                    $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $imagen, $orden, $activo, $id]);
-                    $mensaje = "Producto actualizado";
-                } else {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, imagen, orden, activo)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ");
-                    $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $imagen, $orden, $activo]);
-                    $producto_id = $pdo->lastInsertId();
-                    $mensaje = "Producto creado";
-                }
-                
-                header("Location: productos.php");
-                exit;
-            }
+            header("Location: productos.php");
+            exit;
         } catch (Exception $e) {
             $error = "Error: " . $e->getMessage();
         }
@@ -88,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="card">
     <div class="card-body">
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST">
             <div class="row">
                 <div class="col-md-6 mb-3">
                     <label for="codigo" class="form-label">Código *</label>
@@ -133,18 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="imagen" class="form-label">Imagen</label>
-                    <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*">
-                    <?php if (!empty($producto['imagen'])): ?>
-                        <small class="text-muted">Imagen actual: <?= htmlspecialchars($producto['imagen']) ?></small>
-                    <?php endif; ?>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="orden" class="form-label">Orden</label>
-                    <input type="number" class="form-control" id="orden" name="orden" value="<?= $producto['orden'] ?? 0 ?>">
-                </div>
+            <div class="mb-3">
+                <label for="orden" class="form-label">Orden</label>
+                <input type="number" class="form-control" id="orden" name="orden" value="<?= $producto['orden'] ?? 0 ?>">
             </div>
 
             <div class="mb-3 form-check">
