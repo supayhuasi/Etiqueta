@@ -83,7 +83,9 @@ $stmt_por_tipo = $pdo->prepare("
 $stmt_por_tipo->execute([$mes_filtro]);
 $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
 ?>
+<body>
 
+<?php require_once __DIR__ . '/includes/navbar.php'; ?>
 <div class="container-fluid mt-4">
     <div class="row mb-4">
         <div class="col-md-6">
@@ -265,3 +267,6 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <?php require 'includes/footer.php'; ?>
+</body>
+</html>
+
