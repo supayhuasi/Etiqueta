@@ -413,6 +413,7 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
         </div>
     </div>
 <?php endif; ?>
+<?php endif; ?>
 
 <div class="mt-3">
     <a href="productos.php" class="btn btn-secondary">Volver a Productos</a>

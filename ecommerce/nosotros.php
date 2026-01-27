@@ -16,10 +16,9 @@ $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
             <?php if ($empresa): ?>
                 <p><?= nl2br(htmlspecialchars($empresa['about_us'] ?? '')) ?></p>
             <?php else: ?>
-                <p>Somos una empresa con más de 20 años de experiencia en la industria de cortinas, toldos y persianas. 
-                   Nos dedicamos a ofrecer productos de la más alta calidad con diseños modernos y funcionales.</p>
-                <p>Nuestro compromiso es brindar soluciones personalizadas que satisfagan las necesidades de nuestros clientes, 
-                   combinando calidad, estilo y durabilidad.</p>
+                <p>Somos un equipo de personas apasionadas cuyo objetivo es mejorar la vida de todos a través de productos disruptivos. Construimos grandes productos para resolver sus problemas de negocio. 
+                </p>
+                <p>Nuestros productos están diseñados para pequeñas y medianas empresas dispuestas a optimizar su rendimiento.</p>
             <?php endif; ?>
         </div>
         <div class="col-md-6">
