@@ -267,7 +267,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endif; ?>
 
                     <!-- Atributos personalizados -->
-                    <?php foreach ($atributos as $attr): ?>
+                    <?php foreach ($atributos as $attr): 
+                        // Si es select, obtener opciones con imágenes
+                        $opciones_attr = [];
+                        if ($attr['tipo'] === 'select') {
+                            $stmt = $pdo->prepare("
+                                SELECT * FROM ecommerce_atributo_opciones 
+                                WHERE atributo_id = ? 
+                                ORDER BY orden
+                            ");
+                            $stmt->execute([$attr['id']]);
+                            $opciones_attr = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                        }
+                    ?>
                         <div class="mb-3">
                             <label for="attr_<?= $attr['id'] ?>" class="form-label">
                                 <?= htmlspecialchars($attr['nombre']) ?>
@@ -278,20 +290,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <?php if ($attr['tipo'] === 'text'): ?>
                                 <input type="text" class="form-control" id="attr_<?= $attr['id'] ?>" 
-                                       name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
+                                       name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
                             
                             <?php elseif ($attr['tipo'] === 'number'): ?>
                                 <input type="number" class="form-control" id="attr_<?= $attr['id'] ?>" 
-                                       name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
+                                       name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
                             
                             <?php elseif ($attr['tipo'] === 'select'): ?>
-                                <select class="form-select" id="attr_<?= $attr['id'] ?>" 
-                                        name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
-                                    <option value="">Seleccionar...</option>
-                                    <?php foreach (array_map('trim', explode(',', $attr['valores'])) as $valor): ?>
-                                        <option value="<?= htmlspecialchars($valor) ?>"><?= htmlspecialchars($valor) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php if (!empty($opciones_attr)): ?>
+                                    <!-- Selector con imágenes -->
+                                    <div class="d-flex gap-2 flex-wrap mb-3">
+                                        <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
+                                               <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
+                                        <?php foreach ($opciones_attr as $opcion): ?>
+                                            <div class="position-relative">
+                                                <label class="cursor-pointer position-relative" style="cursor: pointer;">
+                                                    <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
+                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>"
+                                                           onchange="actualizarPrecio()">
+                                                    <div class="border-2 rounded p-1 transition-all" id="option_<?= $opcion['id'] ?>" 
+                                                         style="border: 2px solid #ddd; cursor: pointer; transition: all 0.3s ease;">
+                                                        <?php if ($opcion['imagen']): ?>
+                                                            <img src="uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
+                                                                 alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
+                                                                 style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
+                                                        <?php else: ?>
+                                                            <div class="d-flex align-items-center justify-content-center bg-light rounded" 
+                                                                 style="width: 80px; height: 80px;">
+                                                                <small class="text-center text-muted"><?= htmlspecialchars($opcion['nombre']) ?></small>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <small class="d-block text-center mt-1 text-muted"><?= htmlspecialchars($opcion['nombre']) ?></small>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <script>
+                                        document.querySelectorAll('input[name="attr_<?= $attr['id'] ?>"]').forEach(radio => {
+                                            radio.addEventListener('change', function() {
+                                                // Actualizar visual de selección
+                                                document.querySelectorAll('input[name="attr_<?= $attr['id'] ?>"]').forEach(r => {
+                                                    const option = r.closest('label').querySelector('div[id^="option_"]');
+                                                    if (option) {
+                                                        option.style.borderColor = '#ddd';
+                                                        option.style.backgroundColor = 'transparent';
+                                                    }
+                                                });
+                                                const selectedOption = this.closest('label').querySelector('div[id^="option_"]');
+                                                if (selectedOption) {
+                                                    selectedOption.style.borderColor = '#007bff';
+                                                    selectedOption.style.backgroundColor = '#e7f1ff';
+                                                }
+                                                // Actualizar el hidden input
+                                                document.getElementById('attr_<?= $attr['id'] ?>').value = this.value;
+                                            });
+                                        });
+                                    </script>
+                                <?php else: ?>
+                                    <select class="form-select" id="attr_<?= $attr['id'] ?>" 
+                                            name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()">
+                                        <option value="">Seleccionar...</option>
+                                    </select>
+                                    <small class="text-muted">No hay opciones configuradas para este atributo</small>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     <?php endforeach; ?>

@@ -19,13 +19,25 @@ $stmt = $pdo->prepare("
 $stmt->execute([$producto_id]);
 $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Obtener opciones de atributo si se está editando
+$atributo_id = $_GET['atributo_id'] ?? 0;
+$opciones = [];
+if ($atributo_id > 0) {
+    $stmt = $pdo->prepare("
+        SELECT * FROM ecommerce_atributo_opciones 
+        WHERE atributo_id = ? 
+        ORDER BY orden
+    ");
+    $stmt->execute([$atributo_id]);
+    $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // Procesar agregar/editar atributo
 if ($_POST['accion'] === 'guardar_atributo') {
     try {
         $id = intval($_POST['id'] ?? 0);
         $nombre = $_POST['nombre'];
         $tipo = $_POST['tipo'];
-        $valores = $_POST['valores'] ?? '';
         $costo_adicional = floatval($_POST['costo_adicional'] ?? 0);
         $es_obligatorio = isset($_POST['es_obligatorio']) ? 1 : 0;
         $orden = intval($_POST['orden'] ?? 0);
@@ -36,16 +48,17 @@ if ($_POST['accion'] === 'guardar_atributo') {
             if ($id > 0) {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_producto_atributos 
-                    SET nombre = ?, tipo = ?, valores = ?, costo_adicional = ?, es_obligatorio = ?, orden = ?
+                    SET nombre = ?, tipo = ?, costo_adicional = ?, es_obligatorio = ?, orden = ?
                     WHERE id = ? AND producto_id = ?
                 ");
-                $stmt->execute([$nombre, $tipo, $valores, $costo_adicional, $es_obligatorio, $orden, $id, $producto_id]);
+                $stmt->execute([$nombre, $tipo, $costo_adicional, $es_obligatorio, $orden, $id, $producto_id]);
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, valores, costo_adicional, es_obligatorio, orden)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, costo_adicional, es_obligatorio, orden)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$producto_id, $nombre, $tipo, $valores, $costo_adicional, $es_obligatorio, $orden]);
+                $stmt->execute([$producto_id, $nombre, $tipo, $costo_adicional, $es_obligatorio, $orden]);
+                $atributo_id = $pdo->lastInsertId();
             }
             
             // Recargar atributos
@@ -70,6 +83,9 @@ if ($_POST['accion'] === 'eliminar_atributo') {
         $pdo->prepare("DELETE FROM ecommerce_producto_atributos WHERE id = ? AND producto_id = ?")
             ->execute([$id, $producto_id]);
         
+        $atributo_id = 0;
+        $opciones = [];
+        
         // Recargar
         $stmt = $pdo->prepare("
             SELECT * FROM ecommerce_producto_atributos 
@@ -83,6 +99,99 @@ if ($_POST['accion'] === 'eliminar_atributo') {
         $error = "Error: " . $e->getMessage();
     }
 }
+
+// Procesar agregar opción a atributo
+if ($_POST['accion'] === 'guardar_opcion') {
+    try {
+        $opcion_id = intval($_POST['opcion_id'] ?? 0);
+        $nombre = $_POST['opcion_nombre'];
+        $orden = intval($_POST['opcion_orden'] ?? 0);
+        
+        // Manejo de upload de imagen
+        $imagen = null;
+        if (isset($_FILES['imagen']) && $_FILES['imagen']['size'] > 0) {
+            $file = $_FILES['imagen'];
+            $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            
+            if (!in_array(strtolower($ext), $allowed)) {
+                throw new Exception("Formato de imagen no permitido");
+            }
+            
+            $filename = 'atributo_' . $atributo_id . '_' . time() . '.' . $ext;
+            $dir = '../../uploads/atributos/';
+            
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+            
+            if (move_uploaded_file($file['tmp_name'], $dir . $filename)) {
+                $imagen = $filename;
+            } else {
+                throw new Exception("Error al subir la imagen");
+            }
+        }
+        
+        if (empty($nombre)) {
+            $error = "El nombre de la opción es obligatorio";
+        } else {
+            if ($opcion_id > 0) {
+                // Actualizar opción existente
+                $stmt = $pdo->prepare("
+                    UPDATE ecommerce_atributo_opciones 
+                    SET nombre = ?, orden = ?
+                    WHERE id = ? AND atributo_id = ?
+                ");
+                $stmt->execute([$nombre, $orden, $opcion_id, $atributo_id]);
+                
+                // Si hay nueva imagen, actualizar
+                if ($imagen) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET imagen = ? WHERE id = ?");
+                    $stmt->execute([$imagen, $opcion_id]);
+                }
+            } else {
+                // Nueva opción
+                $stmt = $pdo->prepare("
+                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, orden)
+                    VALUES (?, ?, ?, ?)
+                ");
+                $stmt->execute([$atributo_id, $nombre, $imagen, $orden]);
+            }
+            
+            // Recargar opciones
+            $stmt = $pdo->prepare("
+                SELECT * FROM ecommerce_atributo_opciones 
+                WHERE atributo_id = ? 
+                ORDER BY orden
+            ");
+            $stmt->execute([$atributo_id]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $mensaje = "Opción guardada";
+        }
+    } catch (Exception $e) {
+        $error = "Error: " . $e->getMessage();
+    }
+}
+
+// Procesar eliminación de opción
+if ($_POST['accion'] === 'eliminar_opcion') {
+    try {
+        $opcion_id = intval($_POST['opcion_id']);
+        $pdo->prepare("DELETE FROM ecommerce_atributo_opciones WHERE id = ? AND atributo_id = ?")
+            ->execute([$opcion_id, $atributo_id]);
+        
+        // Recargar opciones
+        $stmt = $pdo->prepare("
+            SELECT * FROM ecommerce_atributo_opciones 
+            WHERE atributo_id = ? 
+            ORDER BY orden
+        ");
+        $stmt->execute([$atributo_id]);
+        $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mensaje = "Opción eliminada";
+    } catch (Exception $e) {
+        $error = "Error: " . $e->getMessage();
+    }
+}
+?>
 ?>
 
 <h1>Atributos - <?= htmlspecialchars($producto['nombre']) ?></h1>
@@ -109,16 +218,12 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                     </div>
                     <div class="mb-3">
                         <label for="tipo" class="form-label">Tipo *</label>
-                        <select class="form-select" id="tipo" name="tipo" required onchange="toggleValores()">
+                        <select class="form-select" id="tipo" name="tipo" required>
                             <option value="">Seleccionar...</option>
                             <option value="text">Texto</option>
                             <option value="number">Número</option>
                             <option value="select">Selección</option>
                         </select>
-                    </div>
-                    <div class="mb-3" id="valores_container" style="display: none;">
-                        <label for="valores" class="form-label">Valores (separados por coma)</label>
-                        <textarea class="form-control" id="valores" name="valores" rows="3" placeholder="Ej: 10cm, 20cm, 30cm"></textarea>
                     </div>
                     <div class="mb-3">
                         <label for="costo_adicional" class="form-label">Costo Adicional ($)</label>
@@ -154,7 +259,6 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                                 <tr>
                                     <th>Nombre</th>
                                     <th>Tipo</th>
-                                    <th>Valores</th>
                                     <th>Costo Adicional</th>
                                     <th>Obligatorio</th>
                                     <th>Acciones</th>
@@ -165,13 +269,6 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                                     <tr>
                                         <td><?= htmlspecialchars($attr['nombre']) ?></td>
                                         <td><span class="badge bg-secondary"><?= ucfirst($attr['tipo']) ?></span></td>
-                                        <td>
-                                            <?php if ($attr['tipo'] === 'select'): ?>
-                                                <small><?= htmlspecialchars(substr($attr['valores'], 0, 50)) ?><?= strlen($attr['valores']) > 50 ? '...' : '' ?></small>
-                                            <?php else: ?>
-                                                <span class="text-muted">-</span>
-                                            <?php endif; ?>
-                                        </td>
                                         <td>
                                             <?php if ($attr['costo_adicional'] > 0): ?>
                                                 <span class="badge bg-info">+$<?= number_format($attr['costo_adicional'], 2) ?></span>
@@ -187,6 +284,9 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                                             <?php endif; ?>
                                         </td>
                                         <td>
+                                            <?php if ($attr['tipo'] === 'select'): ?>
+                                                <a href="?producto_id=<?= $producto_id ?>&atributo_id=<?= $attr['id'] ?>" class="btn btn-sm btn-info" title="Opcioness con imágenes">🖼️</a>
+                                            <?php endif; ?>
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="accion" value="eliminar_atributo">
                                                 <input type="hidden" name="id" value="<?= $attr['id'] ?>">
@@ -203,10 +303,88 @@ if ($_POST['accion'] === 'eliminar_atributo') {
         </div>
 
         <div class="alert alert-info mt-3">
-            <strong>Nota:</strong> Para productos de tipo variable (cortinas, toldos), se recomienda crear atributos "Alto" y "Ancho" como números obligatorios. El sistema calculará el precio automáticamente redondeando a la medida más cercana en la matriz de precios.
+            <strong>Nota:</strong> Para atributos de tipo "Selección", haz clic en el botón 🖼️ para agregar opciones con imágenes.
         </div>
     </div>
 </div>
+
+<?php if ($atributo_id > 0 && !empty($atributos)): 
+    $atributo_actual = array_filter($atributos, fn($a) => $a['id'] == $atributo_id);
+    $atributo_actual = reset($atributo_actual);
+    if ($atributo_actual && $atributo_actual['tipo'] === 'select'):
+?>
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Nueva Opción</h5>
+                    <small class="text-muted">para: <strong><?= htmlspecialchars($atributo_actual['nombre']) ?></strong></small>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="accion" value="guardar_opcion">
+                        <div class="mb-3">
+                            <label for="opcion_nombre" class="form-label">Nombre *</label>
+                            <input type="text" class="form-control" id="opcion_nombre" name="opcion_nombre" placeholder="Ej: Rojo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="imagen" class="form-label">Imagen</label>
+                            <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*">
+                            <small class="text-muted">JPG, PNG, GIF o WEBP (máx. 2MB)</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="opcion_orden" class="form-label">Orden</label>
+                            <input type="number" class="form-control" id="opcion_orden" name="opcion_orden" value="0">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Agregar Opción</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Opciones de "<?= htmlspecialchars($atributo_actual['nombre']) ?>" (<?= count($opciones) ?>)</h5>
+                </div>
+                <div class="card-body">
+                    <?php if (empty($opciones)): ?>
+                        <p class="text-muted">No hay opciones. Agrega las opciones disponibles para este atributo.</p>
+                    <?php else: ?>
+                        <div class="row g-3">
+                            <?php foreach ($opciones as $opcion): ?>
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="card h-100">
+                                        <?php if ($opcion['imagen']): ?>
+                                            <img src="../../uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
+                                                 class="card-img-top" alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
+                                                 style="height: 150px; object-fit: cover;">
+                                        <?php else: ?>
+                                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
+                                                <span class="text-muted">Sin imagen</span>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="card-body">
+                                            <h6 class="card-title"><?= htmlspecialchars($opcion['nombre']) ?></h6>
+                                            <small class="text-muted d-block">Orden: <?= $opcion['orden'] ?></small>
+                                        </div>
+                                        <div class="card-footer bg-light">
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="accion" value="eliminar_opcion">
+                                                <input type="hidden" name="opcion_id" value="<?= $opcion['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('¿Eliminar?')">Eliminar</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="mt-3">
     <a href="productos.php" class="btn btn-secondary">Volver a Productos</a>
