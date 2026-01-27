@@ -19,14 +19,14 @@
       <div class="col-md-4">
         <h5>Contacto</h5>
         <p class="text-white-50">
-          📧 info@tucuroller.com<br>
-          📞 (XXXX) XXX-XXXX<br>
-          📍 Ubicación de la empresa
+          📧 contacto@tucuroller.com<br>
+          📞 (381) 6165554<br>
+          📍 Parque Industrial Kanamico - Lules - Tucuman
         </p>
       </div>
     </div>
     <hr class="bg-white-50">
-    <p class="text-center text-white-50 mb-0">&copy; 2026 Tucu Roller. Todos los derechos reservados.</p>
+    <p class="text-center text-white-50 mb-0">&copy; 2026 Tucu Group. Todos los derechos reservados.</p>
   </div>
 </footer>
 
