@@ -23,13 +23,21 @@ $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $atributo_id = $_GET['atributo_id'] ?? 0;
 $opciones = [];
 if ($atributo_id > 0) {
-    $stmt = $pdo->prepare("
-        SELECT * FROM ecommerce_atributo_opciones 
-        WHERE atributo_id = ? 
-        ORDER BY orden
-    ");
-    $stmt->execute([$atributo_id]);
-    $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        // Verificar si la tabla existe
+        $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+        if ($stmt->rowCount() > 0) {
+            $stmt = $pdo->prepare("
+                SELECT * FROM ecommerce_atributo_opciones 
+                WHERE atributo_id = ? 
+                ORDER BY orden
+            ");
+            $stmt->execute([$atributo_id]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        // Tabla aún no existe, ignorar
+    }
 }
 
 // Procesar agregar/editar atributo
@@ -54,8 +62,8 @@ if ($_POST['accion'] === 'guardar_atributo') {
                 $stmt->execute([$nombre, $tipo, $costo_adicional, $es_obligatorio, $orden, $id, $producto_id]);
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, costo_adicional, es_obligatorio, orden)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, costo_adicional, es_obligatorio, orden, valores)
+                    VALUES (?, ?, ?, ?, ?, ?, '')
                 ");
                 $stmt->execute([$producto_id, $nombre, $tipo, $costo_adicional, $es_obligatorio, $orden]);
                 $atributo_id = $pdo->lastInsertId();
@@ -103,6 +111,12 @@ if ($_POST['accion'] === 'eliminar_atributo') {
 // Procesar agregar opción a atributo
 if ($_POST['accion'] === 'guardar_opcion') {
     try {
+        // Verificar si la tabla existe
+        $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+        if ($stmt->rowCount() === 0) {
+            throw new Exception("La tabla de opciones aún no existe. Ejecuta la migración: admin/migrar_atributo_opciones.php");
+        }
+        
         $opcion_id = intval($_POST['opcion_id'] ?? 0);
         $nombre = $_POST['opcion_nombre'];
         $orden = intval($_POST['opcion_orden'] ?? 0);
@@ -174,24 +188,27 @@ if ($_POST['accion'] === 'guardar_opcion') {
 // Procesar eliminación de opción
 if ($_POST['accion'] === 'eliminar_opcion') {
     try {
-        $opcion_id = intval($_POST['opcion_id']);
-        $pdo->prepare("DELETE FROM ecommerce_atributo_opciones WHERE id = ? AND atributo_id = ?")
-            ->execute([$opcion_id, $atributo_id]);
-        
-        // Recargar opciones
-        $stmt = $pdo->prepare("
-            SELECT * FROM ecommerce_atributo_opciones 
-            WHERE atributo_id = ? 
-            ORDER BY orden
-        ");
-        $stmt->execute([$atributo_id]);
-        $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $mensaje = "Opción eliminada";
+        // Verificar si la tabla existe
+        $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+        if ($stmt->rowCount() > 0) {
+            $opcion_id = intval($_POST['opcion_id']);
+            $pdo->prepare("DELETE FROM ecommerce_atributo_opciones WHERE id = ? AND atributo_id = ?")
+                ->execute([$opcion_id, $atributo_id]);
+            
+            // Recargar opciones
+            $stmt = $pdo->prepare("
+                SELECT * FROM ecommerce_atributo_opciones 
+                WHERE atributo_id = ? 
+                ORDER BY orden
+            ");
+            $stmt->execute([$atributo_id]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $mensaje = "Opción eliminada";
+        }
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
     }
 }
-?>
 ?>
 
 <h1>Atributos - <?= htmlspecialchars($producto['nombre']) ?></h1>

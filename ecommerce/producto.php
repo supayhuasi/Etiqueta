@@ -271,13 +271,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Si es select, obtener opciones con imágenes
                         $opciones_attr = [];
                         if ($attr['tipo'] === 'select') {
-                            $stmt = $pdo->prepare("
-                                SELECT * FROM ecommerce_atributo_opciones 
-                                WHERE atributo_id = ? 
-                                ORDER BY orden
-                            ");
-                            $stmt->execute([$attr['id']]);
-                            $opciones_attr = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            try {
+                                // Verificar si la tabla existe
+                                $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+                                if ($stmt->rowCount() > 0) {
+                                    $stmt = $pdo->prepare("
+                                        SELECT * FROM ecommerce_atributo_opciones 
+                                        WHERE atributo_id = ? 
+                                        ORDER BY orden
+                                    ");
+                                    $stmt->execute([$attr['id']]);
+                                    $opciones_attr = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                }
+                            } catch (Exception $e) {
+                                // Tabla no existe, usar opciones vacías
+                                $opciones_attr = [];
+                            }
                         }
                     ?>
                         <div class="mb-3">

@@ -5,6 +5,16 @@
 - Usuario: Utiliza el mismo login del sistema principal (rol = admin)
 - Autenticación: Compartida con el sistema principal mediante `$_SESSION`
 
+## 🔧 Migraciones
+
+Antes de usar nuevas funcionalidades, ejecuta las migraciones disponibles:
+
+1. **Acceso a Migraciones:** `ecommerce/admin/migraciones.php`
+2. **Migraciones disponibles:**
+   - ✅ `migrar_productos_v2.php` - Atributos, imágenes múltiples (ya incluida)
+   - ✅ `migrar_pedidos_atributos.php` - Almacenamiento de atributos en pedidos (ya incluida)
+   - ⚠️ `migrar_atributo_opciones.php` - Opciones de atributos con imágenes (ejecutar si falla productos_atributos)
+
 ## Módulos
 
 ### 1. Categorías
