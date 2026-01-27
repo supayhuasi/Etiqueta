@@ -125,6 +125,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="d-flex gap-2">
                 <a href="productos.php" class="btn btn-secondary">Cancelar</a>
                 <button type="submit" class="btn btn-primary">Guardar</button>
+                <?php if ($id > 0): ?>
+                    <a href="productos_atributos.php?producto_id=<?= $id ?>" class="btn btn-info">⚙️ Atributos</a>
+                <?php endif; ?>
             </div>
         </form>
     </div>

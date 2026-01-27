@@ -50,6 +50,7 @@ try {
                 nombre VARCHAR(100) NOT NULL,
                 tipo ENUM('text', 'number', 'select') DEFAULT 'text',
                 valores TEXT,
+                costo_adicional DECIMAL(10, 2) DEFAULT 0,
                 es_obligatorio TINYINT(1) DEFAULT 0,
                 orden INT DEFAULT 0,
                 FOREIGN KEY (producto_id) REFERENCES ecommerce_productos(id) ON DELETE CASCADE,
@@ -59,6 +60,12 @@ try {
         echo "   ✓ Tabla ecommerce_producto_atributos creada\n";
     } else {
         echo "   ✓ Ya existe tabla ecommerce_producto_atributos\n";
+        // Agregar columna costo_adicional si no existe
+        $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_producto_atributos LIKE 'costo_adicional'");
+        if ($stmt->rowCount() === 0) {
+            $pdo->exec("ALTER TABLE ecommerce_producto_atributos ADD COLUMN costo_adicional DECIMAL(10, 2) DEFAULT 0 AFTER valores");
+            echo "   ✓ Columna costo_adicional agregada\n";
+        }
     }
     
     // 4. Migrar imagen principal a tabla de imágenes

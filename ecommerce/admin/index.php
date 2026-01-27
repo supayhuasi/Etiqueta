@@ -8,6 +8,9 @@ $total_productos = $stmt->fetch()['total'];
 $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_categorias WHERE activo = 1");
 $total_categorias = $stmt->fetch()['total'];
 
+$stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_producto_atributos");
+$total_atributos = $stmt->fetch()['total'];
+
 $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_pedidos WHERE estado != 'cancelado'");
 $total_pedidos = $stmt->fetch()['total'];
 
@@ -44,6 +47,15 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <h6 class="card-title">📁 Categorías</h6>
                 <h3><?= $total_categorias ?></h3>
                 <a href="categorias.php" class="btn btn-light btn-sm mt-3">Ver</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body">
+                <h6 class="card-title">⚙️ Atributos</h6>
+                <h3><?= $total_atributos ?></h3>
+                <a href="productos.php" class="btn btn-light btn-sm mt-3">Ver</a>
             </div>
         </div>
     </div>

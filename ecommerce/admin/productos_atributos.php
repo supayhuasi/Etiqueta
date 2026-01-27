@@ -26,6 +26,7 @@ if ($_POST['accion'] === 'guardar_atributo') {
         $nombre = $_POST['nombre'];
         $tipo = $_POST['tipo'];
         $valores = $_POST['valores'] ?? '';
+        $costo_adicional = floatval($_POST['costo_adicional'] ?? 0);
         $es_obligatorio = isset($_POST['es_obligatorio']) ? 1 : 0;
         $orden = intval($_POST['orden'] ?? 0);
         
@@ -35,16 +36,16 @@ if ($_POST['accion'] === 'guardar_atributo') {
             if ($id > 0) {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_producto_atributos 
-                    SET nombre = ?, tipo = ?, valores = ?, es_obligatorio = ?, orden = ?
+                    SET nombre = ?, tipo = ?, valores = ?, costo_adicional = ?, es_obligatorio = ?, orden = ?
                     WHERE id = ? AND producto_id = ?
                 ");
-                $stmt->execute([$nombre, $tipo, $valores, $es_obligatorio, $orden, $id, $producto_id]);
+                $stmt->execute([$nombre, $tipo, $valores, $costo_adicional, $es_obligatorio, $orden, $id, $producto_id]);
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, valores, es_obligatorio, orden)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, valores, costo_adicional, es_obligatorio, orden)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$producto_id, $nombre, $tipo, $valores, $es_obligatorio, $orden]);
+                $stmt->execute([$producto_id, $nombre, $tipo, $valores, $costo_adicional, $es_obligatorio, $orden]);
             }
             
             // Recargar atributos
@@ -119,6 +120,11 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                         <label for="valores" class="form-label">Valores (separados por coma)</label>
                         <textarea class="form-control" id="valores" name="valores" rows="3" placeholder="Ej: 10cm, 20cm, 30cm"></textarea>
                     </div>
+                    <div class="mb-3">
+                        <label for="costo_adicional" class="form-label">Costo Adicional ($)</label>
+                        <input type="number" class="form-control" id="costo_adicional" name="costo_adicional" step="0.01" value="0" min="0">
+                        <small class="text-muted">Se suma al precio total del producto</small>
+                    </div>
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="es_obligatorio" name="es_obligatorio">
                         <label class="form-check-label" for="es_obligatorio">Obligatorio</label>
@@ -149,6 +155,7 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                                     <th>Nombre</th>
                                     <th>Tipo</th>
                                     <th>Valores</th>
+                                    <th>Costo Adicional</th>
                                     <th>Obligatorio</th>
                                     <th>Acciones</th>
                                 </tr>
@@ -163,6 +170,13 @@ if ($_POST['accion'] === 'eliminar_atributo') {
                                                 <small><?= htmlspecialchars(substr($attr['valores'], 0, 50)) ?><?= strlen($attr['valores']) > 50 ? '...' : '' ?></small>
                                             <?php else: ?>
                                                 <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($attr['costo_adicional'] > 0): ?>
+                                                <span class="badge bg-info">+$<?= number_format($attr['costo_adicional'], 2) ?></span>
+                                            <?php else: ?>
+                                                <span class="text-muted">Gratis</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>

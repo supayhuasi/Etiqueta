@@ -110,11 +110,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "El atributo '{$attr['nombre']}' es obligatorio";
                     break;
                 }
-                $atributos_seleccionados[$attr['id']] = $valor;
+                $atributos_seleccionados[$attr['id']] = [
+                    'nombre' => $attr['nombre'],
+                    'valor' => $valor,
+                    'costo_adicional' => $attr['costo_adicional']
+                ];
             } else {
                 $valor = $_POST['attr_' . $attr['id']] ?? '';
                 if (!empty($valor)) {
-                    $atributos_seleccionados[$attr['id']] = $valor;
+                    $atributos_seleccionados[$attr['id']] = [
+                        'nombre' => $attr['nombre'],
+                        'valor' => $valor,
+                        'costo_adicional' => $attr['costo_adicional']
+                    ];
                 }
             }
         }
@@ -241,35 +249,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php if ($producto['tipo_precio'] === 'variable'): ?>
                         <div class="alert alert-info mb-4">
                             <h6 class="mb-2">📏 Precio según medidas</h6>
-                            <p class="mb-0 small">El precio se calcula automáticamente según el alto y ancho seleccionado</p>
+                            <p class="mb-0 small">Ingresa el alto y ancho deseado en centímetros. El sistema buscará el precio más cercano a esas medidas.</p>
                         </div>
 
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label for="alto" class="form-label fw-bold">Alto (cm) *</label>
-                                <select class="form-select" id="alto" name="alto" required onchange="actualizarPrecio()">
-                                    <option value="">Seleccionar alto...</option>
-                                    <?php 
-                                    $altos = array_unique(array_column($matriz_precios, 'alto_cm'));
-                                    sort($altos);
-                                    foreach ($altos as $a): 
-                                    ?>
-                                        <option value="<?= $a ?>"><?= $a ?> cm</option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <input type="number" class="form-control" id="alto" name="alto" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <small class="text-muted">Rango: 10 a 300 cm</small>
                             </div>
                             <div class="col-md-6">
                                 <label for="ancho" class="form-label fw-bold">Ancho (cm) *</label>
-                                <select class="form-select" id="ancho" name="ancho" required onchange="actualizarPrecio()">
-                                    <option value="">Seleccionar ancho...</option>
-                                    <?php 
-                                    $anchos = array_unique(array_column($matriz_precios, 'ancho_cm'));
-                                    sort($anchos);
-                                    foreach ($anchos as $a): 
-                                    ?>
-                                        <option value="<?= $a ?>"><?= $a ?> cm</option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <input type="number" class="form-control" id="ancho" name="ancho" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <small class="text-muted">Rango: 10 a 300 cm</small>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -386,47 +378,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <script>
 const matrizPrecios = <?= json_encode($matriz_precios) ?>;
+const atributosData = <?= json_encode($atributos) ?>;
 const precioBase = <?= $producto['precio_base'] ?>;
 
 function actualizarPrecio() {
     const alto = parseInt(document.getElementById('alto').value) || 0;
     const ancho = parseInt(document.getElementById('ancho').value) || 0;
     
-    if (alto > 0 && ancho > 0) {
-        let precioEncontrado = null;
-        let distanciaMinima = Infinity;
-        let medidaOriginal = null;
-        
-        // Encontrar el precio más cercano a las medidas seleccionadas
-        matrizPrecios.forEach(item => {
-            const distancia = Math.abs(item.alto_cm - alto) + Math.abs(item.ancho_cm - ancho);
-            if (distancia < distanciaMinima) {
-                distanciaMinima = distancia;
-                precioEncontrado = parseFloat(item.precio);
-                medidaOriginal = `${item.alto_cm}×${item.ancho_cm}cm`;
-            }
-        });
-        
-        if (precioEncontrado !== null) {
-            const precioFormatado = precioEncontrado.toLocaleString('es-AR', {
-                style: 'currency',
-                currency: 'ARS',
-                minimumFractionDigits: 2
-            }).replace('ARS', '$');
-            
-            document.getElementById('precio_display').innerHTML = 
-                `Precio: <strong>${precioFormatado}</strong>`;
-            
-            const infoDiv = document.getElementById('medidas_info');
-            if (distanciaMinima > 0) {
-                infoDiv.textContent = `(Redondeado a medida más cercana: ${medidaOriginal})`;
-                infoDiv.style.display = 'block';
-            } else {
-                infoDiv.style.display = 'none';
-            }
+    let precioTotal = precioBase;
+    let medidaOriginal = null;
+    let distanciaMinima = Infinity;
+    
+    // Si es producto variable, buscar el precio más cercano
+    if (matrizPrecios.length > 0) {
+        if (alto > 0 && ancho > 0) {
+            // Encontrar el precio más cercano a las medidas seleccionadas
+            matrizPrecios.forEach(item => {
+                const distancia = Math.abs(item.alto_cm - alto) + Math.abs(item.ancho_cm - ancho);
+                if (distancia < distanciaMinima) {
+                    distanciaMinima = distancia;
+                    precioTotal = parseFloat(item.precio);
+                    medidaOriginal = `${item.alto_cm}×${item.ancho_cm}cm`;
+                }
+            });
+        } else {
+            // No hay medidas, mostrar precio base
+            precioTotal = precioBase;
+            medidaOriginal = null;
         }
     }
+    
+    // Agregar costos adicionales de atributos
+    atributosData.forEach(attr => {
+        const valorInput = document.getElementById('attr_' + attr.id);
+        if (valorInput && valorInput.value && attr.costo_adicional > 0) {
+            precioTotal += parseFloat(attr.costo_adicional);
+        }
+    });
+    
+    const precioFormatado = precioTotal.toLocaleString('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2
+    }).replace('ARS', '$');
+    
+    document.getElementById('precio_display').innerHTML = 
+        `Precio: <strong>${precioFormatado}</strong>`;
+    
+    const infoDiv = document.getElementById('medidas_info');
+    if (medidaOriginal && distanciaMinima > 0) {
+        infoDiv.textContent = `(Redondeado a medida más cercana: ${medidaOriginal})`;
+        infoDiv.style.display = 'block';
+    } else if (medidaOriginal && distanciaMinima === 0) {
+        infoDiv.style.display = 'none';
+    } else {
+        infoDiv.style.display = 'none';
+    }
 }
+
+// Actualizar precio cuando cambia un atributo con costo adicional
+document.addEventListener('DOMContentLoaded', function() {
+    atributosData.forEach(attr => {
+        if (attr.costo_adicional > 0) {
+            const valorInput = document.getElementById('attr_' + attr.id);
+            if (valorInput) {
+                valorInput.addEventListener('change', actualizarPrecio);
+                valorInput.addEventListener('keyup', actualizarPrecio);
+            }
+        }
+    });
+});
 </script>
 
 <?php require 'includes/footer.php'; ?>
