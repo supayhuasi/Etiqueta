@@ -4,11 +4,16 @@ require 'includes/header.php';
 $producto_id = $_GET['producto_id'] ?? 0;
 if ($producto_id <= 0) die("Producto no especificado");
 
-$stmt = $pdo->prepare("SELECT * FROM ecommerce_productos WHERE id = ? AND tipo_precio = 'variable'");
+$stmt = $pdo->prepare("SELECT * FROM ecommerce_productos WHERE id = ?");
 $stmt->execute([$producto_id]);
 $producto = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$producto) die("Producto variable no encontrado");
+if (!$producto) die("Producto no encontrado");
+
+// Inicializar variables
+$mensaje = '';
+$error = '';
+$atributo_id = $_GET['atributo_id'] ?? 0;
 
 // Obtener atributos del producto
 $stmt = $pdo->prepare("
@@ -20,7 +25,6 @@ $stmt->execute([$producto_id]);
 $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener opciones de atributo si se está editando
-$atributo_id = $_GET['atributo_id'] ?? 0;
 $opciones = [];
 if ($atributo_id > 0) {
     try {
@@ -41,17 +45,19 @@ if ($atributo_id > 0) {
 }
 
 // Procesar agregar/editar atributo
-if ($_POST['accion'] === 'guardar_atributo') {
+if (($_POST['accion'] ?? '') === 'guardar_atributo') {
     try {
         $id = intval($_POST['id'] ?? 0);
-        $nombre = $_POST['nombre'];
-        $tipo = $_POST['tipo'];
+        $nombre = $_POST['nombre'] ?? '';
+        $tipo = $_POST['tipo'] ?? '';
         $costo_adicional = floatval($_POST['costo_adicional'] ?? 0);
         $es_obligatorio = isset($_POST['es_obligatorio']) ? 1 : 0;
         $orden = intval($_POST['orden'] ?? 0);
         
         if (empty($nombre)) {
             $error = "El nombre es obligatorio";
+        } elseif (empty($tipo)) {
+            $error = "El tipo es obligatorio";
         } else {
             if ($id > 0) {
                 $stmt = $pdo->prepare("
@@ -85,7 +91,7 @@ if ($_POST['accion'] === 'guardar_atributo') {
 }
 
 // Procesar eliminación de atributo
-if ($_POST['accion'] === 'eliminar_atributo') {
+if (($_POST['accion'] ?? '') === 'eliminar_atributo') {
     try {
         $id = intval($_POST['id']);
         $pdo->prepare("DELETE FROM ecommerce_producto_atributos WHERE id = ? AND producto_id = ?")
@@ -109,7 +115,7 @@ if ($_POST['accion'] === 'eliminar_atributo') {
 }
 
 // Procesar agregar opción a atributo
-if ($_POST['accion'] === 'guardar_opcion') {
+if (($_POST['accion'] ?? '') === 'guardar_opcion') {
     try {
         // Verificar si la tabla existe
         $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
@@ -186,12 +192,12 @@ if ($_POST['accion'] === 'guardar_opcion') {
 }
 
 // Procesar eliminación de opción
-if ($_POST['accion'] === 'eliminar_opcion') {
+if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
     try {
         // Verificar si la tabla existe
         $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
         if ($stmt->rowCount() > 0) {
-            $opcion_id = intval($_POST['opcion_id']);
+            $opcion_id = intval($_POST['opcion_id'] ?? 0);
             $pdo->prepare("DELETE FROM ecommerce_atributo_opciones WHERE id = ? AND atributo_id = ?")
                 ->execute([$opcion_id, $atributo_id]);
             
@@ -326,8 +332,13 @@ if ($_POST['accion'] === 'eliminar_opcion') {
 </div>
 
 <?php if ($atributo_id > 0 && !empty($atributos)): 
-    $atributo_actual = array_filter($atributos, fn($a) => $a['id'] == $atributo_id);
-    $atributo_actual = reset($atributo_actual);
+    $atributo_actual = null;
+    foreach ($atributos as $a) {
+        if ($a['id'] == $atributo_id) {
+            $atributo_actual = $a;
+            break;
+        }
+    }
     if ($atributo_actual && $atributo_actual['tipo'] === 'select'):
 ?>
     <div class="row mt-4">
