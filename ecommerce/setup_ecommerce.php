@@ -1,0 +1,136 @@
+<?php
+require '../config.php';
+
+try {
+    // Tabla de categorías de productos
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_categorias (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            nombre VARCHAR(100) NOT NULL UNIQUE,
+            descripcion TEXT,
+            icono VARCHAR(50),
+            activo TINYINT DEFAULT 1,
+            orden INT DEFAULT 0,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
+
+    // Tabla de productos
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_productos (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            codigo VARCHAR(50) NOT NULL UNIQUE,
+            nombre VARCHAR(255) NOT NULL,
+            descripcion TEXT,
+            categoria_id INT NOT NULL,
+            precio_base DECIMAL(10, 2) NOT NULL,
+            tipo_precio ENUM('fijo', 'variable') DEFAULT 'fijo',
+            imagen VARCHAR(255),
+            activo TINYINT DEFAULT 1,
+            orden INT DEFAULT 0,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (categoria_id) REFERENCES ecommerce_categorias(id) ON DELETE RESTRICT,
+            INDEX idx_categoria (categoria_id),
+            INDEX idx_activo (activo)
+        )
+    ");
+
+    // Tabla de matriz de precios (para productos como cortinas/toldos)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_matriz_precios (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            producto_id INT NOT NULL,
+            alto_cm INT NOT NULL,
+            ancho_cm INT NOT NULL,
+            precio DECIMAL(10, 2) NOT NULL,
+            stock INT DEFAULT 0,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (producto_id) REFERENCES ecommerce_productos(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_producto_medidas (producto_id, alto_cm, ancho_cm),
+            INDEX idx_producto (producto_id)
+        )
+    ");
+
+    // Tabla de clientes
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_clientes (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            nombre VARCHAR(255) NOT NULL,
+            telefono VARCHAR(20),
+            provincia VARCHAR(100),
+            ciudad VARCHAR(100),
+            direccion VARCHAR(255),
+            codigo_postal VARCHAR(10),
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_email (email)
+        )
+    ");
+
+    // Tabla de pedidos
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_pedidos (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            numero_pedido VARCHAR(50) NOT NULL UNIQUE,
+            cliente_id INT NOT NULL,
+            total DECIMAL(10, 2) NOT NULL,
+            estado ENUM('pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente',
+            metodo_pago VARCHAR(100),
+            observaciones TEXT,
+            fecha_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fecha_envio DATETIME,
+            fecha_entrega DATETIME,
+            FOREIGN KEY (cliente_id) REFERENCES ecommerce_clientes(id) ON DELETE RESTRICT,
+            INDEX idx_estado (estado),
+            INDEX idx_cliente (cliente_id),
+            INDEX idx_fecha (fecha_pedido)
+        )
+    ");
+
+    // Tabla de items del pedido
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_pedido_items (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            pedido_id INT NOT NULL,
+            producto_id INT NOT NULL,
+            cantidad INT NOT NULL,
+            precio_unitario DECIMAL(10, 2) NOT NULL,
+            alto_cm INT,
+            ancho_cm INT,
+            subtotal DECIMAL(10, 2) NOT NULL,
+            FOREIGN KEY (pedido_id) REFERENCES ecommerce_pedidos(id) ON DELETE CASCADE,
+            FOREIGN KEY (producto_id) REFERENCES ecommerce_productos(id) ON DELETE RESTRICT,
+            INDEX idx_pedido (pedido_id)
+        )
+    ");
+
+    // Tabla de información de la empresa
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_empresa (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            nombre VARCHAR(255) NOT NULL,
+            descripcion TEXT,
+            logo VARCHAR(255),
+            email VARCHAR(255),
+            telefono VARCHAR(20),
+            direccion TEXT,
+            ciudad VARCHAR(100),
+            provincia VARCHAR(100),
+            pais VARCHAR(100),
+            horario_atencion TEXT,
+            redes_sociales JSON,
+            about_us TEXT,
+            terminos_condiciones TEXT,
+            politica_privacidad TEXT,
+            fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+
+    echo "✓ Tablas del ecommerce creadas correctamente";
+
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
