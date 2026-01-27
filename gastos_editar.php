@@ -30,6 +30,10 @@ $tipos = $stmt_tipos->fetchAll(PDO::FETCH_ASSOC);
 $stmt_estados = $pdo->query("SELECT id, nombre FROM estados_gastos WHERE activo = 1 ORDER BY nombre");
 $estados = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 
+// Obtener empleados
+$stmt_empleados = $pdo->query("SELECT id, nombre FROM empleados WHERE activo = 1 ORDER BY nombre");
+$empleados = $stmt_empleados->fetchAll(PDO::FETCH_ASSOC);
+
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha = $_POST['fecha'] ?? '';
@@ -37,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado_gasto_id = $_POST['estado_gasto_id'] ?? 0;
     $descripcion = $_POST['descripcion'] ?? '';
     $monto = floatval($_POST['monto'] ?? 0);
-    $beneficiario = $_POST['beneficiario'] ?? '';
+    $empleado_id = $_POST['empleado_id'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
     
     $errores = [];
@@ -77,12 +81,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare("
                 UPDATE gastos 
-                SET fecha = ?, tipo_gasto_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?, 
-                    beneficiario = ?, observaciones = ?, archivo = ?
+                SET fecha = ?, tipo_gasto_id = ?, empleado_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?, 
+                    observaciones = ?, archivo = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$fecha, $tipo_gasto_id, $estado_gasto_id, $descripcion, $monto, 
-                           $beneficiario, $observaciones, $archivo, $id]);
+            $stmt->execute([$fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
+                           $observaciones, $archivo, $id]);
             
             $mensaje = "Gasto actualizado correctamente";
             
@@ -163,9 +167,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="mb-3">
-                            <label for="beneficiario" class="form-label">Beneficiario</label>
-                            <input type="text" class="form-control" id="beneficiario" name="beneficiario" 
-                                   value="<?= htmlspecialchars($gasto['beneficiario'] ?? '') ?>">
+                            <label for="beneficiario" class="form-label">Beneficiario (Empleado)</label>
+                            <select class="form-select" id="beneficiario" name="empleado_id">
+                                <option value="">Seleccionar empleado...</option>
+                                <?php foreach ($empleados as $empleado): ?>
+                                    <option value="<?= $empleado['id'] ?>" <?= $empleado['id'] == ($gasto['empleado_id'] ?? 0) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($empleado['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="mb-3">

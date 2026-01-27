@@ -31,11 +31,13 @@ $estados_gastos = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 
 // Construir query con filtros
 $query = "SELECT g.*, t.nombre as tipo_nombre, t.color as tipo_color, 
-          e.nombre as estado_nombre, e.color as estado_color, u.nombre as usuario_nombre
+          e.nombre as estado_nombre, e.color as estado_color, u.nombre as usuario_nombre,
+          emp.nombre as empleado_nombre
           FROM gastos g
           LEFT JOIN tipos_gastos t ON g.tipo_gasto_id = t.id
           LEFT JOIN estados_gastos e ON g.estado_gasto_id = e.id
           LEFT JOIN usuarios u ON g.usuario_registra = u.id
+          LEFT JOIN empleados emp ON g.empleado_id = emp.id
           WHERE DATE_FORMAT(g.fecha, '%Y-%m') = ?";
 
 $params = [$mes_filtro];
@@ -188,6 +190,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                         <th>Fecha</th>
                                         <th>Tipo</th>
                                         <th>Descripción</th>
+                                        <th>Beneficiario</th>
                                         <th>Monto</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
@@ -203,6 +206,13 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                             </span>
                                         </td>
                                         <td><?= htmlspecialchars(substr($gasto['descripcion'], 0, 30)) ?></td>
+                                        <td>
+                                            <?php if (!empty($gasto['empleado_nombre'])): ?>
+                                                <strong><?= htmlspecialchars($gasto['empleado_nombre']) ?></strong>
+                                            <?php else: ?>
+                                                <span class="text-muted">Sin asignar</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><strong>$<?= number_format($gasto['monto'], 2, ',', '.') ?></strong></td>
                                         <td>
                                             <span class="badge" style="background-color: <?= htmlspecialchars($gasto['estado_color'] ?? '#999') ?>">

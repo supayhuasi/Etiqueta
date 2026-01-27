@@ -19,6 +19,10 @@ $tipos = $stmt_tipos->fetchAll(PDO::FETCH_ASSOC);
 $stmt_estados = $pdo->query("SELECT id, nombre FROM estados_gastos WHERE activo = 1 ORDER BY nombre");
 $estados = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 
+// Obtener empleados
+$stmt_empleados = $pdo->query("SELECT id, nombre FROM empleados WHERE activo = 1 ORDER BY nombre");
+$empleados = $stmt_empleados->fetchAll(PDO::FETCH_ASSOC);
+
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha = $_POST['fecha'] ?? '';
@@ -26,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado_gasto_id = $_POST['estado_gasto_id'] ?? 0;
     $descripcion = $_POST['descripcion'] ?? '';
     $monto = floatval($_POST['monto'] ?? 0);
-    $beneficiario = $_POST['beneficiario'] ?? '';
+    $empleado_id = $_POST['empleado_id'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
     
     $errores = [];
@@ -64,12 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $numero_gasto = "G-" . str_pad($resultado['total'] + 1, 6, '0', STR_PAD_LEFT);
             
             $stmt = $pdo->prepare("
-                INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, estado_gasto_id, descripcion, monto, 
-                                   beneficiario, observaciones, archivo, usuario_registra)
+                INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto, 
+                                   observaciones, archivo, usuario_registra)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $estado_gasto_id, $descripcion, $monto, 
-                           $beneficiario, $observaciones, $archivo, $_SESSION['user']['id']]);
+            $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
+                           $observaciones, $archivo, $_SESSION['user']['id']]);
             
             $gasto_id = $pdo->lastInsertId();
             
@@ -150,8 +154,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="mb-3">
-                            <label for="beneficiario" class="form-label">Beneficiario</label>
-                            <input type="text" class="form-control" id="beneficiario" name="beneficiario">
+                            <label for="beneficiario" class="form-label">Beneficiario (Empleado)</label>
+                            <select class="form-select" id="beneficiario" name="empleado_id">
+                                <option value="">Seleccionar empleado...</option>
+                                <?php foreach ($empleados as $empleado): ?>
+                                    <option value="<?= $empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="mb-3">
