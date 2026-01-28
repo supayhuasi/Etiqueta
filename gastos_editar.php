@@ -66,11 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // Eliminar archivo anterior si existe
             if (!empty($gasto['archivo']) && file_exists("upload/gastos/" . $gasto['archivo'])) {
-                unlink("upload/gastos/" . $gasto['archivo']);
+                unlink("uploads/gastos/" . $gasto['archivo']);
             }
             
             $archivo = "gasto_" . time() . "." . $ext;
-            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "upload/gastos/" . $archivo)) {
+            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "uploads/gastos/" . $archivo)) {
                 $errores[] = "Error al subir el archivo";
                 $archivo = $gasto['archivo'];
             }
