@@ -136,4 +136,50 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h3 class="mb-3">📱 Gestión de Contenido</h3>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>📸 Slideshow</h5>
+                <p class="text-muted">Carrusel principal</p>
+                <a href="slideshow.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>👥 Clientes</h5>
+                <p class="text-muted">Logos en página inicio</p>
+                <a href="clientes.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>💰 Listas Precios</h5>
+                <p class="text-muted">Descuentos por lista</p>
+                <a href="listas_precios.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>🔧 Setup</h5>
+                <p class="text-muted">Crear tablas</p>
+                <a href="../setup_content.php" class="btn btn-warning btn-sm w-100" target="_blank">Ejecutar</a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php require 'includes/footer.php'; ?>

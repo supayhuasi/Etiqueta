@@ -6,6 +6,14 @@ require 'includes/header.php';
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Obtener slideshow activos
+$stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 ORDER BY orden ASC");
+$slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Obtener clientes activos
+$stmt = $pdo->query("SELECT * FROM ecommerce_clientes_logos WHERE activo = 1 ORDER BY orden ASC");
+$clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Obtener algunos productos destacados
 $stmt = $pdo->query("
     SELECT * FROM ecommerce_productos 
@@ -16,7 +24,37 @@ $stmt = $pdo->query("
 $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<!-- Sección Hero -->
+<!-- Slideshow/Carrusel -->
+<?php if (!empty($slideshows)): ?>
+<div id="carouselSlideshow" class="carousel slide mb-4" data-bs-ride="carousel">
+    <div class="carousel-indicators">
+        <?php foreach ($slideshows as $key => $slide): ?>
+            <button type="button" data-bs-target="#carouselSlideshow" data-bs-slide-to="<?= $key ?>" <?= $key === 0 ? 'class="active"' : '' ?>></button>
+        <?php endforeach; ?>
+    </div>
+    <div class="carousel-inner">
+        <?php foreach ($slideshows as $key => $slide): ?>
+            <div class="carousel-item <?= $key === 0 ? 'active' : '' ?>">
+                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 400px; object-fit: cover;">
+                <div class="carousel-caption d-none d-md-block">
+                    <h1><?= htmlspecialchars($slide['titulo']) ?></h1>
+                    <p><?= htmlspecialchars($slide['descripcion']) ?></p>
+                    <?php if ($slide['enlace']): ?>
+                        <a href="<?= htmlspecialchars($slide['enlace']) ?>" class="btn btn-light btn-lg">Ver más</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#carouselSlideshow" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon"></span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#carouselSlideshow" data-bs-slide="next">
+        <span class="carousel-control-next-icon"></span>
+    </button>
+</div>
+<?php else: ?>
+<!-- Sección Hero por defecto -->
 <section class="hero">
     <div class="container">
         <h1>Bienvenido a Tucu Roller</h1>
@@ -24,6 +62,7 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <a href="tienda.php" class="btn btn-light btn-lg">Ir a la Tienda</a>
     </div>
 </section>
+<?php endif; ?>
 
 <!-- Información de la empresa -->
 <section class="py-5">
@@ -56,7 +95,24 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="col-md-4 mb-4">
                     <div class="card product-card h-100">
                         <?php if (!empty($producto['imagen'])): ?>
-                            <img src="uploads/<?= htmlspecialchars($producto['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>">
+                            <div style="position: relative;">
+                                <img src="uploads/<?= htmlspecialchars($producto['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
+                                <!-- Mostrar descuento si existe -->
+                                <?php 
+                                $stmt = $pdo->prepare("
+                                    SELECT MIN(descuento_porcentaje) as descuento 
+                                    FROM ecommerce_lista_precio_items 
+                                    WHERE producto_id = ? AND activo = 1
+                                ");
+                                $stmt->execute([$producto['id']]);
+                                $descuento_info = $stmt->fetch(PDO::FETCH_ASSOC);
+                                if ($descuento_info['descuento'] > 0):
+                                ?>
+                                    <span class="badge bg-danger" style="position: absolute; top: 10px; right: 10px; font-size: 14px;">
+                                        -<?= $descuento_info['descuento'] ?>%
+                                    </span>
+                                <?php endif; ?>
+                            </div>
                         <?php else: ?>
                             <div class="card-img-top bg-secondary" style="height: 200px; display: flex; align-items: center; justify-content: center;">
                                 <span class="text-white">📦 Sin imagen</span>
@@ -79,6 +135,28 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 </section>
+
+<!-- Nuestros Clientes -->
+<?php if (!empty($clientes)): ?>
+<section class="py-5 bg-light">
+    <div class="container">
+        <h2 class="text-center mb-5">Nuestros Clientes</h2>
+        <div class="row align-items-center">
+            <?php foreach ($clientes as $cliente): ?>
+                <div class="col-md-2 text-center mb-3">
+                    <?php if ($cliente['enlace']): ?>
+                        <a href="<?= htmlspecialchars($cliente['enlace']) ?>" target="_blank" title="<?= htmlspecialchars($cliente['nombre']) ?>">
+                            <img src="uploads/<?= htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
+                        </a>
+                    <?php else: ?>
+                        <img src="uploads/<?= htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <!-- Ventajas -->
 <section class="py-5">
