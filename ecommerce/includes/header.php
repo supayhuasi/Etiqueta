@@ -34,7 +34,7 @@ if (!empty($empresa_menu['logo'])) {
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+<nav class="navbar navbar-expand-lg navbar-light">
   <div class="container-fluid">
     <a class="navbar-brand d-flex align-items-center gap-2" href="index.php">
       <?php if ($logo_menu_src): ?>
