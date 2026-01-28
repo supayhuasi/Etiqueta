@@ -17,6 +17,15 @@ $total_pedidos = $stmt->fetch()['total'];
 $stmt = $pdo->query("SELECT SUM(total) as total FROM ecommerce_pedidos WHERE estado IN ('confirmado', 'preparando', 'enviado', 'entregado')");
 $ingresos_totales = $stmt->fetch()['total'] ?? 0;
 
+// Cotizaciones
+$stmt_cot = $pdo->query("SHOW TABLES LIKE 'ecommerce_cotizaciones'");
+if ($stmt_cot->rowCount() > 0) {
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_cotizaciones WHERE estado = 'pendiente'");
+    $cotizaciones_pendientes = $stmt->fetch()['total'];
+} else {
+    $cotizaciones_pendientes = 0;
+}
+
 // Últimos pedidos
 $stmt = $pdo->query("
     SELECT p.numero_pedido, c.nombre, p.total, p.estado, p.fecha_pedido 
@@ -74,6 +83,15 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <h6 class="card-title">💰 Ingresos</h6>
                 <h3>$<?= number_format($ingresos_totales, 0) ?></h3>
                 <small>Total acumulado</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-dark text-white">
+            <div class="card-body">
+                <h6 class="card-title">💼 Cotizaciones</h6>
+                <h3><?= $cotizaciones_pendientes ?></h3>
+                <a href="cotizaciones.php" class="btn btn-light btn-sm mt-3">Ver</a>
             </div>
         </div>
     </div>
