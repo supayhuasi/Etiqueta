@@ -40,7 +40,6 @@ if (!empty($empresa_menu['logo'])) {
       <?php if ($logo_menu_src): ?>
         <img src="<?= htmlspecialchars($logo_menu_src) ?>" alt="<?= htmlspecialchars($empresa_menu['nombre'] ?? 'Logo') ?>" style="height: 36px; width: auto;">
       <?php endif; ?>
-      <strong><?= htmlspecialchars($empresa_menu['nombre'] ?? '') ?></strong>
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
       <span class="navbar-toggler-icon"></span>
