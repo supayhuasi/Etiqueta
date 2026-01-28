@@ -1,6 +1,26 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+  session_start();
+}
+
+if (!isset($pdo)) {
+  require __DIR__ . '/../config.php';
+}
+
+$empresa_menu = null;
+try {
+  $stmt = $pdo->query("SELECT nombre, logo FROM ecommerce_empresa LIMIT 1");
+  $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  $empresa_menu = null;
+}
+
+$logo_menu_src = null;
+if (!empty($empresa_menu['logo'])) {
+  $logo_menu_path = __DIR__ . '/../uploads/' . $empresa_menu['logo'];
+  if (file_exists($logo_menu_path)) {
+    $logo_menu_src = 'uploads/' . $empresa_menu['logo'];
+  }
 }
 ?>
 <!DOCTYPE html>
@@ -16,8 +36,11 @@ if (session_status() === PHP_SESSION_NONE) {
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container-fluid">
-    <a class="navbar-brand" href="index.php">
-      <strong>Tucu Roller</strong>
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.php">
+      <?php if ($logo_menu_src): ?>
+        <img src="<?= htmlspecialchars($logo_menu_src) ?>" alt="<?= htmlspecialchars($empresa_menu['nombre'] ?? 'Logo') ?>" style="height: 36px; width: auto;">
+      <?php endif; ?>
+      <strong><?= htmlspecialchars($empresa_menu['nombre'] ?? 'Tucu Roller') ?></strong>
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
       <span class="navbar-toggler-icon"></span>
