@@ -249,18 +249,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php if ($producto['tipo_precio'] === 'variable'): ?>
                         <div class="alert alert-info mb-4">
                             <h6 class="mb-2">📏 Precio según medidas</h6>
-                            <p class="mb-0 small">Ingresa el alto y ancho deseado en centímetros. El sistema buscará el precio más cercano a esas medidas.</p>
+                            <p class="mb-0 small">Ingresa el ancho y alto deseado en centímetros. El sistema buscará el precio más cercano a esas medidas.</p>
                         </div>
 
                         <div class="row mb-4">
                             <div class="col-md-6">
-                                <label for="alto" class="form-label fw-bold">Alto (cm) *</label>
-                                <input type="number" class="form-control" id="alto" name="alto" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <label for="ancho" class="form-label fw-bold">Ancho (cm) *</label>
+                                <input type="number" class="form-control" id="ancho" name="ancho" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
                                 <small class="text-muted">Rango: 10 a 300 cm</small>
                             </div>
                             <div class="col-md-6">
-                                <label for="ancho" class="form-label fw-bold">Ancho (cm) *</label>
-                                <input type="number" class="form-control" id="ancho" name="ancho" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <label for="alto" class="form-label fw-bold">Alto (cm) *</label>
+                                <input type="number" class="form-control" id="alto" name="alto" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
                                 <small class="text-muted">Rango: 10 a 300 cm</small>
                             </div>
                         </div>
