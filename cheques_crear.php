@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $numero_cheque = $_POST['numero_cheque'] ?? '';
     $monto = floatval($_POST['monto'] ?? 0);
     $fecha_emision = $_POST['fecha_emision'] ?? '';
+    $fecha_pago = $_POST['fecha_pago'] ?? null;
     $banco = $_POST['banco'] ?? '';
     $beneficiario = $_POST['beneficiario'] ?? '';
     $observaciones = $_POST['observaciones'] ?? '';
@@ -61,18 +62,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE cheques 
                     SET numero_cheque = ?, monto = ?, fecha_emision = ?, mes_emision = ?, 
-                        banco = ?, beneficiario = ?, observaciones = ?
+                        banco = ?, beneficiario = ?, observaciones = ?, fecha_pago = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$numero_cheque, $monto, $fecha_emision, $mes_emision, $banco, $beneficiario, $observaciones, $id]);
+                $stmt->execute([$numero_cheque, $monto, $fecha_emision, $mes_emision, $banco, $beneficiario, $observaciones, $fecha_pago ?: null, $id]);
                 $mensaje = "Cheque actualizado correctamente";
             } else {
                 // Insertar
                 $stmt = $pdo->prepare("
-                    INSERT INTO cheques (numero_cheque, monto, fecha_emision, mes_emision, banco, beneficiario, observaciones, estado, pagado, usuario_registra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    INSERT INTO cheques (numero_cheque, monto, fecha_emision, mes_emision, banco, beneficiario, observaciones, fecha_pago, estado, pagado, usuario_registra)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
                 ");
-                $stmt->execute([$numero_cheque, $monto, $fecha_emision, $mes_emision, $banco, $beneficiario, $observaciones, $estado, $_SESSION['user']['id']]);
+                $stmt->execute([$numero_cheque, $monto, $fecha_emision, $mes_emision, $banco, $beneficiario, $observaciones, $fecha_pago ?: null, $estado, $_SESSION['user']['id']]);
                 $mensaje = "Cheque creado correctamente";
             }
             
@@ -126,10 +127,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="row">
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-6 mb-3">
                                 <label for="fecha_emision" class="form-label">Fecha de Emisión *</label>
                                 <input type="date" class="form-control" id="fecha_emision" name="fecha_emision" 
                                        value="<?= $cheque['fecha_emision'] ?? date('Y-m-d') ?>" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="fecha_pago" class="form-label">Fecha de Pago</label>
+                                <input type="date" class="form-control" id="fecha_pago" name="fecha_pago" 
+                                       value="<?= $cheque['fecha_pago'] ?? '' ?>">
+                                <small class="form-text text-muted">Opcional: fecha estimada/real de pago</small>
                             </div>
                         </div>
 

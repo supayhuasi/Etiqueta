@@ -27,14 +27,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt->fetch()) {
                 $error = "Ya existe una asistencia registrada para este empleado en esta fecha";
             } else {
-                // Determinar estado automáticamente si tiene horario
+                // Determinar estado automáticamente si tiene horario (por día específico o general)
+                $dia_semana = date('w', strtotime($fecha)); // 0=Domingo, 1=Lunes, etc.
+                
+                // Intentar obtener horario específico del día
                 $stmt = $pdo->prepare("
                     SELECT hora_entrada, tolerancia_minutos 
-                    FROM empleados_horarios 
-                    WHERE empleado_id = ? AND activo = 1
+                    FROM empleados_horarios_dias 
+                    WHERE empleado_id = ? AND dia_semana = ? AND activo = 1
                 ");
-                $stmt->execute([$empleado_id]);
+                $stmt->execute([$empleado_id, $dia_semana]);
                 $horario = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Si no hay horario específico del día, usar horario general
+                if (!$horario) {
+                    $stmt = $pdo->prepare("
+                        SELECT hora_entrada, tolerancia_minutos 
+                        FROM empleados_horarios 
+                        WHERE empleado_id = ? AND activo = 1
+                    ");
+                    $stmt->execute([$empleado_id]);
+                    $horario = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
                 
                 if ($horario && $hora_entrada && $estado == 'presente') {
                     $horario_obj = new DateTime($horario['hora_entrada']);
@@ -145,24 +159,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <script>
-// Mostrar horario del empleado seleccionado
-document.getElementById('empleado_id').addEventListener('change', function() {
-    const empleadoId = this.value;
+// Mostrar horario del empleado seleccionado cuando cambia empleado o fecha
+function actualizarHorario() {
+    const empleadoId = document.getElementById('empleado_id').value;
+    const fecha = document.querySelector('input[name="fecha"]').value;
+    
     if (!empleadoId) {
         document.getElementById('horario_info').textContent = '';
         return;
     }
 
-    fetch('asistencias_horario_ajax.php?empleado_id=' + empleadoId)
+    fetch('asistencias_horario_ajax.php?empleado_id=' + empleadoId + '&fecha=' + fecha)
         .then(response => response.json())
         .then(data => {
-            if (data.horario) {
-                document.getElementById('horario_info').textContent = 
-                    `Horario: ${data.horario.hora_entrada} - ${data.horario.hora_salida} (Tolerancia: ${data.horario.tolerancia_minutos} min)`;
-            } else {
-                document.getElementById('horario_info').textContent = 'Sin horario configurado';
-            }
+            document.getElementById('horario_info').textContent = data.texto;
         });
+}
+
+document.getElementById('empleado_id').addEventListener('change', actualizarHorario);
+document.querySelector('input[name="fecha"]').addEventListener('change', actualizarHorario);
+
+// Cargar horario al iniciar si hay empleado y fecha seleccionados
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('empleado_id').value) {
+        actualizarHorario();
+    }
 });
 </script>
 

@@ -12,21 +12,22 @@ if (!isset($_SESSION['user'])) {
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $filtro_estado = $_GET['estado'] ?? 'todos'; // todos, pagados, pendientes
 
-// Obtener todos los meses disponibles con cheques
+// Obtener todos los meses disponibles con cheques (por fecha de pago)
 $stmt_meses = $pdo->query("
-    SELECT DISTINCT mes_emision 
+    SELECT DISTINCT DATE_FORMAT(fecha_pago, '%Y-%m') as mes
     FROM cheques 
-    ORDER BY mes_emision DESC
+    WHERE fecha_pago IS NOT NULL
+    ORDER BY mes DESC
 ");
 $meses_disponibles = $stmt_meses->fetchAll(PDO::FETCH_COLUMN);
 
-// Construir query con filtros
+// Construir query con filtros por fecha de pago
 $query = "
     SELECT * FROM cheques
-    WHERE mes_emision = ?
+    WHERE (DATE_FORMAT(fecha_pago, '%Y-%m') = ? OR (fecha_pago IS NULL AND DATE_FORMAT(fecha_emision, '%Y-%m') = ?))
 ";
 
-$params = [$mes_filtro];
+$params = [$mes_filtro, $mes_filtro];
 
 if ($filtro_estado === 'pagados') {
     $query .= " AND estado = 'pagado'";
@@ -50,9 +51,9 @@ $stmt_total = $pdo->prepare("
         SUM(CASE WHEN estado = 'pagado' THEN 1 ELSE 0 END) as cheques_pagados,
         SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as cheques_pendientes
     FROM cheques
-    WHERE mes_emision = ?
+    WHERE (DATE_FORMAT(fecha_pago, '%Y-%m') = ? OR (fecha_pago IS NULL AND DATE_FORMAT(fecha_emision, '%Y-%m') = ?))
 ");
-$stmt_total->execute([$mes_filtro]);
+$stmt_total->execute([$mes_filtro, $mes_filtro]);
 $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
 ?>
 

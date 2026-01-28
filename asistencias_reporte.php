@@ -21,11 +21,14 @@ $sql = "
         a.hora_salida,
         a.estado,
         a.observaciones,
-        h.hora_entrada as horario_entrada,
-        h.hora_salida as horario_salida
+        COALESCE(hd.hora_entrada, h.hora_entrada) as horario_entrada,
+        COALESCE(hd.hora_salida, h.hora_salida) as horario_salida
     FROM asistencias a
     JOIN empleados e ON a.empleado_id = e.id
     LEFT JOIN empleados_horarios h ON a.empleado_id = h.empleado_id AND h.activo = 1
+    LEFT JOIN empleados_horarios_dias hd ON a.empleado_id = hd.empleado_id 
+        AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1 
+        AND hd.activo = 1
     WHERE " . implode(" AND ", $where) . "
     ORDER BY e.nombre, a.fecha
 ";

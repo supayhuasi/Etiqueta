@@ -28,13 +28,16 @@ $sql = "
     SELECT 
         a.*,
         e.nombre as empleado_nombre,
-        h.hora_entrada as horario_entrada,
-        h.hora_salida as horario_salida,
-        h.tolerancia_minutos,
+        COALESCE(hd.hora_entrada, h.hora_entrada) as horario_entrada,
+        COALESCE(hd.hora_salida, h.hora_salida) as horario_salida,
+        COALESCE(hd.tolerancia_minutos, h.tolerancia_minutos) as tolerancia_minutos,
         u.usuario as creado_por_usuario
     FROM asistencias a
     JOIN empleados e ON a.empleado_id = e.id
     LEFT JOIN empleados_horarios h ON a.empleado_id = h.empleado_id AND h.activo = 1
+    LEFT JOIN empleados_horarios_dias hd ON a.empleado_id = hd.empleado_id 
+        AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1 
+        AND hd.activo = 1
     LEFT JOIN usuarios u ON a.creado_por = u.id
     WHERE " . implode(" AND ", $where) . "
     ORDER BY a.fecha DESC, e.nombre ASC

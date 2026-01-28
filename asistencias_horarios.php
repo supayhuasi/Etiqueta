@@ -79,9 +79,9 @@ $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 </td>
                                 <td>
                                     <?php if ($emp['horario_id']): ?>
-                                        <a href="asistencias_horarios_editar.php?empleado_id=<?= $emp['id'] ?>" class="btn btn-sm btn-primary">✏️ Editar</a>
+                                        <a href="asistencias_horarios_editar_v2.php?empleado_id=<?= $emp['id'] ?>" class="btn btn-sm btn-primary">✏️ Editar</a>
                                     <?php else: ?>
-                                        <a href="asistencias_horarios_crear.php?empleado_id=<?= $emp['id'] ?>" class="btn btn-sm btn-success">➕ Asignar</a>
+                                        <a href="asistencias_horarios_editar_v2.php?empleado_id=<?= $emp['id'] ?>" class="btn btn-sm btn-success">➕ Asignar</a>
                                     <?php endif; ?>
                                 </td>
                             </tr>

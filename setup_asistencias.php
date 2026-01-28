@@ -7,7 +7,7 @@
 require 'config.php';
 
 try {
-    // 1. Tabla de Horarios de Empleados
+    // 1. Tabla de Horarios de Empleados (mantener para compatibilidad)
     $sql = "
     CREATE TABLE IF NOT EXISTS empleados_horarios (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -24,6 +24,26 @@ try {
     ";
     $pdo->exec($sql);
     echo "✓ Tabla empleados_horarios creada<br>";
+
+    // 1b. Tabla de Horarios por Día de la Semana
+    $sql = "
+    CREATE TABLE IF NOT EXISTS empleados_horarios_dias (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        empleado_id INT NOT NULL,
+        dia_semana TINYINT NOT NULL COMMENT '0=Domingo, 1=Lunes, ..., 6=Sábado',
+        hora_entrada TIME NOT NULL,
+        hora_salida TIME NOT NULL,
+        tolerancia_minutos INT DEFAULT 10,
+        activo TINYINT DEFAULT 1,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_empleado_dia (empleado_id, dia_semana),
+        INDEX idx_empleado (empleado_id)
+    )
+    ";
+    $pdo->exec($sql);
+    echo "✓ Tabla empleados_horarios_dias creada<br>";
 
     // 2. Tabla de Asistencias
     $sql = "
