@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require '../includes/navbar.php';
 
 $id = $_GET['id'] ?? 0;
 if ($id <= 0) die("Producto no encontrado");

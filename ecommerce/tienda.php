@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
+require 'includes/navbar.php';
 
 // Obtener categorías
 $stmt = $pdo->query("SELECT * FROM ecommerce_categorias WHERE activo = 1 ORDER BY orden, nombre");

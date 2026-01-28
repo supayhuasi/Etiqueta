@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
+require 'includes/navbar.php';
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");

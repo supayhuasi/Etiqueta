@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require '../includes/navbar.php';
 
 // Obtener o crear registro de empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");

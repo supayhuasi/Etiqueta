@@ -1,7 +1,7 @@
 <?php
 session_start();
 require 'config.php';
-require 'includes/header.php';
+require 'includes/navbar.php';
 
 // Verificar sesión y rol
 if (!isset($_SESSION['user']) || !isset($_SESSION['rol'])) {

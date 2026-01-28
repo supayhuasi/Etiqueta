@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require '../includes/navbar.php';
 
 // Obtener estadísticas
 $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_productos WHERE activo = 1");

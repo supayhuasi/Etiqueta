@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
+require 'includes/navbar.php';
 
 session_start();
 if (!isset($_SESSION['user'])) {

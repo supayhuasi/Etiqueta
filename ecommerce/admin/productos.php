@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require '../includes/navbar.php';
 
 $categoria_filter = $_GET['categoria'] ?? '';
 $query = "

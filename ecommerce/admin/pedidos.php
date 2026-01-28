@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require '../includes/navbar.php';
 
 $estado_filter = $_GET['estado'] ?? '';
 $fecha_desde = $_GET['fecha_desde'] ?? '';

@@ -1,7 +1,7 @@
 <?php
 session_start();
 require 'config.php';
-require 'includes/header.php';
+require 'includes/navbar.php';
 
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
     die("Acceso denegado");
