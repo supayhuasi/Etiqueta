@@ -15,9 +15,15 @@ $stmt = $pdo->query("SELECT * FROM ecommerce_clientes_logos WHERE activo = 1 ORD
 $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener algunos productos destacados
-$stmt = $pdo->query("
-    SELECT * FROM ecommerce_productos 
-    WHERE activo = 1 
+$stmt = $pdo->query(" 
+    SELECT p.*, pi.imagen AS imagen_principal
+    FROM ecommerce_productos p
+    LEFT JOIN (
+        SELECT producto_id, imagen
+        FROM ecommerce_producto_imagenes
+        WHERE es_principal = 1
+    ) pi ON pi.producto_id = p.id
+    WHERE p.activo = 1
     ORDER BY RAND() 
     LIMIT 6
 ");
@@ -94,9 +100,9 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php foreach ($productos_destacados as $producto): ?>
                 <div class="col-md-4 mb-4">
                     <div class="card product-card h-100">
-                        <?php if (!empty($producto['imagen'])): ?>
+                        <?php if (!empty($producto['imagen_principal'])): ?>
                             <div style="position: relative;">
-                                <img src="uploads/<?= htmlspecialchars($producto['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
+                                <img src="uploads/<?= htmlspecialchars($producto['imagen_principal']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
                                 <!-- Mostrar descuento si existe -->
                                 <?php 
                                 $stmt = $pdo->prepare("
