@@ -38,7 +38,7 @@ if (session_status() === PHP_SESSION_NONE) {
         </li>
         <li class="nav-item">
           <a class="nav-link position-relative" href="carrito.php">
-            🛍️ Carrito
+             Carrito
             <?php if (!empty($_SESSION['carrito']) && count($_SESSION['carrito']) > 0): ?>
               <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
                 <?= count($_SESSION['carrito']) ?>

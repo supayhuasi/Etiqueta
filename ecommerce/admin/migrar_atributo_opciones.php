@@ -14,6 +14,7 @@ try {
                 atributo_id INT NOT NULL,
                 nombre VARCHAR(100) NOT NULL,
                 imagen VARCHAR(255),
+                color VARCHAR(7),
                 orden INT DEFAULT 0,
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (atributo_id) REFERENCES ecommerce_producto_atributos(id) ON DELETE CASCADE,
@@ -23,6 +24,16 @@ try {
         echo "   ✓ Tabla ecommerce_atributo_opciones creada\n";
     } else {
         echo "   ✓ Ya existe tabla ecommerce_atributo_opciones\n";
+        
+        // Verificar si existe el campo color
+        $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones LIKE 'color'");
+        if ($stmt->rowCount() === 0) {
+            echo "   + Agregando campo color...\n";
+            $pdo->exec("ALTER TABLE ecommerce_atributo_opciones ADD COLUMN color VARCHAR(7) AFTER imagen");
+            echo "   ✓ Campo color agregado\n";
+        } else {
+            echo "   ✓ Campo color ya existe\n";
+        }
     }
     
     echo "\n✓ Migración completada exitosamente\n";

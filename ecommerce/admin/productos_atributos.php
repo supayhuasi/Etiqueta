@@ -14,6 +14,24 @@ if (!$producto) die("Producto no encontrado");
 $mensaje = '';
 $error = '';
 $atributo_id = $_GET['atributo_id'] ?? 0;
+$editar_atributo_id = $_GET['editar_atributo'] ?? 0;
+$editar_opcion_id = $_GET['editar_opcion'] ?? 0;
+
+// Cargar datos del atributo a editar
+$atributo_editar = null;
+if ($editar_atributo_id > 0) {
+    $stmt = $pdo->prepare("SELECT * FROM ecommerce_producto_atributos WHERE id = ? AND producto_id = ?");
+    $stmt->execute([$editar_atributo_id, $producto_id]);
+    $atributo_editar = $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Cargar datos de la opción a editar
+$opcion_editar = null;
+if ($editar_opcion_id > 0 && $atributo_id > 0) {
+    $stmt = $pdo->prepare("SELECT * FROM ecommerce_atributo_opciones WHERE id = ? AND atributo_id = ?");
+    $stmt->execute([$editar_opcion_id, $atributo_id]);
+    $opcion_editar = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
 // Obtener atributos del producto
 $stmt = $pdo->prepare("
@@ -125,7 +143,13 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
         
         $opcion_id = intval($_POST['opcion_id'] ?? 0);
         $nombre = $_POST['opcion_nombre'];
+        $color = $_POST['opcion_color'] ?? null;
         $orden = intval($_POST['opcion_orden'] ?? 0);
+        
+        // Validar color hexadecimal si se proporciona
+        if ($color && !preg_match('/^#[0-9A-F]{6}$/i', $color)) {
+            $color = null; // Ignorar color inválido
+        }
         
         // Manejo de upload de imagen
         $imagen = null;
@@ -157,23 +181,27 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
                 // Actualizar opción existente
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_atributo_opciones 
-                    SET nombre = ?, orden = ?
+                    SET nombre = ?, color = ?, orden = ?
                     WHERE id = ? AND atributo_id = ?
                 ");
-                $stmt->execute([$nombre, $orden, $opcion_id, $atributo_id]);
+                $stmt->execute([$nombre, $color, $orden, $opcion_id, $atributo_id]);
                 
                 // Si hay nueva imagen, actualizar
                 if ($imagen) {
                     $stmt = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET imagen = ? WHERE id = ?");
                     $stmt->execute([$imagen, $opcion_id]);
                 }
+                
+                // Limpiar edición
+                $editar_opcion_id = 0;
+                $opcion_editar = null;
             } else {
                 // Nueva opción
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, orden)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, orden)
+                    VALUES (?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$atributo_id, $nombre, $imagen, $orden]);
+                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $orden]);
             }
             
             // Recargar opciones
@@ -230,38 +258,51 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5>Nuevo Atributo</h5>
+                <h5><?= $atributo_editar ? 'Editar Atributo' : 'Nuevo Atributo' ?></h5>
+                <?php if ($atributo_editar): ?>
+                    <a href="?producto_id=<?= $producto_id ?>" class="btn btn-sm btn-secondary">Cancelar edición</a>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <form method="POST">
                     <input type="hidden" name="accion" value="guardar_atributo">
+                    <?php if ($atributo_editar): ?>
+                        <input type="hidden" name="id" value="<?= $atributo_editar['id'] ?>">
+                    <?php endif; ?>
                     <div class="mb-3">
                         <label for="nombre" class="form-label">Nombre *</label>
-                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej: Alto" required>
+                        <input type="text" class="form-control" id="nombre" name="nombre" 
+                               value="<?= htmlspecialchars($atributo_editar['nombre'] ?? '') ?>" 
+                               placeholder="Ej: Alto" required>
                     </div>
                     <div class="mb-3">
                         <label for="tipo" class="form-label">Tipo *</label>
                         <select class="form-select" id="tipo" name="tipo" required>
                             <option value="">Seleccionar...</option>
-                            <option value="text">Texto</option>
-                            <option value="number">Número</option>
-                            <option value="select">Selección</option>
+                            <option value="text" <?= ($atributo_editar['tipo'] ?? '') === 'text' ? 'selected' : '' ?>>Texto</option>
+                            <option value="number" <?= ($atributo_editar['tipo'] ?? '') === 'number' ? 'selected' : '' ?>>Número</option>
+                            <option value="select" <?= ($atributo_editar['tipo'] ?? '') === 'select' ? 'selected' : '' ?>>Selección</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label for="costo_adicional" class="form-label">Costo Adicional ($)</label>
-                        <input type="number" class="form-control" id="costo_adicional" name="costo_adicional" step="0.01" value="0" min="0">
+                        <input type="number" class="form-control" id="costo_adicional" name="costo_adicional" 
+                               step="0.01" value="<?= $atributo_editar['costo_adicional'] ?? 0 ?>" min="0">
                         <small class="text-muted">Se suma al precio total del producto</small>
                     </div>
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="es_obligatorio" name="es_obligatorio">
+                        <input type="checkbox" class="form-check-input" id="es_obligatorio" name="es_obligatorio"
+                               <?= ($atributo_editar['es_obligatorio'] ?? 0) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="es_obligatorio">Obligatorio</label>
                     </div>
                     <div class="mb-3">
                         <label for="orden" class="form-label">Orden</label>
-                        <input type="number" class="form-control" id="orden" name="orden" value="0">
+                        <input type="number" class="form-control" id="orden" name="orden" 
+                               value="<?= $atributo_editar['orden'] ?? 0 ?>">
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Agregar Atributo</button>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <?= $atributo_editar ? '💾 Actualizar Atributo' : '➕ Agregar Atributo' ?>
+                    </button>
                 </form>
             </div>
         </div>
@@ -308,12 +349,13 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                         </td>
                                         <td>
                                             <?php if ($attr['tipo'] === 'select'): ?>
-                                                <a href="?producto_id=<?= $producto_id ?>&atributo_id=<?= $attr['id'] ?>" class="btn btn-sm btn-info" title="Opcioness con imágenes">🖼️</a>
+                                                <a href="?producto_id=<?= $producto_id ?>&atributo_id=<?= $attr['id'] ?>" class="btn btn-sm btn-info" title="Opciones con imágenes">🖼️</a>
                                             <?php endif; ?>
+                                            <a href="?producto_id=<?= $producto_id ?>&editar_atributo=<?= $attr['id'] ?>" class="btn btn-sm btn-primary" title="Editar">✏️</a>
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="accion" value="eliminar_atributo">
                                                 <input type="hidden" name="id" value="<?= $attr['id'] ?>">
-                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')">×</button>
+                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar?')" title="Eliminar">🗑️</button>
                                             </form>
                                         </td>
                                     </tr>
@@ -345,26 +387,57 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header">
-                    <h5>Nueva Opción</h5>
+                    <h5><?= $opcion_editar ? 'Editar Opción' : 'Nueva Opción' ?></h5>
                     <small class="text-muted">para: <strong><?= htmlspecialchars($atributo_actual['nombre']) ?></strong></small>
+                    <?php if ($opcion_editar): ?>
+                        <a href="?producto_id=<?= $producto_id ?>&atributo_id=<?= $atributo_id ?>" class="btn btn-sm btn-secondary">Cancelar</a>
+                    <?php endif; ?>
                 </div>
                 <div class="card-body">
                     <form method="POST" enctype="multipart/form-data">
                         <input type="hidden" name="accion" value="guardar_opcion">
+                        <?php if ($opcion_editar): ?>
+                            <input type="hidden" name="opcion_id" value="<?= $opcion_editar['id'] ?>">
+                        <?php endif; ?>
                         <div class="mb-3">
                             <label for="opcion_nombre" class="form-label">Nombre *</label>
-                            <input type="text" class="form-control" id="opcion_nombre" name="opcion_nombre" placeholder="Ej: Rojo" required>
+                            <input type="text" class="form-control" id="opcion_nombre" name="opcion_nombre" 
+                                   value="<?= htmlspecialchars($opcion_editar['nombre'] ?? '') ?>" 
+                                   placeholder="Ej: Rojo" required>
                         </div>
                         <div class="mb-3">
                             <label for="imagen" class="form-label">Imagen</label>
+                            <?php if ($opcion_editar && $opcion_editar['imagen']): ?>
+                                <div class="mb-2">
+                                    <img src="../../uploads/atributos/<?= htmlspecialchars($opcion_editar['imagen']) ?>" 
+                                         alt="Actual" class="img-thumbnail" style="max-width: 150px;">
+                                    <small class="d-block text-muted">Imagen actual (se reemplazará si subes una nueva)</small>
+                                </div>
+                            <?php endif; ?>
                             <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*">
                             <small class="text-muted">JPG, PNG, GIF o WEBP (máx. 2MB)</small>
                         </div>
                         <div class="mb-3">
-                            <label for="opcion_orden" class="form-label">Orden</label>
-                            <input type="number" class="form-control" id="opcion_orden" name="opcion_orden" value="0">
+                            <label for="opcion_color" class="form-label">Color (Opcional)</label>
+                            <div class="input-group">
+                                <input type="color" class="form-control form-control-color" id="opcion_color_picker" 
+                                       value="<?= $opcion_editar['color'] ?? '#000000' ?>" 
+                                       onchange="document.getElementById('opcion_color').value = this.value">
+                                <input type="text" class="form-control" id="opcion_color" name="opcion_color" 
+                                       value="<?= htmlspecialchars($opcion_editar['color'] ?? '') ?>" 
+                                       placeholder="#FF0000" pattern="#[0-9A-Fa-f]{6}" 
+                                       onchange="document.getElementById('opcion_color_picker').value = this.value || '#000000'">
+                            </div>
+                            <small class="text-muted">Formato hexadecimal: #RRGGBB</small>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">Agregar Opción</button>
+                        <div class="mb-3">
+                            <label for="opcion_orden" class="form-label">Orden</label>
+                            <input type="number" class="form-control" id="opcion_orden" name="opcion_orden" 
+                                   value="<?= $opcion_editar['orden'] ?? 0 ?>">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <?= $opcion_editar ? '💾 Actualizar Opción' : '➕ Agregar Opción' ?>
+                        </button>
                     </form>
                 </div>
             </div>
@@ -394,14 +467,25 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                         <?php endif; ?>
                                         <div class="card-body">
                                             <h6 class="card-title"><?= htmlspecialchars($opcion['nombre']) ?></h6>
+                                            <?php if ($opcion['color']): ?>
+                                                <div class="mb-2">
+                                                    <span class="badge" style="background-color: <?= htmlspecialchars($opcion['color']) ?>; color: white;">
+                                                        <?= htmlspecialchars($opcion['color']) ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
                                             <small class="text-muted d-block">Orden: <?= $opcion['orden'] ?></small>
                                         </div>
                                         <div class="card-footer bg-light">
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="accion" value="eliminar_opcion">
-                                                <input type="hidden" name="opcion_id" value="<?= $opcion['id'] ?>">
-                                                <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('¿Eliminar?')">Eliminar</button>
-                                            </form>
+                                            <div class="d-grid gap-2">
+                                                <a href="?producto_id=<?= $producto_id ?>&atributo_id=<?= $atributo_id ?>&editar_opcion=<?= $opcion['id'] ?>" 
+                                                   class="btn btn-sm btn-primary">✏️ Editar</a>
+                                                <form method="POST">
+                                                    <input type="hidden" name="accion" value="eliminar_opcion">
+                                                    <input type="hidden" name="opcion_id" value="<?= $opcion['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('¿Eliminar?')">🗑️ Eliminar</button>
+                                                </form>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
