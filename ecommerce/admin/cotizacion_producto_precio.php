@@ -21,12 +21,39 @@ if (!$producto) {
     exit;
 }
 
+// Obtener atributos del producto
+$stmt = $pdo->prepare("
+    SELECT * FROM ecommerce_producto_atributos 
+    WHERE producto_id = ? 
+    ORDER BY orden
+");
+$stmt->execute([$producto_id]);
+$atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Procesar atributos con sus costos adicionales
+$costo_atributos = 0;
+$atributos_detalles = [];
+foreach ($atributos as $attr) {
+    $valor_attr = $_GET['attr_' . $attr['id']] ?? '';
+    if (!empty($valor_attr)) {
+        $costo_atributos += floatval($attr['costo_adicional']);
+        $atributos_detalles[] = [
+            'id' => $attr['id'],
+            'nombre' => $attr['nombre'],
+            'valor' => $valor_attr,
+            'costo_adicional' => floatval($attr['costo_adicional'])
+        ];
+    }
+}
+
 $respuesta = [
     'id' => $producto['id'],
     'nombre' => $producto['nombre'],
     'descripcion' => $producto['descripcion_corta'],
     'tipo_precio' => $producto['tipo_precio'],
     'precio_base' => floatval($producto['precio_base']),
+    'atributos' => $atributos_detalles,
+    'costo_atributos' => $costo_atributos,
     'requiere_medidas' => $producto['tipo_precio'] === 'variable'
 ];
 
@@ -59,22 +86,28 @@ if ($producto['tipo_precio'] === 'variable' && $ancho > 0 && $alto > 0) {
         }
         
         if ($precio_encontrado) {
-            $respuesta['precio'] = $precio_encontrado['precio'];
+            $precio_base = $precio_encontrado['precio'];
+            $respuesta['precio_matriz'] = $precio_base;
+            $respuesta['medidas_redondeadas'] = "{$precio_encontrado['ancho_original']}x{$precio_encontrado['alto_original']} cm";
             $respuesta['precio_info'] = "Precio aproximado para {$ancho}x{$alto} cm (basado en {$precio_encontrado['ancho_original']}x{$precio_encontrado['alto_original']} cm)";
         } else {
-            $respuesta['precio'] = $producto['precio_base'];
+            $precio_base = $producto['precio_base'];
             $respuesta['precio_info'] = "No hay precio exacto. Usando precio base.";
         }
     } else {
-        $respuesta['precio'] = $producto['precio_base'];
+        $precio_base = $producto['precio_base'];
         $respuesta['precio_info'] = "Sin matriz de precios. Usando precio base.";
     }
 } else {
-    // Precio fijo
-    $respuesta['precio'] = $producto['precio_base'];
+    // Precio fijo o sin medidas especificadas
+    $precio_base = $producto['precio_base'];
     $respuesta['precio_info'] = $producto['tipo_precio'] === 'variable' 
         ? "Ingrese medidas para calcular precio" 
         : "Precio fijo";
 }
+
+// Precio final = precio_base + costo_atributos
+$respuesta['precio'] = $precio_base;
+$respuesta['precio_con_atributos'] = $precio_base + $costo_atributos;
 
 echo json_encode($respuesta);

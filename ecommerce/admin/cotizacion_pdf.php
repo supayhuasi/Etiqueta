@@ -133,6 +133,23 @@ foreach ($items as $item) {
         $pdf->Cell(120, 5, '', 1, 1);
         $pdf->SetFont('Arial', '', 9);
     }
+    
+    // Mostrar atributos si existen
+    if (!empty($item['atributos']) && is_array($item['atributos'])) {
+        $pdf->SetFont('Arial', 'I', 8);
+        $atributos_str = '  🎨 Atributos: ';
+        foreach ($item['atributos'] as $attr) {
+            $atributos_str .= $attr['nombre'] . ': ' . $attr['valor'];
+            if ($attr['costo_adicional'] > 0) {
+                $atributos_str .= ' (+$' . number_format($attr['costo_adicional'], 2) . ')';
+            }
+            $atributos_str .= ' | ';
+        }
+        $atributos_str = rtrim($atributos_str, ' | ');
+        $pdf->Cell(70, 5, utf8_decode(substr($atributos_str, 0, 50)), 1);
+        $pdf->Cell(120, 5, '', 1, 1);
+        $pdf->SetFont('Arial', '', 9);
+    }
 }
 
 // Totales

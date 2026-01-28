@@ -191,6 +191,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <td class="text-end">$<?= number_format($item['precio_unitario'], 2) ?></td>
                             <td class="text-end"><strong>$<?= number_format($item['precio_total'], 2) ?></strong></td>
                         </tr>
+                        <?php if (!empty($item['atributos']) && is_array($item['atributos'])): ?>
+                            <tr class="table-light">
+                                <td colspan="6" class="p-2">
+                                    <small class="text-muted">
+                                        <strong>🎨 Atributos:</strong><br>
+                                        <?php foreach ($item['atributos'] as $attr): ?>
+                                            • <?= htmlspecialchars($attr['nombre']) ?>: <?= htmlspecialchars($attr['valor']) ?>
+                                            <?php if ($attr['costo_adicional'] > 0): ?>
+                                                <span class="badge bg-warning text-dark">+$<?= number_format($attr['costo_adicional'], 2) ?></span>
+                                            <?php endif; ?>
+                                            <br>
+                                        <?php endforeach; ?>
+                                    </small>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
                     <?php endforeach; ?>
                 </tbody>
                 <tfoot>

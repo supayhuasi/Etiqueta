@@ -1,6 +1,27 @@
 <?php
 require 'includes/header.php';
 
+// Endpoint JSON para obtener atributos (usado por cotizaciones)
+if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['producto_id'])) {
+    header('Content-Type: application/json');
+    
+    $producto_id = intval($_GET['producto_id']);
+    
+    $stmt = $pdo->prepare("
+        SELECT id, nombre, tipo, valores, costo_adicional, es_obligatorio, orden
+        FROM ecommerce_producto_atributos 
+        WHERE producto_id = ? 
+        ORDER BY orden
+    ");
+    $stmt->execute([$producto_id]);
+    $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo json_encode([
+        'atributos' => $atributos
+    ]);
+    exit;
+}
+
 $producto_id = $_GET['producto_id'] ?? 0;
 if ($producto_id <= 0) die("Producto no especificado");
 

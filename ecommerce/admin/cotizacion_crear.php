@@ -37,13 +37,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $precio = floatval($item['precio']);
                 $total_item = $cantidad * $precio;
                 
+                // Procesar atributos si existen
+                $atributos = [];
+                $costo_atributos_total = 0;
+                if (!empty($item['atributos']) && is_array($item['atributos'])) {
+                    foreach ($item['atributos'] as $attr) {
+                        if (!empty($attr['nombre'])) {
+                            $costo = floatval($attr['costo'] ?? 0);
+                            $atributos[] = [
+                                'nombre' => $attr['nombre'],
+                                'valor' => $attr['valor'] ?? '',
+                                'costo_adicional' => $costo
+                            ];
+                            $costo_atributos_total += $costo;
+                        }
+                    }
+                }
+                
+                // Agregar costo de atributos al precio unitario
+                $precio_total_unitario = $precio + $costo_atributos_total;
+                $total_item = $cantidad * $precio_total_unitario;
+                
                 $items[] = [
                     'nombre' => $item['nombre'],
                     'descripcion' => $item['descripcion'] ?? '',
                     'cantidad' => $cantidad,
                     'ancho' => !empty($item['ancho']) ? floatval($item['ancho']) : null,
                     'alto' => !empty($item['alto']) ? floatval($item['alto']) : null,
-                    'precio_unitario' => $precio,
+                    'precio_base' => $precio,
+                    'atributos' => $atributos,
+                    'precio_unitario' => $precio_total_unitario,
                     'precio_total' => $total_item
                 ];
                 
@@ -275,6 +298,13 @@ function agregarItem() {
                         </div>
                     </div>
                 </div>
+                
+                <!-- Atributos del producto -->
+                <div id="atributos-container-${itemIndex}" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                    <h6 class="mb-3">🎨 Atributos del Producto</h6>
+                    <div id="atributos-list-${itemIndex}"></div>
+                </div>
+                
                 <button type="button" class="btn btn-sm btn-danger mt-2" onclick="eliminarItem(${itemIndex})">🗑️ Eliminar</button>
             </div>
         </div>
@@ -294,6 +324,7 @@ function cargarProducto(index) {
         document.getElementById(`descripcion_${index}`).value = '';
         document.getElementById(`precio_${index}`).value = '';
         document.getElementById(`precio-info-${index}`).style.display = 'none';
+        document.getElementById(`atributos-container-${index}`).style.display = 'none';
         calcularTotales();
         return;
     }
@@ -305,6 +336,9 @@ function cargarProducto(index) {
     
     // Llenar nombre
     document.getElementById(`nombre_${index}`).value = nombreProducto;
+    
+    // Cargar atributos del producto
+    cargarAtributosProducto(productoId, index);
     
     // Si es precio fijo, establecer precio inmediatamente
     if (tipoProducto === 'fijo') {
@@ -318,6 +352,55 @@ function cargarProducto(index) {
         document.getElementById(`precio-info-${index}`).innerHTML = '⚠️ Ingrese ancho y alto para calcular precio';
         document.getElementById(`precio-info-${index}`).style.display = 'block';
     }
+}
+
+function cargarAtributosProducto(productoId, index) {
+    fetch(`../../ecommerce/admin/productos_atributos.php?accion=obtener&producto_id=${productoId}`)
+        .then(response => response.json())
+        .then(data => {
+            const atributosContainer = document.getElementById(`atributos-list-${index}`);
+            atributosContainer.innerHTML = '';
+            
+            if (data.atributos && data.atributos.length > 0) {
+                document.getElementById(`atributos-container-${index}`).style.display = 'block';
+                
+                data.atributos.forEach(attr => {
+                    let inputHTML = '';
+                    const fieldName = `items[${index}][atributos][${attr.id}]`;
+                    
+                    if (attr.tipo === 'text') {
+                        inputHTML = `<input type="text" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">`;
+                    } else if (attr.tipo === 'number') {
+                        inputHTML = `<input type="number" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" step="0.01" onchange="calcularTotales()">`;
+                    } else if (attr.tipo === 'select') {
+                        const opciones = attr.valores ? attr.valores.split(',') : [];
+                        inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">
+                            <option value="">-- Seleccionar --</option>
+                            ${opciones.map(o => `<option value="${o.trim()}">${o.trim()}</option>`).join('')}
+                        </select>`;
+                    }
+                    
+                    const attrHTML = `
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">
+                                ${attr.nombre}
+                                ${attr.costo_adicional > 0 ? `<span class="badge bg-warning text-dark">+$${parseFloat(attr.costo_adicional).toFixed(2)}</span>` : ''}
+                            </label>
+                            ${inputHTML}
+                            <input type="hidden" name="${fieldName}[nombre]" value="${attr.nombre}">
+                            <input type="hidden" name="${fieldName}[costo]" value="${attr.costo_adicional}">
+                        </div>
+                    `;
+                    atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
+                });
+            } else {
+                document.getElementById(`atributos-container-${index}`).style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error cargando atributos:', error);
+            document.getElementById(`atributos-container-${index}`).style.display = 'none';
+        });
 }
 
 function actualizarPrecioItem(index) {
