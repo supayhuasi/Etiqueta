@@ -29,12 +29,12 @@ $query = "
 $params = [$mes_filtro];
 
 if ($filtro_estado === 'pagados') {
-    $query .= " AND pagado = 1";
+    $query .= " AND estado = 'pagado'";
 } elseif ($filtro_estado === 'pendientes') {
-    $query .= " AND pagado = 0";
+    $query .= " AND estado = 'pendiente'";
 }
 
-$query .= " ORDER BY fecha_emision DESC";
+$query .= " ORDER BY fecha_pago DESC, fecha_emision DESC";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -45,10 +45,10 @@ $stmt_total = $pdo->prepare("
     SELECT 
         COUNT(*) as total_cheques,
         SUM(monto) as monto_total,
-        SUM(CASE WHEN pagado = 1 THEN monto ELSE 0 END) as monto_pagado,
-        SUM(CASE WHEN pagado = 0 THEN monto ELSE 0 END) as monto_pendiente,
-        SUM(CASE WHEN pagado = 1 THEN 1 ELSE 0 END) as cheques_pagados,
-        SUM(CASE WHEN pagado = 0 THEN 1 ELSE 0 END) as cheques_pendientes
+        SUM(CASE WHEN estado = 'pagado' THEN monto ELSE 0 END) as monto_pagado,
+        SUM(CASE WHEN estado = 'pendiente' THEN monto ELSE 0 END) as monto_pendiente,
+        SUM(CASE WHEN estado = 'pagado' THEN 1 ELSE 0 END) as cheques_pagados,
+        SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as cheques_pendientes
     FROM cheques
     WHERE mes_emision = ?
 ");
@@ -173,18 +173,24 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                                 </td>
                                 <td><?= date('d/m/Y', strtotime($cheque['fecha_emision'])) ?></td>
                                 <td>
-                                    <?php if ($cheque['pagado']): ?>
-                                        <span class="badge bg-success">✓ Pagado</span>
+                                    <?php
+                                    $estado_badges = [
+                                        'pendiente' => ['bg' => 'warning', 'icon' => '⏳', 'texto' => 'Pendiente'],
+                                        'pagado' => ['bg' => 'success', 'icon' => '✓', 'texto' => 'Pagado'],
+                                        'rechazado' => ['bg' => 'danger', 'icon' => '✗', 'texto' => 'Rechazado'],
+                                        'aceptado' => ['bg' => 'info', 'icon' => '✓', 'texto' => 'Aceptado']
+                                    ];
+                                    $estado = $cheque['estado'] ?? 'pendiente';
+                                    $badge = $estado_badges[$estado] ?? $estado_badges['pendiente'];
+                                    ?>
+                                    <span class="badge bg-<?= $badge['bg'] ?>"><?= $badge['icon'] ?> <?= $badge['texto'] ?></span>
+                                    <?php if ($cheque['fecha_pago']): ?>
                                         <br><small class="text-muted"><?= date('d/m/Y', strtotime($cheque['fecha_pago'])) ?></small>
-                                    <?php else: ?>
-                                        <span class="badge bg-warning">⏳ Pendiente</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <?php if (!$cheque['pagado']): ?>
-                                            <a href="cheques_pagar.php?id=<?= $cheque['id'] ?>" class="btn btn-success" title="Marcar como pagado">💰</a>
-                                        <?php endif; ?>
+                                        <a href="cheques_cambiar_estado.php?id=<?= $cheque['id'] ?>" class="btn btn-primary" title="Cambiar estado">🔄</a>
                                         <a href="cheques_editar.php?id=<?= $cheque['id'] ?>" class="btn btn-warning" title="Editar">✎</a>
                                         <a href="cheques_eliminar.php?id=<?= $cheque['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-danger" title="Eliminar" onclick="return confirm('¿Estás seguro?')">🗑️</a>
                                     </div>

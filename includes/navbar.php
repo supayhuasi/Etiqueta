@@ -53,6 +53,10 @@ if (!isset($_SESSION)) {
         <li class="nav-item">
           <a class="nav-link" href="gastos.php">💸 Gastos</a>
         </li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="asistencias.php">📋 Asistencias</a>
+        </li>
         <?php endif; ?>
 
       </ul>
