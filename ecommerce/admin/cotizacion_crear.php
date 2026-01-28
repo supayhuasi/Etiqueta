@@ -95,6 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = $e->getMessage();
     }
 }
+
+// Obtener productos activos para el selector
+$stmt = $pdo->query("
+    SELECT id, nombre, tipo_precio, precio_base 
+    FROM ecommerce_productos 
+    WHERE activo = 1 
+    ORDER BY nombre
+");
+$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -204,38 +213,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <script>
 let itemIndex = 0;
+const productos = <?= json_encode($productos) ?>;
 
 function agregarItem() {
     itemIndex++;
+    
+    // Crear opciones del selector de productos
+    let productosOptions = '<option value="">-- Seleccionar producto --</option>';
+    productos.forEach(p => {
+        productosOptions += `<option value="${p.id}" data-tipo="${p.tipo_precio}" data-precio="${p.precio_base}">${p.nombre} ${p.tipo_precio === 'variable' ? '(Precio variable)' : '($' + parseFloat(p.precio_base).toFixed(2) + ')'}</option>`;
+    });
+    
     const html = `
         <div class="card mb-3 item-row" id="item_${itemIndex}">
             <div class="card-body">
+                <div class="row mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Producto del catálogo</label>
+                        <select class="form-select producto-select" data-index="${itemIndex}" onchange="cargarProducto(${itemIndex})">
+                            ${productosOptions}
+                        </select>
+                        <small class="text-muted">O ingresa manualmente abajo</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div id="precio-info-${itemIndex}" class="alert alert-info mt-4" style="display:none; padding: 8px; margin: 0;"></div>
+                    </div>
+                </div>
                 <div class="row">
-                    <div class="col-md-4">
-                        <label class="form-label">Nombre del Producto *</label>
-                        <input type="text" class="form-control" name="items[${itemIndex}][nombre]" required onchange="calcularTotales()">
-                    </div>
                     <div class="col-md-3">
+                        <label class="form-label">Nombre del Producto *</label>
+                        <input type="text" class="form-control item-nombre" id="nombre_${itemIndex}" name="items[${itemIndex}][nombre]" required onchange="calcularTotales()">
+                    </div>
+                    <div class="col-md-2">
                         <label class="form-label">Descripción</label>
-                        <input type="text" class="form-control" name="items[${itemIndex}][descripcion]" onchange="calcularTotales()">
+                        <input type="text" class="form-control" id="descripcion_${itemIndex}" name="items[${itemIndex}][descripcion]" onchange="calcularTotales()">
                     </div>
                     <div class="col-md-1">
-                        <label class="form-label">Ancho</label>
-                        <input type="number" class="form-control" name="items[${itemIndex}][ancho]" step="0.01" min="0" onchange="calcularTotales()">
+                        <label class="form-label">Ancho (cm)</label>
+                        <input type="number" class="form-control item-ancho" id="ancho_${itemIndex}" name="items[${itemIndex}][ancho]" step="0.01" min="0" onchange="actualizarPrecioItem(${itemIndex})">
                     </div>
                     <div class="col-md-1">
-                        <label class="form-label">Alto</label>
-                        <input type="number" class="form-control" name="items[${itemIndex}][alto]" step="0.01" min="0" onchange="calcularTotales()">
+                        <label class="form-label">Alto (cm)</label>
+                        <input type="number" class="form-control item-alto" id="alto_${itemIndex}" name="items[${itemIndex}][alto]" step="0.01" min="0" onchange="actualizarPrecioItem(${itemIndex})">
                     </div>
                     <div class="col-md-1">
                         <label class="form-label">Cant. *</label>
-                        <input type="number" class="form-control item-cantidad" name="items[${itemIndex}][cantidad]" value="1" min="1" required onchange="calcularTotales()">
+                        <input type="number" class="form-control item-cantidad" id="cantidad_${itemIndex}" name="items[${itemIndex}][cantidad]" value="1" min="1" required onchange="calcularTotales()">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Precio Unit. *</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control item-precio" name="items[${itemIndex}][precio]" step="0.01" min="0" required onchange="calcularTotales()">
+                            <input type="number" class="form-control item-precio" id="precio_${itemIndex}" name="items[${itemIndex}][precio]" step="0.01" min="0" required onchange="calcularTotales()">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Subtotal</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="text" class="form-control item-subtotal" id="subtotal_${itemIndex}" readonly>
                         </div>
                     </div>
                 </div>
@@ -245,6 +281,82 @@ function agregarItem() {
     `;
     
     document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+    calcularTotales();
+}
+
+function cargarProducto(index) {
+    const select = document.querySelector(`[data-index="${index}"]`);
+    const productoId = select.value;
+    
+    if (!productoId) {
+        // Limpiar campos
+        document.getElementById(`nombre_${index}`).value = '';
+        document.getElementById(`descripcion_${index}`).value = '';
+        document.getElementById(`precio_${index}`).value = '';
+        document.getElementById(`precio-info-${index}`).style.display = 'none';
+        calcularTotales();
+        return;
+    }
+    
+    const option = select.selectedOptions[0];
+    const tipoProducto = option.dataset.tipo;
+    const precioBase = parseFloat(option.dataset.precio);
+    const nombreProducto = option.text.split('(')[0].trim();
+    
+    // Llenar nombre
+    document.getElementById(`nombre_${index}`).value = nombreProducto;
+    
+    // Si es precio fijo, establecer precio inmediatamente
+    if (tipoProducto === 'fijo') {
+        document.getElementById(`precio_${index}`).value = precioBase.toFixed(2);
+        document.getElementById(`precio-info-${index}`).innerHTML = '✓ Precio fijo del producto';
+        document.getElementById(`precio-info-${index}`).style.display = 'block';
+        calcularTotales();
+    } else {
+        // Es precio variable, necesita medidas
+        document.getElementById(`precio_${index}`).value = '';
+        document.getElementById(`precio-info-${index}`).innerHTML = '⚠️ Ingrese ancho y alto para calcular precio';
+        document.getElementById(`precio-info-${index}`).style.display = 'block';
+    }
+}
+
+function actualizarPrecioItem(index) {
+    const select = document.querySelector(`[data-index="${index}"]`);
+    const productoId = select?.value;
+    
+    if (!productoId) {
+        calcularTotales();
+        return;
+    }
+    
+    const option = select.selectedOptions[0];
+    const tipoProducto = option.dataset.tipo;
+    
+    if (tipoProducto === 'variable') {
+        const ancho = parseFloat(document.getElementById(`ancho_${index}`).value || 0);
+        const alto = parseFloat(document.getElementById(`alto_${index}`).value || 0);
+        
+        if (ancho > 0 && alto > 0) {
+            // Obtener precio desde la matriz
+            fetch(`cotizacion_producto_precio.php?producto_id=${productoId}&ancho=${ancho}&alto=${alto}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    document.getElementById(`precio_${index}`).value = data.precio.toFixed(2);
+                    document.getElementById(`precio-info-${index}`).innerHTML = '✓ ' + data.precio_info;
+                    document.getElementById(`precio-info-${index}`).style.display = 'block';
+                    calcularTotales();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+    }
+    
     calcularTotales();
 }
 
@@ -259,7 +371,15 @@ function calcularTotales() {
     document.querySelectorAll('.item-row').forEach(row => {
         const cantidad = parseFloat(row.querySelector('.item-cantidad')?.value || 0);
         const precio = parseFloat(row.querySelector('.item-precio')?.value || 0);
-        subtotal += cantidad * precio;
+        const subtotalItem = cantidad * precio;
+        
+        // Actualizar subtotal del item
+        const subtotalInput = row.querySelector('.item-subtotal');
+        if (subtotalInput) {
+            subtotalInput.value = subtotalItem.toFixed(2);
+        }
+        
+        subtotal += subtotalItem;
     });
     
     const descuento = parseFloat(document.getElementById('descuento').value || 0);
