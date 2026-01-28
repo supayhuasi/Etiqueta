@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/navbar.php';
+require 'includes/header.php';
 
 $id = $_GET['id'] ?? 0;
 $mes = $_GET['mes'] ?? date('Y-m');

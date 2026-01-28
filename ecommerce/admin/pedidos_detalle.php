@@ -1,5 +1,5 @@
 <?php
-require '../includes/navbar.php';
+require 'includes/header.php';
 
 $pedido_id = $_GET['id'] ?? 0;
 

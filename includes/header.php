@@ -7,12 +7,6 @@
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-dark px-3">
-  <span class="navbar-brand">Tucu Roller</span>
-  <div class="text-white">
-    <?= $_SESSION['user']['nombre'] ?>
-    <a href="auth/logout.php" class="btn btn-sm btn-outline-light ms-2">Salir</a>
-  </div>
-</nav>
+<?php require 'navbar.php'; ?>
 
 <div class="container mt-4">

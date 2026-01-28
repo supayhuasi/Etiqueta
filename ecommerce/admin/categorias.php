@@ -1,5 +1,5 @@
 <?php
-require '../includes/navbar.php';
+require 'includes/header.php';
 
 $stmt = $pdo->query("SELECT * FROM ecommerce_categorias ORDER BY orden, nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);

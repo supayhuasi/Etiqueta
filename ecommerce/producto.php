@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/navbar.php';
+require 'includes/header.php';
 
 $producto_id = $_GET['id'] ?? 0;
 

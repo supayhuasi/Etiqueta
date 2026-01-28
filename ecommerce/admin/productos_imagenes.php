@@ -1,5 +1,5 @@
 <?php
-require '../includes/navbar.php';
+require 'includes/header.php';
 
 $producto_id = $_GET['producto_id'] ?? 0;
 if ($producto_id <= 0) die("Producto no especificado");

@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/navbar.php';
+require 'includes/header.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {

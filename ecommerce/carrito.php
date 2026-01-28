@@ -1,6 +1,6 @@
 <?php
 require 'config.php';
-require 'includes/navbar.php';
+require 'includes/header.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
