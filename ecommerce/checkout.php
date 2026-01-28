@@ -36,6 +36,10 @@ $total = $subtotal + $envio;
 $mensaje = '';
 $error = '';
 
+// Obtener configuración de Mercado Pago
+$stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
+$config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = $_POST['email'] ?? '';
     $nombre = $_POST['nombre'] ?? '';
@@ -79,12 +83,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Generar número de pedido
             $numero_pedido = "PED-" . date('YmdHis') . "-" . rand(1000, 9999);
             
+            // Determinar estado inicial del pedido
+            $estado_pedido = 'pendiente_pago';
+            if ($metodo_pago === 'Transferencia Bancaria') {
+                $estado_pedido = 'esperando_transferencia';
+            } elseif ($metodo_pago === 'Efectivo contra Entrega') {
+                $estado_pedido = 'esperando_envio';
+            }
+            
             // Crear pedido
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado)
+                VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$numero_pedido, $cliente_id, $total, $metodo_pago]);
+            $stmt->execute([$numero_pedido, $cliente_id, $total, $metodo_pago, $estado_pedido]);
             $pedido_id = $pdo->lastInsertId();
             
             // Agregar items al pedido
@@ -119,7 +131,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
             
-            // Limpiar carrito
+            // Si es tarjeta de crédito y Mercado Pago está disponible
+            if ($metodo_pago === 'Tarjeta de Crédito' && $config_mp) {
+                // Redirigir a página de pago con Mercado Pago
+                $_SESSION['pedido_id'] = $pedido_id;
+                $_SESSION['pedido_numero'] = $numero_pedido;
+                header("Location: mp_checkout.php?pedido_id=" . $pedido_id);
+                exit;
+            }
+            
+            // Para otros métodos de pago, limpiar carrito y mostrar confirmación
             unset($_SESSION['carrito']);
             
             $mensaje = "¡Pedido creado exitosamente! Número de pedido: <strong>$numero_pedido</strong>";

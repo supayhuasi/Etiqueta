@@ -79,6 +79,28 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN imagen VARCHAR(255) AFTER tipo_precio");
     }
     
+    // Verificar tabla ecommerce_mercadopago_config
+    $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_mercadopago_config'");
+    if ($stmt->rowCount() === 0) {
+        echo "Creando tabla ecommerce_mercadopago_config...\n";
+        $pdo->exec("
+            CREATE TABLE ecommerce_mercadopago_config (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                activo TINYINT(1) DEFAULT 0,
+                modo ENUM('test', 'produccion') DEFAULT 'test',
+                public_key_test VARCHAR(500),
+                access_token_test VARCHAR(500),
+                public_key_produccion VARCHAR(500),
+                access_token_produccion VARCHAR(500),
+                notification_url VARCHAR(500),
+                descripcion_defecto VARCHAR(255) DEFAULT 'Pago en tienda',
+                fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        ");
+        // Insertar registro inicial
+        $pdo->exec("INSERT INTO ecommerce_mercadopago_config (activo) VALUES (0)");
+    }
+    
     echo "✓ Todas las tablas están listas\n";
 } catch (Exception $e) {
     echo "✗ Error: " . $e->getMessage() . "\n";

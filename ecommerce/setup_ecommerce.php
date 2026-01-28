@@ -76,16 +76,20 @@ try {
             numero_pedido VARCHAR(50) NOT NULL UNIQUE,
             cliente_id INT NOT NULL,
             total DECIMAL(10, 2) NOT NULL,
-            estado ENUM('pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente',
+            estado ENUM('pendiente_pago', 'esperando_transferencia', 'esperando_envio', 'pagado', 'pago_pendiente', 'pago_autorizado', 'pago_en_proceso', 'pago_rechazado', 'pago_reembolsado', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente_pago',
             metodo_pago VARCHAR(100),
             observaciones TEXT,
-            fecha_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+            mercadopago_preference_id VARCHAR(255),
+            mercadopago_payment_id VARCHAR(255),
+            mercadopago_status VARCHAR(50),
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_envio DATETIME,
             fecha_entrega DATETIME,
             FOREIGN KEY (cliente_id) REFERENCES ecommerce_clientes(id) ON DELETE RESTRICT,
             INDEX idx_estado (estado),
             INDEX idx_cliente (cliente_id),
-            INDEX idx_fecha (fecha_pedido)
+            INDEX idx_fecha (fecha_creacion),
+            INDEX idx_mp_payment (mercadopago_payment_id)
         )
     ");
 
