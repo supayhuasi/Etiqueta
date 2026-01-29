@@ -1,10 +1,13 @@
 <?php
 require 'config.php';
 require 'includes/header.php';
+require 'includes/cliente_auth.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+$cliente_actual = cliente_actual($pdo);
 
 $carrito = $_SESSION['carrito'] ?? [];
 
@@ -57,27 +60,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "El carrito está vacío";
     } else {
         try {
-            // Verificar o crear cliente
-            $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ?");
-            $stmt->execute([$email]);
-            $cliente = $stmt->fetch();
-            
-            if (!$cliente) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_clientes (email, nombre, telefono, provincia, ciudad, direccion, codigo_postal)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$email, $nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal]);
-                $cliente_id = $pdo->lastInsertId();
-            } else {
-                $cliente_id = $cliente['id'];
-                // Actualizar datos del cliente
+            if ($cliente_actual) {
+                $cliente_id = $cliente_actual['id'];
+                $email = $cliente_actual['email'];
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_clientes 
                     SET nombre = ?, telefono = ?, provincia = ?, ciudad = ?, direccion = ?, codigo_postal = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([$nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal, $cliente_id]);
+            } else {
+                // Verificar o crear cliente
+                $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ?");
+                $stmt->execute([$email]);
+                $cliente = $stmt->fetch();
+                
+                if (!$cliente) {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO ecommerce_clientes (email, nombre, telefono, provincia, ciudad, direccion, codigo_postal)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([$email, $nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal]);
+                    $cliente_id = $pdo->lastInsertId();
+                } else {
+                    $cliente_id = $cliente['id'];
+                    // Actualizar datos del cliente
+                    $stmt = $pdo->prepare("
+                        UPDATE ecommerce_clientes 
+                        SET nombre = ?, telefono = ?, provincia = ?, ciudad = ?, direccion = ?, codigo_postal = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal, $cliente_id]);
+                }
             }
             
             // Generar número de pedido
@@ -177,38 +191,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="nombre" class="form-label">Nombre Completo *</label>
-                                    <input type="text" class="form-control" id="nombre" name="nombre" required>
+                                    <input type="text" class="form-control" id="nombre" name="nombre" value="<?= htmlspecialchars($cliente_actual['nombre'] ?? '') ?>" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="email" class="form-label">Email *</label>
-                                    <input type="email" class="form-control" id="email" name="email" required>
+                                    <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cliente_actual['email'] ?? '') ?>" <?= $cliente_actual ? 'readonly' : '' ?> required>
                                 </div>
                             </div>
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="telefono" class="form-label">Teléfono</label>
-                                    <input type="tel" class="form-control" id="telefono" name="telefono">
+                                    <input type="tel" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars($cliente_actual['telefono'] ?? '') ?>">
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="codigo_postal" class="form-label">Código Postal</label>
-                                    <input type="text" class="form-control" id="codigo_postal" name="codigo_postal">
+                                    <input type="text" class="form-control" id="codigo_postal" name="codigo_postal" value="<?= htmlspecialchars($cliente_actual['codigo_postal'] ?? '') ?>">
                                 </div>
                             </div>
 
                             <div class="mb-3">
                                 <label for="direccion" class="form-label">Dirección *</label>
-                                <input type="text" class="form-control" id="direccion" name="direccion" required>
+                                <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cliente_actual['direccion'] ?? '') ?>" required>
                             </div>
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="ciudad" class="form-label">Ciudad</label>
-                                    <input type="text" class="form-control" id="ciudad" name="ciudad">
+                                    <input type="text" class="form-control" id="ciudad" name="ciudad" value="<?= htmlspecialchars($cliente_actual['ciudad'] ?? '') ?>">
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="provincia" class="form-label">Provincia</label>
-                                    <input type="text" class="form-control" id="provincia" name="provincia">
+                                    <input type="text" class="form-control" id="provincia" name="provincia" value="<?= htmlspecialchars($cliente_actual['provincia'] ?? '') ?>">
                                 </div>
                             </div>
                         </div>

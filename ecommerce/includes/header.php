@@ -58,6 +58,21 @@ if (!empty($empresa_menu['logo'])) {
         <li class="nav-item">
           <a class="nav-link" href="contacto.php">Contacto</a>
         </li>
+        <?php if (!empty($_SESSION['cliente_id'])): ?>
+          <li class="nav-item">
+            <a class="nav-link" href="mis_pedidos.php">Mis pedidos</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="cliente_logout.php">Salir<?= !empty($_SESSION['cliente_nombre']) ? ' (' . htmlspecialchars($_SESSION['cliente_nombre']) . ')' : '' ?></a>
+          </li>
+        <?php else: ?>
+          <li class="nav-item">
+            <a class="nav-link" href="cliente_login.php">Ingresar</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="cliente_registro.php">Registrarse</a>
+          </li>
+        <?php endif; ?>
         <li class="nav-item">
           <a class="nav-link position-relative" href="carrito.php">
              Carrito

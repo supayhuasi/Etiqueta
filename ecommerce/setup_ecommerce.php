@@ -57,12 +57,14 @@ try {
         CREATE TABLE IF NOT EXISTS ecommerce_clientes (
             id INT PRIMARY KEY AUTO_INCREMENT,
             email VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255),
             nombre VARCHAR(255) NOT NULL,
             telefono VARCHAR(20),
             provincia VARCHAR(100),
             ciudad VARCHAR(100),
             direccion VARCHAR(255),
             codigo_postal VARCHAR(10),
+            activo TINYINT DEFAULT 1,
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_email (email)
