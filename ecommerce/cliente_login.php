@@ -3,6 +3,22 @@ require 'config.php';
 require 'includes/header.php';
 require 'includes/cliente_auth.php';
 
+$empresa = null;
+try {
+    $stmt = $pdo->query("SELECT nombre, logo FROM ecommerce_empresa LIMIT 1");
+    $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $empresa = null;
+}
+
+$logo_src = null;
+if (!empty($empresa['logo'])) {
+    $logo_path = __DIR__ . '/uploads/' . $empresa['logo'];
+    if (file_exists($logo_path)) {
+        $logo_src = 'uploads/' . $empresa['logo'];
+    }
+}
+
 if (!empty($_SESSION['cliente_id'])) {
     header('Location: mis_pedidos.php');
     exit;
@@ -22,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$cliente || empty($cliente['password_hash'])) {
-            $error = 'No existe una cuenta con ese email. Registrate.';
+            $error = 'No existe una cuenta con ese email.';
         } elseif ((int)$cliente['activo'] !== 1) {
             $error = 'La cuenta está inactiva.';
         } elseif (!password_verify($password, $cliente['password_hash'])) {
@@ -48,6 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="card">
                 <div class="card-body">
+                    <?php if ($logo_src): ?>
+                        <div class="text-center mb-3">
+                            <img src="<?= htmlspecialchars($logo_src) ?>" alt="<?= htmlspecialchars($empresa['nombre'] ?? 'Logo') ?>" style="max-height: 90px; max-width: 100%;">
+                        </div>
+                    <?php endif; ?>
                     <form method="POST">
                         <div class="mb-3">
                             <label class="form-label">Email</label>
@@ -58,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="password" name="password" class="form-control" required>
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
-                            <a href="cliente_registro.php" class="text-muted">Crear cuenta</a>
                             <button type="submit" class="btn btn-primary">Ingresar</button>
                         </div>
                     </form>

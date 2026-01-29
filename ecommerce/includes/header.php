@@ -36,16 +36,16 @@ if (!empty($empresa_menu['logo'])) {
 
 <nav class="navbar navbar-expand-lg navbar-light">
   <div class="container-fluid">
-    <a class="navbar-brand d-flex align-items-center gap-2" href="index.php">
-      <?php if ($logo_menu_src): ?>
-        <img src="<?= htmlspecialchars($logo_menu_src) ?>" alt="<?= htmlspecialchars($empresa_menu['nombre'] ?? 'Logo') ?>" style="height: 36px; width: auto;">
-      <?php endif; ?>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+    <button class="navbar-toggler order-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto">
+    <a class="navbar-brand d-flex align-items-center gap-2 mx-auto order-1" href="index.php">
+      <?php if ($logo_menu_src): ?>
+        <img src="<?= htmlspecialchars($logo_menu_src) ?>" alt="<?= htmlspecialchars($empresa_menu['nombre'] ?? 'Logo') ?>" style="height: 64px; width: auto;">
+      <?php endif; ?>
+    </a>
+    <div class="collapse navbar-collapse order-2 justify-content-end" id="navbarNav">
+      <ul class="navbar-nav">
         <li class="nav-item">
           <a class="nav-link" href="index.php">Inicio</a>
         </li>
@@ -68,9 +68,6 @@ if (!empty($empresa_menu['logo'])) {
         <?php else: ?>
           <li class="nav-item">
             <a class="nav-link" href="cliente_login.php">Ingresar</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="cliente_registro.php">Registrarse</a>
           </li>
         <?php endif; ?>
         <li class="nav-item">
