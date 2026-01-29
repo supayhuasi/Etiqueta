@@ -242,6 +242,27 @@ let itemIndex = 0;
 const itemsExistentes = <?= json_encode($items) ?>;
 const productos = <?= json_encode($productos) ?>;
 
+function productoLabel(p) {
+    const precioLabel = p.tipo_precio === 'variable'
+        ? '(Precio variable)'
+        : '($' + parseFloat(p.precio_base).toFixed(2) + ')';
+    return `${p.nombre} ${precioLabel}`;
+}
+
+function asegurarDatalistProductos() {
+    let datalist = document.getElementById('productos-datalist');
+    if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'productos-datalist';
+        productos.forEach(p => {
+            const option = document.createElement('option');
+            option.value = productoLabel(p);
+            datalist.appendChild(option);
+        });
+        document.body.appendChild(datalist);
+    }
+}
+
 function agregarItem(itemData = null) {
     itemIndex++;
     const item = itemData || {
@@ -253,11 +274,7 @@ function agregarItem(itemData = null) {
         precio_unitario: 0
     };
     
-    // Crear opciones del selector de productos
-    let productosOptions = '<option value="">-- Seleccionar producto --</option>';
-    productos.forEach(p => {
-        productosOptions += `<option value="${p.id}" data-tipo="${p.tipo_precio}" data-precio="${p.precio_base}">${p.nombre} ${p.tipo_precio === 'variable' ? '(Precio variable)' : '($' + parseFloat(p.precio_base).toFixed(2) + ')'}</option>`;
-    });
+    asegurarDatalistProductos();
     
     const html = `
         <div class="card mb-3 item-row" id="item_${itemIndex}">
@@ -265,9 +282,8 @@ function agregarItem(itemData = null) {
                 <div class="row mb-2">
                     <div class="col-md-6">
                         <label class="form-label">Producto del catálogo</label>
-                        <select class="form-select producto-select" data-index="${itemIndex}" onchange="cargarProducto(${itemIndex})">
-                            ${productosOptions}
-                        </select>
+                        <input type="text" class="form-control producto-autocomplete" list="productos-datalist" id="producto_input_${itemIndex}" data-index="${itemIndex}" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeInput(${itemIndex})">
+                        <input type="hidden" id="producto_id_${itemIndex}" name="items[${itemIndex}][producto_id]">
                         <small class="text-muted">O edita manualmente abajo</small>
                     </div>
                     <div class="col-md-6">
@@ -323,37 +339,57 @@ function agregarItem(itemData = null) {
     `;
     
     document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+    if (item.nombre) {
+        const producto = productos.find(p => p.nombre.toLowerCase() === String(item.nombre).toLowerCase());
+        if (producto) {
+            document.getElementById(`producto_input_${itemIndex}`).value = productoLabel(producto);
+            document.getElementById(`producto_id_${itemIndex}`).value = producto.id;
+        }
+    }
     calcularTotales();
 }
 
-function cargarProducto(index) {
-    const select = document.querySelector(`[data-index="${index}"]`);
-    const productoId = select.value;
-    
-    if (!productoId) {
-        // Limpiar campos
-        document.getElementById(`nombre_${index}`).value = '';
-        document.getElementById(`descripcion_${index}`).value = '';
-        document.getElementById(`precio_${index}`).value = '';
-        document.getElementById(`precio-info-${index}`).style.display = 'none';
-        document.getElementById(`atributos-container-${index}`).style.display = 'none';
-        calcularTotales();
+function limpiarProducto(index) {
+    document.getElementById(`nombre_${index}`).value = '';
+    document.getElementById(`descripcion_${index}`).value = '';
+    document.getElementById(`precio_${index}`).value = '';
+    document.getElementById(`precio-info-${index}`).style.display = 'none';
+    document.getElementById(`atributos-container-${index}`).style.display = 'none';
+    calcularTotales();
+}
+
+function obtenerProductoPorTexto(texto) {
+    const textoNormalizado = texto.toLowerCase();
+    return productos.find(p => productoLabel(p).toLowerCase() === textoNormalizado);
+}
+
+function cargarProductoDesdeInput(index) {
+    const input = document.getElementById(`producto_input_${index}`);
+    const texto = input.value.trim();
+    const producto = obtenerProductoPorTexto(texto);
+
+    if (!producto) {
+        document.getElementById(`producto_id_${index}`).value = '';
+        if (texto === '') {
+            limpiarProducto(index);
+        }
         return;
     }
-    
-    const option = select.selectedOptions[0];
-    const tipoProducto = option.dataset.tipo;
-    const precioBase = parseFloat(option.dataset.precio);
-    const nombreProducto = option.text.split('(')[0].trim();
-    
+
+    document.getElementById(`producto_id_${index}`).value = producto.id;
+    aplicarProducto(index, producto);
+}
+
+function aplicarProducto(index, producto) {
     // Llenar nombre
-    document.getElementById(`nombre_${index}`).value = nombreProducto;
-    
+    document.getElementById(`nombre_${index}`).value = producto.nombre;
+
     // Cargar atributos del producto
-    cargarAtributosProducto(productoId, index);
-    
+    cargarAtributosProducto(producto.id, index);
+
     // Si es precio fijo, establecer precio inmediatamente
-    if (tipoProducto === 'fijo') {
+    if (producto.tipo_precio === 'fijo') {
+        const precioBase = parseFloat(producto.precio_base);
         document.getElementById(`precio_${index}`).value = precioBase.toFixed(2);
         document.getElementById(`precio-info-${index}`).innerHTML = '✓ Precio fijo del producto';
         document.getElementById(`precio-info-${index}`).style.display = 'block';
@@ -416,18 +452,15 @@ function cargarAtributosProducto(productoId, index) {
 }
 
 function actualizarPrecioItem(index) {
-    const select = document.querySelector(`[data-index="${index}"]`);
-    const productoId = select?.value;
+    const productoId = document.getElementById(`producto_id_${index}`)?.value;
     
     if (!productoId) {
         calcularTotales();
         return;
     }
-    
-    const option = select.selectedOptions[0];
-    const tipoProducto = option.dataset.tipo;
-    
-    if (tipoProducto === 'variable') {
+
+    const producto = productos.find(p => String(p.id) === String(productoId));
+    if (producto?.tipo_precio === 'variable') {
         const ancho = parseFloat(document.getElementById(`ancho_${index}`).value || 0);
         const alto = parseFloat(document.getElementById(`alto_${index}`).value || 0);
         
