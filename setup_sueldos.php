@@ -9,12 +9,37 @@ $pdo->exec("
         id INT PRIMARY KEY AUTO_INCREMENT,
         nombre VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL UNIQUE,
+        documento VARCHAR(20),
+        tipo_documento ENUM('DNI', 'CUIT', 'Pasaporte') DEFAULT 'DNI',
+        telefono VARCHAR(20),
+        direccion VARCHAR(255),
+        ciudad VARCHAR(100),
+        provincia VARCHAR(100),
+        codigo_postal VARCHAR(10),
+        puesto VARCHAR(100),
+        departamento VARCHAR(100),
+        fecha_ingreso DATE,
         sueldo_base DECIMAL(10, 2) NOT NULL,
         activo TINYINT DEFAULT 1,
         fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
         fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP
     )
 ");
+
+// Agregar columnas si la tabla ya existía
+$col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'documento'");
+if ($col->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN documento VARCHAR(20) AFTER email");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN tipo_documento ENUM('DNI', 'CUIT', 'Pasaporte') DEFAULT 'DNI' AFTER documento");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN telefono VARCHAR(20) AFTER tipo_documento");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN direccion VARCHAR(255) AFTER telefono");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN ciudad VARCHAR(100) AFTER direccion");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN provincia VARCHAR(100) AFTER ciudad");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN codigo_postal VARCHAR(10) AFTER provincia");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN puesto VARCHAR(100) AFTER codigo_postal");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN departamento VARCHAR(100) AFTER puesto");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN fecha_ingreso DATE AFTER departamento");
+}
 
 // Tabla de Conceptos (Bonificaciones y Descuentos)
 $pdo->exec("
