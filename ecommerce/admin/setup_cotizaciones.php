@@ -14,6 +14,7 @@ try {
             email VARCHAR(200) NOT NULL,
             telefono VARCHAR(50),
             empresa VARCHAR(200),
+            lista_precio_id INT,
             items JSON NOT NULL,
             subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
             descuento DECIMAL(10,2) DEFAULT 0,
@@ -28,7 +29,8 @@ try {
             INDEX idx_numero (numero_cotizacion),
             INDEX idx_estado (estado),
             INDEX idx_email (email),
-            INDEX idx_fecha (fecha_creacion)
+            INDEX idx_fecha (fecha_creacion),
+            INDEX idx_lista_precio (lista_precio_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     echo "   ✓ Tabla ecommerce_cotizaciones creada<br>";

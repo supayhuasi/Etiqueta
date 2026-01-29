@@ -13,6 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $empresa = $_POST['empresa'] ?? '';
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
+        $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
         
         // Validaciones
         if (empty($nombre_cliente) || empty($email)) {
@@ -59,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $total_item = $cantidad * $precio_total_unitario;
                 
                 $items[] = [
+                    'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
                     'nombre' => $item['nombre'],
                     'descripcion' => $item['descripcion'] ?? '',
                     'cantidad' => $cantidad,
@@ -90,8 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Guardar cotización
         $stmt = $pdo->prepare("
             INSERT INTO ecommerce_cotizaciones 
-            (numero_cotizacion, nombre_cliente, email, telefono, empresa, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (numero_cotizacion, nombre_cliente, email, telefono, empresa, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $stmt->execute([
@@ -100,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email,
             $telefono,
             $empresa,
+            $lista_precio_id,
             json_encode($items),
             $subtotal,
             $descuento,
@@ -121,12 +124,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Obtener productos activos para el selector
 $stmt = $pdo->query("
-    SELECT id, nombre, tipo_precio, precio_base 
+    SELECT id, nombre, tipo_precio, precio_base, categoria_id 
     FROM ecommerce_productos 
     WHERE activo = 1 
     ORDER BY nombre
 ");
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Listas de precios activas
+$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
+$listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
+$lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$lista_items_map = [];
+foreach ($lista_items_rows as $row) {
+    $lista_items_map[$row['lista_precio_id']][$row['producto_id']] = [
+        'precio_nuevo' => (float)$row['precio_nuevo'],
+        'descuento_porcentaje' => (float)$row['descuento_porcentaje']
+    ];
+}
+
+$stmt = $pdo->query("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1");
+$lista_cat_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$lista_cat_map = [];
+foreach ($lista_cat_rows as $row) {
+    $lista_cat_map[$row['lista_precio_id']][$row['categoria_id']] = (float)$row['descuento_porcentaje'];
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -183,6 +207,16 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <small class="text-muted">Días de validez del presupuesto</small>
                     </div>
                     <div class="mb-3">
+                        <label for="lista_precio_id" class="form-label">Lista de Precios</label>
+                        <select class="form-select" id="lista_precio_id" name="lista_precio_id" onchange="aplicarListaPrecios()">
+                            <option value="">-- Sin lista --</option>
+                            <?php foreach ($listas_precios as $lista): ?>
+                                <option value="<?= $lista['id'] ?>"><?= htmlspecialchars($lista['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Aplica descuentos por producto o categoría</small>
+                    </div>
+                    <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
                         <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas internas, condiciones especiales, etc."></textarea>
                     </div>
@@ -237,12 +271,47 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <script>
 let itemIndex = 0;
 const productos = <?= json_encode($productos) ?>;
+const listaItems = <?= json_encode($lista_items_map) ?>;
+const listaCategorias = <?= json_encode($lista_cat_map) ?>;
 
 function productoLabel(p) {
     const precioLabel = p.tipo_precio === 'variable'
         ? '(Precio variable)'
         : '($' + parseFloat(p.precio_base).toFixed(2) + ')';
     return `${p.nombre} ${precioLabel}`;
+}
+
+function obtenerListaSeleccionada() {
+    const select = document.getElementById('lista_precio_id');
+    return select ? parseInt(select.value || '0', 10) : 0;
+}
+
+function calcularPrecioConLista(productoId, precioBase) {
+    const listaId = obtenerListaSeleccionada();
+    if (!listaId) {
+        return precioBase;
+    }
+
+    const item = listaItems?.[listaId]?.[productoId];
+    if (item) {
+        const precioNuevo = parseFloat(item.precio_nuevo || 0);
+        const descItem = parseFloat(item.descuento_porcentaje || 0);
+        if (precioNuevo > 0) {
+            return precioNuevo;
+        }
+        if (descItem > 0) {
+            return precioBase * (1 - descItem / 100);
+        }
+    }
+
+    const producto = productos.find(p => String(p.id) === String(productoId));
+    const categoriaId = producto?.categoria_id;
+    const descCat = listaCategorias?.[listaId]?.[categoriaId] ?? 0;
+    if (descCat > 0) {
+        return precioBase * (1 - descCat / 100);
+    }
+
+    return precioBase;
 }
 
 function asegurarDatalistProductos() {
@@ -334,6 +403,7 @@ function limpiarProducto(index) {
     document.getElementById(`nombre_${index}`).value = '';
     document.getElementById(`descripcion_${index}`).value = '';
     document.getElementById(`precio_${index}`).value = '';
+    document.getElementById(`precio_${index}`).dataset.base = '';
     document.getElementById(`precio-info-${index}`).style.display = 'none';
     document.getElementById(`atributos-container-${index}`).style.display = 'none';
     calcularTotales();
@@ -371,13 +441,18 @@ function aplicarProducto(index, producto) {
     // Si es precio fijo, establecer precio inmediatamente
     if (producto.tipo_precio === 'fijo') {
         const precioBase = parseFloat(producto.precio_base);
-        document.getElementById(`precio_${index}`).value = precioBase.toFixed(2);
+        const precioLista = calcularPrecioConLista(producto.id, precioBase);
+        const precioInput = document.getElementById(`precio_${index}`);
+        precioInput.dataset.base = precioBase.toFixed(2);
+        precioInput.value = precioLista.toFixed(2);
         document.getElementById(`precio-info-${index}`).innerHTML = '✓ Precio fijo del producto';
         document.getElementById(`precio-info-${index}`).style.display = 'block';
         calcularTotales();
     } else {
         // Es precio variable, necesita medidas
-        document.getElementById(`precio_${index}`).value = '';
+        const precioInput = document.getElementById(`precio_${index}`);
+        precioInput.value = '';
+        precioInput.dataset.base = '';
         document.getElementById(`precio-info-${index}`).innerHTML = '⚠️ Ingrese ancho y alto para calcular precio';
         document.getElementById(`precio-info-${index}`).style.display = 'block';
     }
@@ -454,8 +529,12 @@ function actualizarPrecioItem(index) {
                         alert(data.error);
                         return;
                     }
-                    
-                    document.getElementById(`precio_${index}`).value = data.precio.toFixed(2);
+
+                    const precioBase = parseFloat(data.precio);
+                    const precioLista = calcularPrecioConLista(productoId, precioBase);
+                    const precioInput = document.getElementById(`precio_${index}`);
+                    precioInput.dataset.base = precioBase.toFixed(2);
+                    precioInput.value = precioLista.toFixed(2);
                     document.getElementById(`precio-info-${index}`).innerHTML = '✓ ' + data.precio_info;
                     document.getElementById(`precio-info-${index}`).style.display = 'block';
                     calcularTotales();
@@ -496,6 +575,25 @@ function calcularTotales() {
     
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('total').textContent = '$' + total.toFixed(2);
+}
+
+function aplicarListaPrecios() {
+    document.querySelectorAll('.item-row').forEach(row => {
+        const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
+        const precioInput = row.querySelector('.item-precio');
+        if (!productoId || !precioInput) {
+            return;
+        }
+
+        const precioBase = parseFloat(precioInput.dataset.base || 0);
+        if (!precioBase) {
+            return;
+        }
+
+        const precioLista = calcularPrecioConLista(productoId, precioBase);
+        precioInput.value = precioLista.toFixed(2);
+    });
+    calcularTotales();
 }
 
 // Agregar primer item al cargar

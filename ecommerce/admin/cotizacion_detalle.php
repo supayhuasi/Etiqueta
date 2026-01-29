@@ -12,6 +12,13 @@ if (!$cotizacion) {
     die("Cotización no encontrada");
 }
 
+$lista_precio = null;
+if (!empty($cotizacion['lista_precio_id'])) {
+    $stmt = $pdo->prepare("SELECT nombre FROM ecommerce_listas_precios WHERE id = ?");
+    $stmt->execute([$cotizacion['lista_precio_id']]);
+    $lista_precio = $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 $items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = $_GET['mensaje'] ?? '';
 
@@ -150,6 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             echo $fecha_vence;
                             ?>
                         </td>
+                    </tr>
+                    <tr>
+                        <th>Lista de Precios:</th>
+                        <td><?= htmlspecialchars($lista_precio['nombre'] ?? 'Sin lista') ?></td>
                     </tr>
                 </table>
             </div>

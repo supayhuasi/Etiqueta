@@ -53,6 +53,7 @@ $listas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td>
                                         <a href="listas_precios_editar.php?id=<?= $lista['id'] ?>" class="btn btn-sm btn-primary">✏️ Editar</a>
                                         <a href="listas_precios_items.php?id=<?= $lista['id'] ?>" class="btn btn-sm btn-info">📊 Precios</a>
+                                        <a href="listas_precios_categorias.php?lista_id=<?= $lista['id'] ?>" class="btn btn-sm btn-secondary">🏷️ Categorías</a>
                                         <a href="listas_precios_eliminar.php?id=<?= $lista['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Estás seguro?')">🗑️ Eliminar</a>
                                     </td>
                                 </tr>
