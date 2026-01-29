@@ -100,6 +100,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    // Aplicar lista de precios pública al precio base
+    if (!isset($error)) {
+        $precio_info = calcular_precio_publico(
+            (int)$producto['id'],
+            (int)($producto['categoria_id'] ?? 0),
+            (float)$precio,
+            $lista_publica_id,
+            $mapas_lista_publica['items'],
+            $mapas_lista_publica['categorias']
+        );
+        $precio = $precio_info['precio'];
+    }
     
     // Validar atributos obligatorios
     if (!isset($error)) {
@@ -239,8 +252,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <form method="POST">
                     <!-- Mostrar precio base -->
                     <div class="mb-4 pb-3 border-bottom">
+                        <?php
+                        $precio_info_base = calcular_precio_publico(
+                            (int)$producto['id'],
+                            (int)($producto['categoria_id'] ?? 0),
+                            (float)$producto['precio_base'],
+                            $lista_publica_id,
+                            $mapas_lista_publica['items'],
+                            $mapas_lista_publica['categorias']
+                        );
+                        ?>
                         <h3 id="precio_display" class="text-primary">
-                            Precio: <strong>$<?= number_format($producto['precio_base'], 2, ',', '.') ?></strong>
+                            Precio:
+                            <?php if ($precio_info_base['descuento_pct'] > 0): ?>
+                                <span class="text-muted text-decoration-line-through">$<?= number_format($precio_info_base['precio_original'], 2, ',', '.') ?></span>
+                            <?php endif; ?>
+                            <strong>$<?= number_format($precio_info_base['precio'], 2, ',', '.') ?></strong>
                         </h3>
                         <small class="text-muted" id="medidas_info" style="display: none;"></small>
                     </div>
@@ -451,6 +478,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 const matrizPrecios = <?= json_encode($matriz_precios) ?>;
 const atributosData = <?= json_encode($atributos) ?>;
 const precioBase = <?= $producto['precio_base'] ?>;
+const listaId = <?= (int)$lista_publica_id ?>;
+const listaItems = <?= json_encode($mapas_lista_publica['items']) ?>;
+const listaCategorias = <?= json_encode($mapas_lista_publica['categorias']) ?>;
+const productoId = <?= (int)$producto['id'] ?>;
+const categoriaId = <?= (int)($producto['categoria_id'] ?? 0) ?>;
+
+function aplicarDescuento(precioBaseActual) {
+    let descuento = 0;
+    let precioFinal = precioBaseActual;
+
+    if (listaId && listaItems?.[productoId]) {
+        const item = listaItems[productoId];
+        const precioNuevo = parseFloat(item.precio_nuevo || 0);
+        const descItem = parseFloat(item.descuento_porcentaje || 0);
+
+        if (precioNuevo > 0) {
+            precioFinal = precioNuevo;
+            if (precioBaseActual > 0) {
+                descuento = Math.max(0, Math.round((1 - (precioNuevo / precioBaseActual)) * 10000) / 100);
+            }
+        } else if (descItem > 0) {
+            descuento = descItem;
+            precioFinal = precioBaseActual * (1 - descuento / 100);
+        }
+    }
+
+    if (descuento <= 0 && listaId && categoriaId && listaCategorias?.[categoriaId]) {
+        const descCat = parseFloat(listaCategorias[categoriaId] || 0);
+        if (descCat > 0) {
+            descuento = descCat;
+            precioFinal = precioBaseActual * (1 - descuento / 100);
+        }
+    }
+
+    return { precio: precioFinal, descuento };
+}
 
 function actualizarPrecio() {
     const alto = parseInt(document.getElementById('alto').value) || 0;
@@ -479,22 +542,36 @@ function actualizarPrecio() {
         }
     }
     
+    // Aplicar descuento de lista pública
+    const precioConDescuento = aplicarDescuento(precioTotal);
+    let precioFinal = precioConDescuento.precio;
+
     // Agregar costos adicionales de atributos
     atributosData.forEach(attr => {
         const valorInput = document.getElementById('attr_' + attr.id);
         if (valorInput && valorInput.value && attr.costo_adicional > 0) {
-            precioTotal += parseFloat(attr.costo_adicional);
+            precioFinal += parseFloat(attr.costo_adicional);
         }
     });
     
-    const precioFormatado = precioTotal.toLocaleString('es-AR', {
+    const precioFormatado = precioFinal.toLocaleString('es-AR', {
         style: 'currency',
         currency: 'ARS',
         minimumFractionDigits: 2
     }).replace('ARS', '$');
-    
-    document.getElementById('precio_display').innerHTML = 
-        `Precio: <strong>${precioFormatado}</strong>`;
+
+    if (precioConDescuento.descuento > 0) {
+        const precioOriginalFormatado = precioTotal.toLocaleString('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+            minimumFractionDigits: 2
+        }).replace('ARS', '$');
+        document.getElementById('precio_display').innerHTML = 
+            `Precio: <span class="text-muted text-decoration-line-through">${precioOriginalFormatado}</span> <strong>${precioFormatado}</strong>`;
+    } else {
+        document.getElementById('precio_display').innerHTML = 
+            `Precio: <strong>${precioFormatado}</strong>`;
+    }
     
     const infoDiv = document.getElementById('medidas_info');
     if (medidaOriginal && distanciaMinima > 0) {

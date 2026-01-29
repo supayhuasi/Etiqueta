@@ -73,6 +73,20 @@ try {
         // Insertar registro inicial
         $pdo->exec("INSERT INTO ecommerce_empresa (nombre, email) VALUES ('Mi Empresa', 'info@empresa.com')");
     }
+
+    // Verificar tabla ecommerce_config
+    $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_config'");
+    if ($stmt->rowCount() === 0) {
+        echo "Creando tabla ecommerce_config...\n";
+        $pdo->exec("
+            CREATE TABLE ecommerce_config (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                lista_precio_id INT,
+                fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        ");
+        $pdo->exec("INSERT INTO ecommerce_config (id, lista_precio_id) VALUES (1, NULL)");
+    }
     
     // Verificar columnas en ecommerce_productos
     $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_productos LIKE 'imagen'");

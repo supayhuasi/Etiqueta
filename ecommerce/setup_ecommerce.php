@@ -136,6 +136,16 @@ try {
         )
     ");
 
+    // Configuración general del ecommerce
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_config (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            lista_precio_id INT,
+            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+    $pdo->exec("INSERT INTO ecommerce_config (id, lista_precio_id) VALUES (1, NULL) ON DUPLICATE KEY UPDATE id = id");
+
     // Tabla de proveedores
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_proveedores (

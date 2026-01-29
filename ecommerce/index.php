@@ -1,6 +1,7 @@
 <?php
 require 'config.php';
 require 'includes/header.php';
+require 'includes/precios_publico.php';
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
@@ -13,6 +14,10 @@ $slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Obtener clientes activos
 $stmt = $pdo->query("SELECT * FROM ecommerce_clientes_logos WHERE activo = 1 ORDER BY orden ASC");
 $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Configuración de lista de precios pública
+$lista_publica_id = obtener_lista_precio_publica($pdo);
+$mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
 // Obtener algunos productos destacados
 $stmt = $pdo->query(" 
@@ -104,18 +109,19 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <div style="position: relative;">
                                 <img src="uploads/<?= htmlspecialchars($producto['imagen_principal']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
                                 <!-- Mostrar descuento si existe -->
-                                <?php 
-                                $stmt = $pdo->prepare("
-                                    SELECT MIN(descuento_porcentaje) as descuento 
-                                    FROM ecommerce_lista_precio_items 
-                                    WHERE producto_id = ? AND activo = 1
-                                ");
-                                $stmt->execute([$producto['id']]);
-                                $descuento_info = $stmt->fetch(PDO::FETCH_ASSOC);
-                                if ($descuento_info['descuento'] > 0):
+                                <?php
+                                $precio_info = calcular_precio_publico(
+                                    (int)$producto['id'],
+                                    (int)($producto['categoria_id'] ?? 0),
+                                    (float)$producto['precio_base'],
+                                    $lista_publica_id,
+                                    $mapas_lista_publica['items'],
+                                    $mapas_lista_publica['categorias']
+                                );
+                                if ($precio_info['descuento_pct'] > 0):
                                 ?>
                                     <span class="badge bg-danger" style="position: absolute; top: 10px; right: 10px; font-size: 14px;">
-                                        -<?= $descuento_info['descuento'] ?>%
+                                        -<?= $precio_info['descuento_pct'] ?>%
                                     </span>
                                 <?php endif; ?>
                             </div>
@@ -129,7 +135,22 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <p class="card-text text-muted flex-grow-1">
                                 <?= htmlspecialchars(substr($producto['descripcion'], 0, 100)) ?>...
                             </p>
-                            <h4 class="text-primary">$<?= number_format($producto['precio_base'], 2, ',', '.') ?></h4>
+                            <?php
+                            $precio_info = calcular_precio_publico(
+                                (int)$producto['id'],
+                                (int)($producto['categoria_id'] ?? 0),
+                                (float)$producto['precio_base'],
+                                $lista_publica_id,
+                                $mapas_lista_publica['items'],
+                                $mapas_lista_publica['categorias']
+                            );
+                            ?>
+                            <?php if ($precio_info['descuento_pct'] > 0): ?>
+                                <div class="mb-1">
+                                    <span class="text-muted text-decoration-line-through">$<?= number_format($precio_info['precio_original'], 2, ',', '.') ?></span>
+                                </div>
+                            <?php endif; ?>
+                            <h4 class="text-primary">$<?= number_format($precio_info['precio'], 2, ',', '.') ?></h4>
                             <a href="producto.php?id=<?= $producto['id'] ?>" class="btn btn-primary mt-auto">Ver Detalles</a>
                         </div>
                     </div>
