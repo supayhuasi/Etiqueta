@@ -15,6 +15,7 @@ try {
         descripcion TEXT,
         imagen_url VARCHAR(500),
         enlace VARCHAR(500),
+        ubicacion ENUM('inicio','tienda') NOT NULL DEFAULT 'inicio',
         orden INT DEFAULT 0,
         activo TINYINT DEFAULT 1,
         fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -23,6 +24,13 @@ try {
     ";
     $pdo->exec($sql);
     echo "✓ Tabla ecommerce_slideshow creada<br>";
+
+    // Agregar columna ubicacion si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_slideshow LIKE 'ubicacion'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_slideshow ADD COLUMN ubicacion ENUM('inicio','tienda') NOT NULL DEFAULT 'inicio' AFTER enlace");
+        echo "✓ Columna ubicacion agregada a ecommerce_slideshow<br>";
+    }
 
     // 2. Tabla para Clientes/Logos
     $sql = "

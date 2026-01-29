@@ -7,8 +7,8 @@ require 'includes/precios_publico.php';
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Obtener slideshow activos
-$stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 ORDER BY orden ASC");
+// Obtener slideshow activos (Inicio)
+$stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 AND (ubicacion = 'inicio' OR ubicacion IS NULL) ORDER BY orden ASC");
 $slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener clientes activos

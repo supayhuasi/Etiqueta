@@ -45,6 +45,15 @@ if (!$slide) {
                 </div>
 
                 <div class="mb-3">
+                    <label class="form-label">Ubicación</label>
+                    <select name="ubicacion" class="form-select">
+                        <option value="inicio" <?= ($slide['ubicacion'] ?? 'inicio') === 'inicio' ? 'selected' : '' ?>>Inicio</option>
+                        <option value="tienda" <?= ($slide['ubicacion'] ?? 'inicio') === 'tienda' ? 'selected' : '' ?>>Tienda</option>
+                    </select>
+                    <small class="text-muted">Selecciona dónde se mostrará este slide</small>
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label">Imagen</label>
                     <input type="file" name="imagen" class="form-control" accept="image/*">
                     <small class="text-muted">Dejalo en blanco para mantener la imagen actual</small>

@@ -31,6 +31,7 @@ $slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <th width="80">Orden</th>
                                 <th>Título</th>
                                 <th>Descripción</th>
+                                <th width="120">Ubicación</th>
                                 <th width="150">Estado</th>
                                 <th width="200">Acciones</th>
                             </tr>
@@ -46,6 +47,13 @@ $slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     </td>
                                     <td>
                                         <?= htmlspecialchars(substr($slide['descripcion'] ?? '', 0, 50)) ?>
+                                    </td>
+                                    <td>
+                                        <?php if (($slide['ubicacion'] ?? 'inicio') === 'tienda'): ?>
+                                            <span class="badge bg-info">Tienda</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-primary">Inicio</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php if ($slide['activo']): ?>

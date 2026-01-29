@@ -3,6 +3,10 @@ require 'config.php';
 require 'includes/header.php';
 require 'includes/precios_publico.php';
 
+// Obtener slideshow activos (Tienda)
+$stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 AND ubicacion = 'tienda' ORDER BY orden ASC");
+$slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Obtener categorías
 $stmt = $pdo->query("SELECT * FROM ecommerce_categorias WHERE activo = 1 ORDER BY orden, nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -36,6 +40,37 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
+<!-- Slideshow/Carrusel -->
+<?php if (!empty($slideshows)): ?>
+<div id="carouselSlideshowTienda" class="carousel slide mb-4" data-bs-ride="carousel">
+    <div class="carousel-indicators">
+        <?php foreach ($slideshows as $key => $slide): ?>
+            <button type="button" data-bs-target="#carouselSlideshowTienda" data-bs-slide-to="<?= $key ?>" <?= $key === 0 ? 'class="active"' : '' ?>></button>
+        <?php endforeach; ?>
+    </div>
+    <div class="carousel-inner">
+        <?php foreach ($slideshows as $key => $slide): ?>
+            <div class="carousel-item <?= $key === 0 ? 'active' : '' ?>">
+                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 320px; object-fit: cover;">
+                <div class="carousel-caption d-none d-md-block">
+                    <h2><?= htmlspecialchars($slide['titulo']) ?></h2>
+                    <p><?= htmlspecialchars($slide['descripcion']) ?></p>
+                    <?php if ($slide['enlace']): ?>
+                        <a href="<?= htmlspecialchars($slide['enlace']) ?>" class="btn btn-light btn-lg">Ver más</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#carouselSlideshowTienda" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon"></span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#carouselSlideshowTienda" data-bs-slide="next">
+        <span class="carousel-control-next-icon"></span>
+    </button>
+</div>
+<?php endif; ?>
 
 <!-- Encabezado de la tienda -->
 <div class="bg-light py-4 mb-5">

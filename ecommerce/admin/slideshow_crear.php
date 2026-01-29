@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $orden = $_POST['orden'] ?? 0;
     $activo = isset($_POST['activo']) ? 1 : 0;
     $imagen_url = $_POST['imagen_url'] ?? '';
+    $ubicacion = $_POST['ubicacion'] ?? 'inicio';
 
     // Manejo de carga de imagen
     if (!empty($_FILES['imagen']['name'])) {
@@ -51,17 +52,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($editar) {
             $stmt = $pdo->prepare("
                 UPDATE ecommerce_slideshow 
-                SET titulo = ?, descripcion = ?, enlace = ?, orden = ?, activo = ?, imagen_url = ?
+                SET titulo = ?, descripcion = ?, enlace = ?, orden = ?, activo = ?, imagen_url = ?, ubicacion = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$titulo, $descripcion, $enlace, $orden, $activo, $imagen_url, $_GET['id']]);
+            $stmt->execute([$titulo, $descripcion, $enlace, $orden, $activo, $imagen_url, $ubicacion, $_GET['id']]);
             $mensaje = "✓ Slideshow actualizado correctamente";
         } else {
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_slideshow (titulo, descripcion, enlace, orden, activo, imagen_url)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO ecommerce_slideshow (titulo, descripcion, enlace, orden, activo, imagen_url, ubicacion)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$titulo, $descripcion, $enlace, $orden, $activo, $imagen_url]);
+            $stmt->execute([$titulo, $descripcion, $enlace, $orden, $activo, $imagen_url, $ubicacion]);
             $mensaje = "✓ Slideshow creado correctamente";
         }
         echo "<div class='alert alert-success'>$mensaje</div>";
@@ -104,6 +105,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-3">
                     <label class="form-label">Enlace (URL)</label>
                     <input type="text" name="enlace" class="form-control" placeholder="https://..." value="<?= $slide['enlace'] ?? '' ?>">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Ubicación</label>
+                    <select name="ubicacion" class="form-select">
+                        <option value="inicio" <?= ($slide['ubicacion'] ?? 'inicio') === 'inicio' ? 'selected' : '' ?>>Inicio</option>
+                        <option value="tienda" <?= ($slide['ubicacion'] ?? 'inicio') === 'tienda' ? 'selected' : '' ?>>Tienda</option>
+                    </select>
+                    <small class="text-muted">Selecciona dónde se mostrará este slide</small>
                 </div>
 
                 <div class="mb-3">
