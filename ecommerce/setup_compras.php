@@ -8,6 +8,12 @@ try {
         echo "✓ Columna stock agregada en ecommerce_productos<br>";
     }
 
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_productos LIKE 'mostrar_ecommerce'");
+    if ($stmt->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN mostrar_ecommerce TINYINT(1) DEFAULT 1 AFTER stock");
+        echo "✓ Columna mostrar_ecommerce agregada en ecommerce_productos<br>";
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_proveedores (
             id INT PRIMARY KEY AUTO_INCREMENT,

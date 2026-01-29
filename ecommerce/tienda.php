@@ -11,7 +11,7 @@ $categoria_filtro = $_GET['categoria'] ?? 'todos';
 $busqueda = $_GET['busqueda'] ?? '';
 
 // Construir query de productos
-$query = "SELECT * FROM ecommerce_productos WHERE activo = 1";
+$query = "SELECT * FROM ecommerce_productos WHERE activo = 1 AND mostrar_ecommerce = 1";
 $params = [];
 
 if ($categoria_filtro !== 'todos') {

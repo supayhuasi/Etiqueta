@@ -27,6 +27,7 @@ try {
             tipo_precio ENUM('fijo', 'variable') DEFAULT 'fijo',
             imagen VARCHAR(255),
             stock INT DEFAULT 0,
+            mostrar_ecommerce TINYINT DEFAULT 1,
             activo TINYINT DEFAULT 1,
             orden INT DEFAULT 0,
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,

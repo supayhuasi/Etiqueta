@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tipo_precio = $_POST['tipo_precio'] ?? 'fijo';
     $orden = intval($_POST['orden'] ?? 0);
     $activo = isset($_POST['activo']) ? 1 : 0;
+    $mostrar_ecommerce = isset($_POST['mostrar_ecommerce']) ? 1 : 0;
     
     if (empty($nombre) || empty($codigo) || $precio_base <= 0 || $categoria_id <= 0) {
         $error = "Falta completar campos obligatorios";
@@ -35,17 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_productos 
                     SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
-                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?
+                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $id]);
                 $mensaje = "Producto actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce]);
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
@@ -120,6 +121,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" id="activo" name="activo" <?= ($producto['activo'] ?? 1) ? 'checked' : '' ?>>
                 <label class="form-check-label" for="activo">Activo</label>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="mostrar_ecommerce" name="mostrar_ecommerce" <?= ($producto['mostrar_ecommerce'] ?? 1) ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mostrar_ecommerce">Mostrar en Ecommerce</label>
             </div>
 
             <div class="d-flex gap-2">

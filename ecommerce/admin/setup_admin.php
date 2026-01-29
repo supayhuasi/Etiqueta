@@ -18,6 +18,8 @@ try {
                 precio_base DECIMAL(10, 2) NOT NULL,
                 tipo_precio ENUM('fijo', 'variable') DEFAULT 'fijo',
                 imagen VARCHAR(255),
+                stock INT DEFAULT 0,
+                mostrar_ecommerce TINYINT(1) DEFAULT 1,
                 orden INT DEFAULT 0,
                 activo TINYINT(1) DEFAULT 1,
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +79,18 @@ try {
     if ($stmt->rowCount() === 0) {
         echo "Agregando columna imagen a ecommerce_productos...\n";
         $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN imagen VARCHAR(255) AFTER tipo_precio");
+    }
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_productos LIKE 'stock'");
+    if ($stmt->rowCount() === 0) {
+        echo "Agregando columna stock a ecommerce_productos...\n";
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN stock INT DEFAULT 0 AFTER imagen");
+    }
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_productos LIKE 'mostrar_ecommerce'");
+    if ($stmt->rowCount() === 0) {
+        echo "Agregando columna mostrar_ecommerce a ecommerce_productos...\n";
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN mostrar_ecommerce TINYINT(1) DEFAULT 1 AFTER stock");
     }
     
     // Verificar tabla ecommerce_mercadopago_config

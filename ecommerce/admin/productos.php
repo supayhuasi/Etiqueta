@@ -67,6 +67,7 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>Categoría</th>
                     <th>Precio Base</th>
                     <th>Tipo</th>
+                    <th>Ecommerce</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -82,6 +83,13 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <span class="badge bg-<?= $prod['tipo_precio'] === 'variable' ? 'warning' : 'info' ?>">
                                 <?= $prod['tipo_precio'] === 'variable' ? 'Variable' : 'Fijo' ?>
                             </span>
+                        </td>
+                        <td>
+                            <?php if (!empty($prod['mostrar_ecommerce'])): ?>
+                                <span class="badge bg-success">Visible</span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">Oculto</span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php if ($prod['activo']): ?>

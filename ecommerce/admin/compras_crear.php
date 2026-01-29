@@ -16,6 +16,10 @@ foreach ($productos as $p) {
     $productosById[$p['id']] = $p;
 }
 
+// Categorías activas
+$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
+$categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
@@ -31,15 +35,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (isset($_POST['items']) && is_array($_POST['items'])) {
             foreach ($_POST['items'] as $item) {
-                if (empty($item['producto_id']) || empty($item['cantidad']) || empty($item['costo'])) {
+                $producto_id = intval($item['producto_id'] ?? 0);
+                $nuevo = !empty($item['nuevo']);
+                $nombre_nuevo = trim($item['nombre_nuevo'] ?? '');
+
+                if (($producto_id <= 0 && !$nuevo) || empty($item['cantidad']) || empty($item['costo'])) {
                     continue;
                 }
 
-                $producto_id = intval($item['producto_id']);
                 $cantidad = intval($item['cantidad']);
                 $costo = floatval($item['costo']);
                 $alto = !empty($item['alto']) ? intval($item['alto']) : null;
                 $ancho = !empty($item['ancho']) ? intval($item['ancho']) : null;
+                $categoria_id_nuevo = intval($item['categoria_id'] ?? 0);
+                $tipo_precio_nuevo = $item['tipo_precio_nuevo'] ?? 'fijo';
+                $precio_base_nuevo = floatval($item['precio_base_nuevo'] ?? 0);
+                $mostrar_ecommerce = !empty($item['mostrar_ecommerce']) ? 1 : 0;
+
+                if ($producto_id <= 0 && $nuevo) {
+                    if (empty($nombre_nuevo) || $categoria_id_nuevo <= 0) {
+                        throw new Exception('Complete nombre y categoría del nuevo producto');
+                    }
+
+                    $codigo = null;
+                    for ($i = 0; $i < 5; $i++) {
+                        $codigo = 'AUTO-' . date('YmdHis') . '-' . rand(100, 999);
+                        $stmt = $pdo->prepare("SELECT id FROM ecommerce_productos WHERE codigo = ? LIMIT 1");
+                        $stmt->execute([$codigo]);
+                        if (!$stmt->fetch()) {
+                            break;
+                        }
+                        $codigo = null;
+                    }
+
+                    if (!$codigo) {
+                        throw new Exception('No se pudo generar código de producto');
+                    }
+
+                    $precio_base_insert = $precio_base_nuevo > 0 ? $precio_base_nuevo : $costo;
+
+                    $stmt = $pdo->prepare("
+                        INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce)
+                        VALUES (?, ?, '', ?, ?, ?, 0, 1, ?)
+                    ");
+                    $stmt->execute([$codigo, $nombre_nuevo, $categoria_id_nuevo, $precio_base_insert, $tipo_precio_nuevo, $mostrar_ecommerce]);
+                    $producto_id = $pdo->lastInsertId();
+
+                    $productosById[$producto_id] = [
+                        'id' => $producto_id,
+                        'nombre' => $nombre_nuevo,
+                        'tipo_precio' => $tipo_precio_nuevo
+                    ];
+                }
+
+                $tipo_item = $productosById[$producto_id]['tipo_precio'] ?? 'fijo';
+                if ($tipo_item === 'variable' && (empty($alto) || empty($ancho))) {
+                    throw new Exception('Debe indicar alto y ancho para productos variables');
+                }
+
                 $subtotal_item = $cantidad * $costo;
 
                 $items[] = [
@@ -228,6 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 let itemIndex = 0;
 const productos = <?= json_encode($productos) ?>;
+const categorias = <?= json_encode($categorias) ?>;
 
 function agregarItem() {
     itemIndex++;
@@ -235,6 +289,11 @@ function agregarItem() {
     let productosOptions = '<option value="">-- Seleccionar producto --</option>';
     productos.forEach(p => {
         productosOptions += `<option value="${p.id}" data-tipo="${p.tipo_precio}">${p.nombre}</option>`;
+    });
+
+    let categoriasOptions = '<option value="">-- Seleccionar categoría --</option>';
+    categorias.forEach(c => {
+        categoriasOptions += `<option value="${c.id}">${c.nombre}</option>`;
     });
 
     const html = `
@@ -246,6 +305,10 @@ function agregarItem() {
                         <select class="form-select item-producto" data-index="${itemIndex}" onchange="toggleMedidas(${itemIndex});" name="items[${itemIndex}][producto_id]" required>
                             ${productosOptions}
                         </select>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="nuevo_${itemIndex}" name="items[${itemIndex}][nuevo]" value="1" onchange="toggleNuevoProducto(${itemIndex})">
+                            <label class="form-check-label" for="nuevo_${itemIndex}">Nuevo producto</label>
+                        </div>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Cantidad *</label>
@@ -262,6 +325,35 @@ function agregarItem() {
                     <div class="col-md-2">
                         <label class="form-label">Ancho (cm)</label>
                         <input type="number" class="form-control item-ancho" name="items[${itemIndex}][ancho]" step="1" min="0" disabled onchange="calcularTotales()">
+                    </div>
+                </div>
+                <div class="row mt-3 nuevo-producto-fields" id="nuevo_fields_${itemIndex}" style="display:none;">
+                    <div class="col-md-4">
+                        <label class="form-label">Nombre nuevo *</label>
+                        <input type="text" class="form-control" name="items[${itemIndex}][nombre_nuevo]" placeholder="Nombre del producto">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Categoría *</label>
+                        <select class="form-select" name="items[${itemIndex}][categoria_id]">
+                            ${categoriasOptions}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo de precio</label>
+                        <select class="form-select" name="items[${itemIndex}][tipo_precio_nuevo]" onchange="toggleMedidasNuevo(${itemIndex})">
+                            <option value="fijo">Fijo</option>
+                            <option value="variable">Variable</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Precio base</label>
+                        <input type="number" class="form-control" name="items[${itemIndex}][precio_base_nuevo]" step="0.01" min="0" placeholder="Opcional">
+                    </div>
+                    <div class="col-md-3 mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="items[${itemIndex}][mostrar_ecommerce]" id="mostrar_${itemIndex}" checked>
+                            <label class="form-check-label" for="mostrar_${itemIndex}">Mostrar en Ecommerce</label>
+                        </div>
                     </div>
                 </div>
                 <div class="row mt-2">
@@ -296,6 +388,40 @@ function toggleMedidas(index) {
         ancho.value = '';
         alto.disabled = true;
         ancho.disabled = true;
+    }
+}
+
+function toggleMedidasNuevo(index) {
+    const select = document.querySelector(`#item_${index} select[name="items[${index}][tipo_precio_nuevo]"]`);
+    const tipo = select?.value || 'fijo';
+    const alto = document.querySelector(`#item_${index} .item-alto`);
+    const ancho = document.querySelector(`#item_${index} .item-ancho`);
+
+    if (tipo === 'variable') {
+        alto.disabled = false;
+        ancho.disabled = false;
+    } else {
+        alto.value = '';
+        ancho.value = '';
+        alto.disabled = true;
+        ancho.disabled = true;
+    }
+}
+
+function toggleNuevoProducto(index) {
+    const nuevo = document.getElementById(`nuevo_${index}`).checked;
+    const select = document.querySelector(`#item_${index} .item-producto`);
+    const fields = document.getElementById(`nuevo_fields_${index}`);
+
+    if (nuevo) {
+        select.value = '';
+        select.disabled = true;
+        fields.style.display = 'flex';
+        toggleMedidasNuevo(index);
+    } else {
+        select.disabled = false;
+        fields.style.display = 'none';
+        toggleMedidas(index);
     }
 }
 

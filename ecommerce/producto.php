@@ -9,7 +9,7 @@ $stmt = $pdo->prepare("
     SELECT p.*, c.nombre as categoria_nombre 
     FROM ecommerce_productos p
     LEFT JOIN ecommerce_categorias c ON p.categoria_id = c.id
-    WHERE p.id = ? AND p.activo = 1
+        WHERE p.id = ? AND p.activo = 1 AND p.mostrar_ecommerce = 1
 ");
 $stmt->execute([$producto_id]);
 $producto = $stmt->fetch(PDO::FETCH_ASSOC);

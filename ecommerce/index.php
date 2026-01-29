@@ -23,7 +23,7 @@ $stmt = $pdo->query("
         FROM ecommerce_producto_imagenes
         WHERE es_principal = 1
     ) pi ON pi.producto_id = p.id
-    WHERE p.activo = 1
+    WHERE p.activo = 1 AND p.mostrar_ecommerce = 1
     ORDER BY RAND() 
     LIMIT 6
 ");
