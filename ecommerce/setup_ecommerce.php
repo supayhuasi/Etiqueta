@@ -132,9 +132,22 @@ try {
             about_us TEXT,
             terminos_condiciones TEXT,
             politica_privacidad TEXT,
+            cuit VARCHAR(50),
+            responsabilidad_fiscal VARCHAR(100),
+            iibb VARCHAR(50),
+            regimen_iva VARCHAR(100),
             fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP
         )
     ");
+
+    // Agregar columnas fiscales si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'cuit'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN cuit VARCHAR(50) AFTER politica_privacidad");
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN responsabilidad_fiscal VARCHAR(100) AFTER cuit");
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN iibb VARCHAR(50) AFTER responsabilidad_fiscal");
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN regimen_iva VARCHAR(100) AFTER iibb");
+    }
 
     // Configuración general del ecommerce
     $pdo->exec("

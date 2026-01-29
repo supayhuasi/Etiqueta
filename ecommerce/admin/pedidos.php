@@ -146,6 +146,8 @@ if ($_POST['accion'] === 'cambiar_estado') {
                         </td>
                         <td>
                             <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detalle<?= $pedido['id'] ?>">Ver Detalle</button>
+                            <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
+                            <a class="btn btn-sm btn-outline-primary" href="pedido_remito.php?id=<?= $pedido['id'] ?>" target="_blank">Remito</a>
                             <div class="dropdown d-inline-block">
                                 <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                     Cambiar Estado

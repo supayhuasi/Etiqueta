@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $facebook = $_POST['facebook'] ?? '';
     $instagram = $_POST['instagram'] ?? '';
     $whatsapp = $_POST['whatsapp'] ?? '';
+    $cuit = $_POST['cuit'] ?? '';
+    $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
+    $iibb = $_POST['iibb'] ?? '';
+    $regimen_iva = $_POST['regimen_iva'] ?? '';
     
     if (empty($nombre) || empty($email)) {
         $error = "Nombre y email son obligatorios";
@@ -63,14 +67,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     SET nombre = ?, descripcion = ?, logo = ?, email = ?, telefono = ?,
                         direccion = ?, ciudad = ?, provincia = ?, pais = ?,
                         horario_atencion = ?, about_us = ?, terminos_condiciones = ?,
-                        politica_privacidad = ?, redes_sociales = ?
+                        politica_privacidad = ?, redes_sociales = ?, cuit = ?,
+                        responsabilidad_fiscal = ?, iibb = ?, regimen_iva = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([
                     $nombre, $descripcion, $logo, $email, $telefono,
                     $direccion, $ciudad, $provincia, $pais,
                     $horario_atencion, $about_us, $terminos, $privacidad,
-                    $redes_sociales, $empresa['id']
+                    $redes_sociales, $cuit, $responsabilidad_fiscal, $iibb, $regimen_iva,
+                    $empresa['id']
                 ]);
                 
                 $mensaje = "Información actualizada correctamente";
@@ -124,6 +130,46 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     <div class="mb-3">
                         <label for="about_us" class="form-label">Acerca de Nosotros</label>
                         <textarea class="form-control" id="about_us" name="about_us" rows="4"><?= htmlspecialchars($empresa['about_us'] ?? '') ?></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5>Datos Fiscales</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cuit" class="form-label">CUIT</label>
+                            <input type="text" class="form-control" id="cuit" name="cuit" placeholder="Ej: 20-12345678-9" value="<?= htmlspecialchars($empresa['cuit'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="responsabilidad_fiscal" class="form-label">Responsabilidad Fiscal</label>
+                            <select class="form-select" id="responsabilidad_fiscal" name="responsabilidad_fiscal">
+                                <option value="">Selecciona...</option>
+                                <option value="Responsable Inscripto" <?= ($empresa['responsabilidad_fiscal'] ?? '') === 'Responsable Inscripto' ? 'selected' : '' ?>>Responsable Inscripto</option>
+                                <option value="Monotributista" <?= ($empresa['responsabilidad_fiscal'] ?? '') === 'Monotributista' ? 'selected' : '' ?>>Monotributista</option>
+                                <option value="Exento" <?= ($empresa['responsabilidad_fiscal'] ?? '') === 'Exento' ? 'selected' : '' ?>>Exento</option>
+                                <option value="No Responsable" <?= ($empresa['responsabilidad_fiscal'] ?? '') === 'No Responsable' ? 'selected' : '' ?>>No Responsable</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="iibb" class="form-label">Ingresos Brutos</label>
+                            <input type="text" class="form-control" id="iibb" name="iibb" placeholder="Ej: 123456789" value="<?= htmlspecialchars($empresa['iibb'] ?? '') ?>">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="regimen_iva" class="form-label">Régimen IVA</label>
+                            <select class="form-select" id="regimen_iva" name="regimen_iva">
+                                <option value="">Selecciona...</option>
+                                <option value="IVA 0%" <?= ($empresa['regimen_iva'] ?? '') === 'IVA 0%' ? 'selected' : '' ?>>IVA 0%</option>
+                                <option value="IVA 10.5%" <?= ($empresa['regimen_iva'] ?? '') === 'IVA 10.5%' ? 'selected' : '' ?>>IVA 10.5%</option>
+                                <option value="IVA 21%" <?= ($empresa['regimen_iva'] ?? '') === 'IVA 21%' ? 'selected' : '' ?>>IVA 21%</option>
+                                <option value="IVA 27%" <?= ($empresa['regimen_iva'] ?? '') === 'IVA 27%' ? 'selected' : '' ?>>IVA 27%</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
