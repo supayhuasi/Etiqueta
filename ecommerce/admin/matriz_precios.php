@@ -95,7 +95,20 @@ if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
             'stock' => array_search('stock', $normalized, true),
         ];
 
-        if (!$hasHeader) {
+        // Detectar formato matriz: primera celda vacía y encabezados numéricos (anchos)
+        $headerValues = array_map(function($v) {
+            return trim((string)$v);
+        }, $header);
+        $firstCell = $headerValues[0] ?? '';
+        $numericHeaders = 0;
+        for ($i = 1; $i < count($headerValues); $i++) {
+            if ($headerValues[$i] !== '' && is_numeric(str_replace(',', '.', $headerValues[$i]))) {
+                $numericHeaders++;
+            }
+        }
+        $isMatrixFormat = ($firstCell === '' || !is_numeric(str_replace(',', '.', $firstCell))) && $numericHeaders >= 2;
+
+        if (!$hasHeader && !$isMatrixFormat) {
             // Usar formato fijo: alto_cm, ancho_cm, precio, stock
             $index = [
                 'alto_cm' => 0,
@@ -120,38 +133,74 @@ if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
         $importados = 0;
         $omitidos = 0;
 
-        if (!$hasHeader) {
-            // Procesar la primera fila como datos
-            $dataRows = [$header];
+        if ($isMatrixFormat) {
+            $anchos = [];
+            for ($i = 1; $i < count($headerValues); $i++) {
+                $anchos[$i] = intval(str_replace(',', '.', $headerValues[$i]));
+            }
+
+            while (($row = fgetcsv($handle, 0, $delim)) !== false) {
+                $alto_cm = isset($row[0]) ? intval(str_replace(',', '.', $row[0])) : 0;
+                if ($alto_cm < 10 || $alto_cm > 300) {
+                    continue;
+                }
+
+                for ($i = 1; $i < count($row); $i++) {
+                    $total++;
+                    $ancho_cm = $anchos[$i] ?? 0;
+                    $precio = isset($row[$i]) ? floatval(str_replace(',', '.', $row[$i])) : 0;
+                    $stock = 0;
+
+                    if ($ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+                        $omitidos++;
+                        continue;
+                    }
+
+                    $stmtCheck->execute([$producto_id, $alto_cm, $ancho_cm]);
+                    $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+                    if ($existing) {
+                        $stmtUpd->execute([$precio, $stock, $existing['id']]);
+                    } else {
+                        $stmtIns->execute([$producto_id, $alto_cm, $ancho_cm, $precio, $stock]);
+                    }
+                    $importados++;
+                }
+            }
         } else {
-            $dataRows = [];
-        }
-
-        while (($row = fgetcsv($handle, 0, $delim)) !== false) {
-            $dataRows[] = $row;
-        }
-
-        foreach ($dataRows as $row) {
-            $total++;
-            $alto_cm = isset($row[$index['alto_cm']]) ? intval($row[$index['alto_cm']]) : 0;
-            $ancho_cm = isset($row[$index['ancho_cm']]) ? intval($row[$index['ancho_cm']]) : 0;
-            $precio = isset($row[$index['precio']]) ? floatval(str_replace(',', '.', $row[$index['precio']])) : 0;
-            $stock = isset($row[$index['stock']]) ? intval($row[$index['stock']]) : 0;
-
-            if ($alto_cm < 10 || $alto_cm > 300 || $ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
-                $omitidos++;
-                continue;
-            }
-
-            $stmtCheck->execute([$producto_id, $alto_cm, $ancho_cm]);
-            $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-
-            if ($existing) {
-                $stmtUpd->execute([$precio, $stock, $existing['id']]);
+            if (!$hasHeader) {
+                // Procesar la primera fila como datos
+                $dataRows = [$header];
             } else {
-                $stmtIns->execute([$producto_id, $alto_cm, $ancho_cm, $precio, $stock]);
+                $dataRows = [];
             }
-            $importados++;
+
+            while (($row = fgetcsv($handle, 0, $delim)) !== false) {
+                $dataRows[] = $row;
+            }
+
+            foreach ($dataRows as $row) {
+                $total++;
+                $alto_cm = isset($row[$index['alto_cm']]) ? intval($row[$index['alto_cm']]) : 0;
+                $ancho_cm = isset($row[$index['ancho_cm']]) ? intval($row[$index['ancho_cm']]) : 0;
+                $precio = isset($row[$index['precio']]) ? floatval(str_replace(',', '.', $row[$index['precio']])) : 0;
+                $stock = isset($row[$index['stock']]) ? intval($row[$index['stock']]) : 0;
+
+                if ($alto_cm < 10 || $alto_cm > 300 || $ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+                    $omitidos++;
+                    continue;
+                }
+
+                $stmtCheck->execute([$producto_id, $alto_cm, $ancho_cm]);
+                $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing) {
+                    $stmtUpd->execute([$precio, $stock, $existing['id']]);
+                } else {
+                    $stmtIns->execute([$producto_id, $alto_cm, $ancho_cm, $precio, $stock]);
+                }
+                $importados++;
+            }
         }
 
         fclose($handle);
