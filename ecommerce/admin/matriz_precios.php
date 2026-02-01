@@ -55,6 +55,126 @@ if ($_POST['accion'] === 'generar' && isset($_POST['precio_base_matriz'])) {
     }
 }
 
+// Procesar importación CSV
+if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
+    try {
+        if ($_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception("Error al subir el archivo");
+        }
+
+        $tmpPath = $_FILES['archivo_csv']['tmp_name'];
+        $handle = fopen($tmpPath, 'r');
+        if (!$handle) {
+            throw new Exception("No se pudo abrir el archivo");
+        }
+
+        // Detectar delimitador
+        $firstLine = fgets($handle);
+        if ($firstLine === false) {
+            fclose($handle);
+            throw new Exception("Archivo vacío");
+        }
+        $delim = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+        rewind($handle);
+
+        $header = fgetcsv($handle, 0, $delim);
+        if (!$header) {
+            fclose($handle);
+            throw new Exception("No se pudo leer el encabezado");
+        }
+
+        $normalized = array_map(function($h) {
+            return strtolower(trim($h));
+        }, $header);
+
+        $hasHeader = in_array('alto_cm', $normalized, true) || in_array('alto', $normalized, true);
+        $index = [
+            'alto_cm' => array_search('alto_cm', $normalized, true),
+            'ancho_cm' => array_search('ancho_cm', $normalized, true),
+            'precio' => array_search('precio', $normalized, true),
+            'stock' => array_search('stock', $normalized, true),
+        ];
+
+        if (!$hasHeader) {
+            // Usar formato fijo: alto_cm, ancho_cm, precio, stock
+            $index = [
+                'alto_cm' => 0,
+                'ancho_cm' => 1,
+                'precio' => 2,
+                'stock' => 3,
+            ];
+        }
+
+        $reemplazar = isset($_POST['reemplazar']) && $_POST['reemplazar'] === '1';
+        $pdo->beginTransaction();
+
+        if ($reemplazar) {
+            $pdo->prepare("DELETE FROM ecommerce_matriz_precios WHERE producto_id = ?")->execute([$producto_id]);
+        }
+
+        $stmtCheck = $pdo->prepare("SELECT id FROM ecommerce_matriz_precios WHERE producto_id = ? AND alto_cm = ? AND ancho_cm = ?");
+        $stmtUpd = $pdo->prepare("UPDATE ecommerce_matriz_precios SET precio = ?, stock = ? WHERE id = ?");
+        $stmtIns = $pdo->prepare("INSERT INTO ecommerce_matriz_precios (producto_id, alto_cm, ancho_cm, precio, stock) VALUES (?, ?, ?, ?, ?)");
+
+        $total = 0;
+        $importados = 0;
+        $omitidos = 0;
+
+        if (!$hasHeader) {
+            // Procesar la primera fila como datos
+            $dataRows = [$header];
+        } else {
+            $dataRows = [];
+        }
+
+        while (($row = fgetcsv($handle, 0, $delim)) !== false) {
+            $dataRows[] = $row;
+        }
+
+        foreach ($dataRows as $row) {
+            $total++;
+            $alto_cm = isset($row[$index['alto_cm']]) ? intval($row[$index['alto_cm']]) : 0;
+            $ancho_cm = isset($row[$index['ancho_cm']]) ? intval($row[$index['ancho_cm']]) : 0;
+            $precio = isset($row[$index['precio']]) ? floatval(str_replace(',', '.', $row[$index['precio']])) : 0;
+            $stock = isset($row[$index['stock']]) ? intval($row[$index['stock']]) : 0;
+
+            if ($alto_cm < 10 || $alto_cm > 300 || $ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+                $omitidos++;
+                continue;
+            }
+
+            $stmtCheck->execute([$producto_id, $alto_cm, $ancho_cm]);
+            $existing = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+            if ($existing) {
+                $stmtUpd->execute([$precio, $stock, $existing['id']]);
+            } else {
+                $stmtIns->execute([$producto_id, $alto_cm, $ancho_cm, $precio, $stock]);
+            }
+            $importados++;
+        }
+
+        fclose($handle);
+        $pdo->commit();
+
+        // Recargar matriz
+        $stmt = $pdo->prepare("
+            SELECT * FROM ecommerce_matriz_precios 
+            WHERE producto_id = ? 
+            ORDER BY alto_cm, ancho_cm
+        ");
+        $stmt->execute([$producto_id]);
+        $matriz = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $mensaje = "Importación completada: {$importados} filas importadas, {$omitidos} omitidas";
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $error = "Error: " . $e->getMessage();
+    }
+}
+
 // Procesar agregar/actualizar entrada
 if ($_POST['accion'] === 'guardar' && isset($_POST['alto_cm'])) {
     try {
@@ -142,6 +262,27 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
                         <small class="text-muted">Se generarán 870 registros (87 altos × 10 anchos)</small>
                     </div>
                     <button type="submit" class="btn btn-primary w-100" onclick="return confirm('Esto elimará la matriz existente y generará una nueva')">Generar Matriz</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Importar desde CSV</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="accion" value="importar">
+                    <div class="mb-3">
+                        <label for="archivo_csv" class="form-label">Archivo CSV</label>
+                        <input type="file" class="form-control" id="archivo_csv" name="archivo_csv" accept=".csv,.txt" required>
+                        <small class="text-muted d-block">Formato: alto_cm, ancho_cm, precio, stock (stock opcional). Se acepta encabezado.</small>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="reemplazar" name="reemplazar">
+                        <label class="form-check-label" for="reemplazar">Reemplazar matriz existente</label>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100">Importar CSV</button>
                 </form>
             </div>
         </div>
