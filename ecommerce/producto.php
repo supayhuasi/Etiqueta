@@ -1,8 +1,13 @@
 <?php
 require 'config.php';
 require 'includes/header.php';
+require 'includes/precios_publico.php';
 
 $producto_id = $_GET['id'] ?? 0;
+
+// Configuración de lista de precios pública
+$lista_publica_id = obtener_lista_precio_publica($pdo);
+$mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
 // Obtener producto
 $stmt = $pdo->prepare("
