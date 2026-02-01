@@ -459,7 +459,7 @@ function aplicarProducto(index, producto) {
 }
 
 function cargarAtributosProducto(productoId, index) {
-    fetch(`../../ecommerce/admin/productos_atributos.php?accion=obtener&producto_id=${productoId}`)
+    fetch(`productos_atributos.php?accion=obtener&producto_id=${productoId}`)
         .then(response => response.json())
         .then(data => {
             const atributosContainer = document.getElementById(`atributos-list-${index}`);
@@ -471,17 +471,55 @@ function cargarAtributosProducto(productoId, index) {
                 data.atributos.forEach(attr => {
                     let inputHTML = '';
                     const fieldName = `items[${index}][atributos][${attr.id}]`;
+                    const requerido = attr.es_obligatorio ? 'required' : '';
                     
                     if (attr.tipo === 'text') {
-                        inputHTML = `<input type="text" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">`;
+                        inputHTML = `<input type="text" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" ${requerido} onchange="calcularTotales()">`;
                     } else if (attr.tipo === 'number') {
-                        inputHTML = `<input type="number" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" step="0.01" onchange="calcularTotales()">`;
+                        inputHTML = `<input type="number" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" step="0.01" ${requerido} onchange="calcularTotales()">`;
+                    } else if (attr.tipo === 'color') {
+                        const inputId = `attr_${attr.id}_${index}`;
+                        const previewId = `color_preview_${attr.id}_${index}`;
+                        inputHTML = `
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <input type="color" class="form-control form-control-color" id="${inputId}" name="${fieldName}[valor]" value="#000000" ${requerido}>
+                                <div class="border rounded" id="${previewId}" style="width: 28px; height: 28px; background-color: #000000;"></div>
+                            </div>
+                        `;
                     } else if (attr.tipo === 'select') {
-                        const opciones = attr.valores ? attr.valores.split(',') : [];
-                        inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">
-                            <option value="">-- Seleccionar --</option>
-                            ${opciones.map(o => `<option value="${o.trim()}">${o.trim()}</option>`).join('')}
-                        </select>`;
+                        const opciones = Array.isArray(attr.opciones) && attr.opciones.length > 0
+                            ? attr.opciones.map(o => ({
+                                valor: o.nombre,
+                                color: o.color,
+                                imagen: o.imagen
+                            }))
+                            : (attr.valores ? attr.valores.split(',').map(v => ({ valor: v.trim() })) : []);
+
+                        if (opciones.some(o => o.color || o.imagen)) {
+                            const inputId = `attr_${attr.id}_${index}`;
+                            inputHTML = `
+                                <input type="hidden" id="${inputId}" name="${fieldName}[valor]" ${requerido}>
+                                <div class="d-flex gap-2 flex-wrap mb-2">
+                                    ${opciones.map((o, i) => {
+                                        const optId = `opt_${attr.id}_${index}_${i}`;
+                                        const colorBox = o.color ? `<span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:${o.color};border-radius:3px;"></span>` : '';
+                                        const imgTag = o.imagen ? `<img src="../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
+                                        return `
+                                            <label class="border rounded p-2 d-flex align-items-center gap-2" style="cursor:pointer;">
+                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" ${requerido}>
+                                                ${imgTag || colorBox}
+                                                <small>${o.valor}</small>
+                                            </label>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            `;
+                        } else {
+                            inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" ${requerido} onchange="calcularTotales()">
+                                <option value="">-- Seleccionar --</option>
+                                ${opciones.map(o => `<option value="${o.valor}">${o.valor}</option>`).join('')}
+                            </select>`;
+                        }
                     }
                     
                     const attrHTML = `
@@ -496,6 +534,18 @@ function cargarAtributosProducto(productoId, index) {
                         </div>
                     `;
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
+
+                    if (attr.tipo === 'color') {
+                        const inputId = `attr_${attr.id}_${index}`;
+                        const previewId = `color_preview_${attr.id}_${index}`;
+                        const colorInput = document.getElementById(inputId);
+                        const preview = document.getElementById(previewId);
+                        if (colorInput && preview) {
+                            const updatePreview = () => { preview.style.backgroundColor = colorInput.value || '#000000'; };
+                            colorInput.addEventListener('input', updatePreview);
+                            updatePreview();
+                        }
+                    }
                 });
             } else {
                 document.getElementById(`atributos-container-${index}`).style.display = 'none';

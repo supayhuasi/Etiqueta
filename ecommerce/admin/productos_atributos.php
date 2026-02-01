@@ -1,12 +1,22 @@
 <?php
-require 'includes/header.php';
-
 // Endpoint JSON para obtener atributos (usado por cotizaciones)
 if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['producto_id'])) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Acceso denegado']);
+        exit;
+    }
+
+    require '../../config.php';
     header('Content-Type: application/json');
-    
+
     $producto_id = intval($_GET['producto_id']);
-    
+
     $stmt = $pdo->prepare("
         SELECT id, nombre, tipo, valores, costo_adicional, es_obligatorio, orden
         FROM ecommerce_producto_atributos 
@@ -15,12 +25,42 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
     ");
     $stmt->execute([$producto_id]);
     $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
+    // Cargar opciones si existen
+    $opciones_map = [];
+    try {
+        $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+        if ($stmt->rowCount() > 0 && !empty($atributos)) {
+            $ids = array_column($atributos, 'id');
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $pdo->prepare("
+                SELECT id, atributo_id, nombre, color, imagen
+                FROM ecommerce_atributo_opciones
+                WHERE atributo_id IN ($placeholders)
+                ORDER BY orden
+            ");
+            $stmt->execute($ids);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($opciones as $op) {
+                $opciones_map[$op['atributo_id']][] = $op;
+            }
+        }
+    } catch (Exception $e) {
+        $opciones_map = [];
+    }
+
+    foreach ($atributos as &$attr) {
+        $attr['opciones'] = $opciones_map[$attr['id']] ?? [];
+    }
+    unset($attr);
+
     echo json_encode([
         'atributos' => $atributos
     ]);
     exit;
 }
+
+require 'includes/header.php';
 
 $producto_id = $_GET['producto_id'] ?? 0;
 if ($producto_id <= 0) die("Producto no especificado");
