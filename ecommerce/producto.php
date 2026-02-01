@@ -18,6 +18,8 @@ if (!$producto) {
     die("Producto no encontrado");
 }
 
+$tipo_precio = strtolower(trim($producto['tipo_precio'] ?? 'fijo'));
+
 // Obtener imágenes del producto
 $stmt = $pdo->prepare("
     SELECT * FROM ecommerce_producto_imagenes 
@@ -38,7 +40,7 @@ $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener matriz de precios si es producto variable
 $matriz_precios = [];
-if ($producto['tipo_precio'] === 'variable') {
+if ($tipo_precio === 'variable') {
     $stmt = $pdo->prepare("
         SELECT * FROM ecommerce_matriz_precios 
         WHERE producto_id = ? 
@@ -87,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $precio = $producto['precio_base'];
     $medidas_info = null;
     
-    if ($producto['tipo_precio'] === 'variable') {
+    if ($tipo_precio === 'variable') {
         if ($alto <= 0 || $ancho <= 0) {
             $error = "Debe especificar alto y ancho";
         } else {
@@ -273,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <!-- Medidas si es variable -->
-                    <?php if ($producto['tipo_precio'] === 'variable'): ?>
+                    <?php if ($tipo_precio === 'variable'): ?>
                         <div class="alert alert-info mb-4">
                             <h6 class="mb-2">📏 Precio según medidas</h6>
                             <p class="mb-0 small">Ingresa el ancho y alto deseado en centímetros. El sistema buscará el precio más cercano a esas medidas.</p>
@@ -409,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <!-- Matriz de precios expandible -->
-    <?php if ($producto['tipo_precio'] === 'variable' && !empty($matriz_precios)): ?>
+    <?php if ($tipo_precio === 'variable' && !empty($matriz_precios)): ?>
         <div class="row mt-5">
             <div class="col-12">
                 <div class="accordion" id="accordionMatriz">
