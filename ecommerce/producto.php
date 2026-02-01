@@ -338,6 +338,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php elseif ($attr['tipo'] === 'number'): ?>
                                 <input type="number" class="form-control" id="attr_<?= $attr['id'] ?>" 
                                        name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+
+                            <?php elseif ($attr['tipo'] === 'color'): ?>
+                                <div class="d-flex align-items-center gap-3">
+                                    <input type="color" class="form-control form-control-color" id="attr_<?= $attr['id'] ?>" 
+                                           name="attr_<?= $attr['id'] ?>" value="#000000" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()">
+                                    <div class="border rounded" id="color_preview_<?= $attr['id'] ?>" style="width: 36px; height: 36px; background-color: #000000;"></div>
+                                </div>
+                                <script>
+                                    (function() {
+                                        const colorInput = document.getElementById('attr_<?= $attr['id'] ?>');
+                                        const preview = document.getElementById('color_preview_<?= $attr['id'] ?>');
+                                        if (colorInput && preview) {
+                                            const updatePreview = () => { preview.style.backgroundColor = colorInput.value || '#000000'; };
+                                            colorInput.addEventListener('input', updatePreview);
+                                            updatePreview();
+                                        }
+                                    })();
+                                </script>
                             
                             <?php elseif ($attr['tipo'] === 'select'): ?>
                                 <?php if (!empty($opciones_attr)): ?>
