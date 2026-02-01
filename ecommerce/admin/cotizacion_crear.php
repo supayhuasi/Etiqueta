@@ -16,11 +16,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
         
         // Validaciones
-        if (empty($nombre_cliente) || empty($email)) {
-            throw new Exception("Nombre y email son obligatorios");
+        if (empty($nombre_cliente)) {
+            throw new Exception("Nombre es obligatorio");
         }
         
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Email no válido");
         }
         
