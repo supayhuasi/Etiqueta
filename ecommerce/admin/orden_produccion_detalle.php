@@ -31,6 +31,25 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$pedido_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Recetas por producto
+$producto_ids = array_unique(array_filter(array_map(function($i){ return (int)$i['producto_id']; }, $items)));
+$recetas_map = [];
+if (!empty($producto_ids)) {
+    $placeholders = implode(',', array_fill(0, count($producto_ids), '?'));
+    $stmt = $pdo->prepare("
+        SELECT r.*, m.nombre AS material_nombre, m.unidad
+        FROM ecommerce_producto_recetas r
+        JOIN ecommerce_materiales m ON r.material_id = m.id
+        WHERE r.producto_id IN ($placeholders)
+        ORDER BY m.nombre
+    ");
+    $stmt->execute($producto_ids);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $recetas_map[$r['producto_id']][] = $r;
+    }
+}
 ?>
 
 <div class="row mb-4">
@@ -90,6 +109,10 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <tbody>
                 <?php foreach ($items as $item): 
                     $atributos = !empty($item['atributos']) ? json_decode($item['atributos'], true) : [];
+                    $alto_m = !empty($item['alto_cm']) ? ((float)$item['alto_cm'] / 100) : 0;
+                    $ancho_m = !empty($item['ancho_cm']) ? ((float)$item['ancho_cm'] / 100) : 0;
+                    $area_m2 = $alto_m * $ancho_m;
+                    $recetas = $recetas_map[$item['producto_id']] ?? [];
                 ?>
                     <tr>
                         <td><strong><?= htmlspecialchars($item['producto_nombre'] ?? 'Producto eliminado') ?></strong></td>
@@ -113,6 +136,53 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </td>
                         <td><?= $item['cantidad'] ?></td>
                     </tr>
+                    <?php if (!empty($recetas)): ?>
+                        <tr class="table-light">
+                            <td colspan="4">
+                                <small class="text-muted"><strong>Receta:</strong></small>
+                                <div class="table-responsive mt-2">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Material</th>
+                                                <th>Consumo</th>
+                                                <th>Unidad</th>
+                                                <th>Detalle</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($recetas as $r):
+                                                $factor = (float)$r['factor'];
+                                                $merma = (float)$r['merma_pct'];
+                                                $cantidad_base = 0;
+                                                if ($r['tipo_calculo'] === 'fijo') {
+                                                    $cantidad_base = $factor;
+                                                } elseif ($r['tipo_calculo'] === 'por_area') {
+                                                    $cantidad_base = $area_m2 * $factor;
+                                                } elseif ($r['tipo_calculo'] === 'por_ancho') {
+                                                    $cantidad_base = $ancho_m * $factor;
+                                                } elseif ($r['tipo_calculo'] === 'por_alto') {
+                                                    $cantidad_base = $alto_m * $factor;
+                                                }
+                                                $cantidad_total = $cantidad_base * (1 + ($merma / 100));
+                                                $cantidad_total = $cantidad_total * (int)$item['cantidad'];
+                                            ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars($r['material_nombre']) ?></td>
+                                                    <td><?= number_format($cantidad_total, 4, ',', '.') ?></td>
+                                                    <td><?= htmlspecialchars($r['unidad']) ?></td>
+                                                    <td>
+                                                        <?= htmlspecialchars($r['tipo_calculo']) ?>
+                                                        <?= $merma > 0 ? ' + ' . $merma . '%' : '' ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                 <?php endforeach; ?>
             </tbody>
         </table>

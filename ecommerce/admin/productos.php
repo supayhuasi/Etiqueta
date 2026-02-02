@@ -105,6 +105,7 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <a href="productos_eliminar.php?id=<?= $prod['id'] ?>" class="btn btn-sm btn-danger">Eliminar</a>
                             <?php if ($prod['tipo_precio'] === 'variable'): ?>
                                 <a href="matriz_precios.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-info">Matriz</a>
+                                <a href="receta_producto.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-secondary">Receta</a>
                             <?php endif; ?>
                         </td>
                     </tr>
