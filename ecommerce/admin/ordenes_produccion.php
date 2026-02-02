@@ -6,11 +6,10 @@ $estado = $_GET['estado'] ?? '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'scan_estado') {
     try {
         $codigo = trim($_POST['codigo'] ?? '');
-        $nuevo_estado = $_POST['nuevo_estado'] ?? '';
-        $estados_validos = ['pendiente','en_produccion','terminado','entregado'];
+        $secuencia = ['pendiente','en_produccion','terminado','entregado'];
 
-        if ($codigo === '' || !in_array($nuevo_estado, $estados_validos, true)) {
-            throw new Exception('Código o estado inválido');
+        if ($codigo === '') {
+            throw new Exception('Código inválido');
         }
 
         $stmt = $pdo->prepare("SELECT id FROM ecommerce_pedidos WHERE numero_pedido = ? LIMIT 1");
@@ -19,6 +18,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'scan_
         if (!$pedido) {
             throw new Exception('Pedido no encontrado');
         }
+
+        $stmt = $pdo->prepare("SELECT estado FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+        $stmt->execute([$pedido['id']]);
+        $orden = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$orden) {
+            throw new Exception('Orden de producción no encontrada');
+        }
+
+        $idx = array_search($orden['estado'], $secuencia, true);
+        if ($idx === false || $idx >= count($secuencia) - 1) {
+            throw new Exception('La orden ya está en el último estado');
+        }
+        $nuevo_estado = $secuencia[$idx + 1];
 
         $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = ? WHERE pedido_id = ?");
         $stmt->execute([$nuevo_estado, $pedido['id']]);
@@ -70,15 +82,6 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="col-md-4">
                 <label class="form-label">Código de pedido (scanner)</label>
                 <input type="text" name="codigo" class="form-control" autofocus>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Nuevo estado</label>
-                <select name="nuevo_estado" class="form-select">
-                    <option value="pendiente">Pendiente</option>
-                    <option value="en_produccion">En producción</option>
-                    <option value="terminado">Terminado</option>
-                    <option value="entregado">Entregado</option>
-                </select>
             </div>
             <div class="col-md-3">
                 <button class="btn btn-primary" type="submit">Actualizar por scanner</button>
