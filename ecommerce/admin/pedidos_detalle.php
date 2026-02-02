@@ -17,6 +17,39 @@ if (!$pedido) {
     die("Pedido no encontrado");
 }
 
+// Orden de producción
+$stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+$stmt->execute([$pedido_id]);
+$orden_produccion = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Procesar acciones de producción
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accion = $_POST['accion'] ?? '';
+    try {
+        if ($accion === 'crear_orden' && !$orden_produccion) {
+            $fecha_entrega = !empty($_POST['fecha_entrega']) ? $_POST['fecha_entrega'] : null;
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, notas, fecha_entrega) VALUES (?, 'pendiente', ?, ?)");
+            $stmt->execute([$pedido_id, $_POST['notas'] ?? null, $fecha_entrega]);
+            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            exit;
+        } elseif ($accion === 'actualizar_orden' && $orden_produccion) {
+            $estado = $_POST['estado'] ?? 'pendiente';
+            $notas = $_POST['notas'] ?? null;
+            $fecha_entrega = !empty($_POST['fecha_entrega']) ? $_POST['fecha_entrega'] : null;
+            $estados_validos = ['pendiente','en_produccion','terminado','entregado'];
+            if (!in_array($estado, $estados_validos, true)) {
+                throw new Exception('Estado inválido');
+            }
+            $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = ?, notas = ?, fecha_entrega = ? WHERE id = ?");
+            $stmt->execute([$estado, $notas, $fecha_entrega, $orden_produccion['id']]);
+            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            exit;
+        }
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
+
 // Obtener items del pedido
 $stmt = $pdo->prepare("
     SELECT pi.*, pr.nombre as producto_nombre, pr.imagen
@@ -68,6 +101,58 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
             </div>
         </div>
+    </div>
+</div>
+
+<?php if (isset($error)): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+<?php endif; ?>
+
+<div class="card mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0">🏭 Orden de Producción</h5>
+    </div>
+    <div class="card-body">
+        <?php if (!$orden_produccion): ?>
+            <form method="POST" class="row g-3">
+                <input type="hidden" name="accion" value="crear_orden">
+                <div class="col-md-4">
+                    <label class="form-label">Fecha de entrega</label>
+                    <input type="date" class="form-control" name="fecha_entrega">
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Notas</label>
+                    <textarea class="form-control" name="notas" rows="3" placeholder="Instrucciones de producción..."></textarea>
+                </div>
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-success">Crear Orden de Producción</button>
+                </div>
+            </form>
+        <?php else: ?>
+            <form method="POST" class="row g-3">
+                <input type="hidden" name="accion" value="actualizar_orden">
+                <div class="col-md-4">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="pendiente" <?= $orden_produccion['estado'] === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                        <option value="en_produccion" <?= $orden_produccion['estado'] === 'en_produccion' ? 'selected' : '' ?>>En producción</option>
+                        <option value="terminado" <?= $orden_produccion['estado'] === 'terminado' ? 'selected' : '' ?>>Terminado</option>
+                        <option value="entregado" <?= $orden_produccion['estado'] === 'entregado' ? 'selected' : '' ?>>Entregado</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Fecha de entrega</label>
+                    <input type="date" class="form-control" name="fecha_entrega" value="<?= htmlspecialchars($orden_produccion['fecha_entrega'] ?? '') ?>">
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Notas</label>
+                    <textarea class="form-control" name="notas" rows="3"><?= htmlspecialchars($orden_produccion['notas'] ?? '') ?></textarea>
+                </div>
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">Actualizar Orden</button>
+                </div>
+            </form>
+        <?php endif; ?>
     </div>
 </div>
 

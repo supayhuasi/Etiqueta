@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $metodo_pago = $_POST['metodo_pago'] ?? '';
     
     // Validar datos
-    if (empty($email) || empty($nombre) || empty($direccion)) {
+    if (empty($nombre) || empty($direccion)) {
         $error = "Por favor completa todos los campos obligatorios";
     } else if (empty($carrito)) {
         $error = "El carrito está vacío";
@@ -71,6 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal, $cliente_id]);
             } else {
                 // Verificar o crear cliente
+                if (empty($email)) {
+                    $email = 'sin-email-' . date('YmdHis') . '-' . rand(1000, 9999) . '@tucuroller.local';
+                }
+
                 $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ?");
                 $stmt->execute([$email]);
                 $cliente = $stmt->fetch();
@@ -214,8 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <input type="text" class="form-control" id="nombre" name="nombre" value="<?= htmlspecialchars($cliente_actual['nombre'] ?? '') ?>" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label for="email" class="form-label">Email *</label>
-                                    <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cliente_actual['email'] ?? '') ?>" <?= $cliente_actual ? 'readonly' : '' ?> required>
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cliente_actual['email'] ?? '') ?>" <?= $cliente_actual ? 'readonly' : '' ?>>
                                 </div>
                             </div>
 

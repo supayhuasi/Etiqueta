@@ -7,6 +7,7 @@ $id = intval($_GET['id'] ?? 0);
 $stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
 $stmt->execute([$id]);
 $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+// Agregar validaciones y conversión a pedido
 
 if (!$cotizacion) {
     die("Cotización no encontrada");
@@ -37,6 +38,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$id]);
             }
             
+            } elseif ($accion === 'convertir_pedido') {
+                if ($cotizacion['estado'] === 'convertida') {
+                    throw new Exception('La cotización ya fue convertida');
+                }
+
+                $items = json_decode($cotizacion['items'], true) ?? [];
+                if (empty($items)) {
+                    throw new Exception('La cotización no tiene items');
+                }
+
+                foreach ($items as $it) {
+                    if (empty($it['producto_id'])) {
+                        throw new Exception('Todos los items deben pertenecer a un producto para convertir');
+                    }
+                }
+
+                $pdo->beginTransaction();
+
+                // Resolver cliente
+                $cliente_id = (int)($cotizacion['cliente_id'] ?? 0);
+                if ($cliente_id <= 0) {
+                    $email = trim((string)($cotizacion['email'] ?? ''));
+                    $nombre = trim((string)($cotizacion['nombre_cliente'] ?? ''));
+                    $telefono = trim((string)($cotizacion['telefono'] ?? ''));
+
+                    if ($email === '') {
+                        throw new Exception('Email requerido para crear cliente del pedido');
+                    }
+
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ? LIMIT 1");
+                    $stmt->execute([$email]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                    if ($row) {
+                        $cliente_id = (int)$row['id'];
+                    } else {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO ecommerce_clientes (email, nombre, telefono)
+                            VALUES (?, ?, ?)
+                        ");
+                        $stmt->execute([$email, $nombre ?: $email, $telefono ?: null]);
+                        $cliente_id = (int)$pdo->lastInsertId();
+                    }
+                }
+
+                $numero_pedido = 'PED-COT-' . date('YmdHis') . '-' . rand(1000, 9999);
+                $metodo_pago = 'Cotización';
+                $estado_pedido = 'pendiente_pago';
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $numero_pedido,
+                    $cliente_id,
+                    (float)$cotizacion['total'],
+                    $metodo_pago,
+                    $estado_pedido
+                ]);
+                $pedido_id = (int)$pdo->lastInsertId();
+
+                $stmtItem = $pdo->prepare("
+                    INSERT INTO ecommerce_pedido_items (pedido_id, producto_id, cantidad, precio_unitario, alto_cm, ancho_cm, subtotal, atributos)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+
+                foreach ($items as $it) {
+                    $cantidad = (int)($it['cantidad'] ?? 1);
+                    $precio_unitario = (float)($it['precio_unitario'] ?? $it['precio_base'] ?? 0);
+                    $alto = !empty($it['alto']) ? (int)$it['alto'] : null;
+                    $ancho = !empty($it['ancho']) ? (int)$it['ancho'] : null;
+                    $atributos_json = !empty($it['atributos']) ? json_encode($it['atributos']) : null;
+                    $subtotal_item = $precio_unitario * $cantidad;
+
+                    $stmtItem->execute([
+                        $pedido_id,
+                        (int)$it['producto_id'],
+                        $cantidad,
+                        $precio_unitario,
+                        $alto,
+                        $ancho,
+                        $subtotal_item,
+                        $atributos_json
+                    ]);
+                }
+
+                $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = 'convertida' WHERE id = ?");
+                $stmt->execute([$id]);
+
+                $pdo->commit();
+
+                header("Location: pedidos_detalle.php?id=" . $pedido_id . "&mensaje=convertida");
+                exit;
             $mensaje = "Estado actualizado";
             
             // Recargar
@@ -282,7 +377,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="cotizacion_pdf.php?id=<?= $id ?>" class="btn btn-info" target="_blank">📄 Ver/Descargar PDF</a>
             <a href="cotizacion_editar.php?id=<?= $id ?>" class="btn btn-warning">✏️ Editar Cotización</a>
             <?php if ($cotizacion['estado'] !== 'convertida'): ?>
-                <button type="button" class="btn btn-success" onclick="alert('Funcionalidad de conversión a pedido próximamente')">🛒 Convertir a Pedido</button>
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="accion" value="convertir_pedido">
+                    <button type="submit" class="btn btn-success" onclick="return confirm('¿Convertir esta cotización a pedido?')">🛒 Convertir a Pedido</button>
+                </form>
             <?php endif; ?>
         </div>
     </div>

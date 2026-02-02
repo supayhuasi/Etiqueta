@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $cotizacion_id = $pdo->lastInsertId();
         
-        header("Location: cotizacion_detalle.php?id=" . $cotizacion_id . "&mensaje=creada");
+        header("Location: cotizaciones.php?mensaje=creada");
         exit;
         
     } catch (Exception $e) {
