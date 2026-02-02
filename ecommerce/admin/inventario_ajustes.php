@@ -107,14 +107,13 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <form method="POST" class="row g-3">
             <div class="col-md-4">
                 <label class="form-label">Producto *</label>
-                <select class="form-select" name="producto_id" id="producto_id" onchange="toggleMedidas()" required>
-                    <option value="">-- Seleccionar --</option>
+                <input type="text" class="form-control" id="producto_input" list="productos_datalist" placeholder="Escriba para buscar..." required>
+                <datalist id="productos_datalist">
                     <?php foreach ($productos as $prod): ?>
-                        <option value="<?= $prod['id'] ?>" data-tipo="<?= $prod['tipo_precio'] ?>">
-                            <?= htmlspecialchars($prod['nombre']) ?>
-                        </option>
+                        <option value="<?= htmlspecialchars($prod['nombre']) ?>" data-id="<?= $prod['id'] ?>" data-tipo="<?= $prod['tipo_precio'] ?>"></option>
                     <?php endforeach; ?>
-                </select>
+                </datalist>
+                <input type="hidden" name="producto_id" id="producto_id" required>
             </div>
             <div class="col-md-2">
                 <label class="form-label">Cantidad *</label>
@@ -182,9 +181,7 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script>
 function toggleMedidas() {
-    const select = document.getElementById('producto_id');
-    const option = select.selectedOptions[0];
-    const tipo = option?.dataset?.tipo || 'fijo';
+    const tipo = document.getElementById('producto_id').dataset.tipo || 'fijo';
     const alto = document.getElementById('alto');
     const ancho = document.getElementById('ancho');
 
@@ -198,6 +195,22 @@ function toggleMedidas() {
         ancho.disabled = true;
     }
 }
+
+document.getElementById('producto_input').addEventListener('input', function() {
+    const input = this.value.trim();
+    const datalist = document.getElementById('productos_datalist');
+    const option = Array.from(datalist.options).find(o => o.value === input);
+    const hidden = document.getElementById('producto_id');
+    if (option) {
+        hidden.value = option.dataset.id;
+        hidden.dataset.tipo = option.dataset.tipo;
+        toggleMedidas();
+    } else {
+        hidden.value = '';
+        hidden.dataset.tipo = 'fijo';
+        toggleMedidas();
+    }
+});
 </script>
 
 <?php require 'includes/footer.php'; ?>
