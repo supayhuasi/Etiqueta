@@ -94,6 +94,7 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <a href="mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>">💳 Mercado Pago</a>
             <a href="pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>">📋 Pedidos</a>
             <a href="cotizaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizaciones.php', 'cotizacion_crear.php', 'cotizacion_detalle.php', 'cotizacion_editar.php']) ? 'active' : '' ?>">💼 Cotizaciones</a>
+            <a href="cotizacion_clientes.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizacion_clientes.php', 'cotizacion_clientes_crear.php']) ? 'active' : '' ?>">👥 Clientes Cotización</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">COMPRAS</p>
             <a href="proveedores.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['proveedores.php', 'proveedores_crear.php']) ? 'active' : '' ?>">🏭 Proveedores</a>

@@ -15,16 +15,20 @@ if ($estado_filtro) {
 }
 
 if ($buscar) {
-    $where[] = "(numero_cotizacion LIKE ? OR nombre_cliente LIKE ? OR email LIKE ?)";
+    $where[] = "(c.numero_cotizacion LIKE ? OR c.nombre_cliente LIKE ? OR c.email LIKE ? OR cc.nombre LIKE ? OR cc.email LIKE ?)";
+    $params[] = "%$buscar%";
+    $params[] = "%$buscar%";
     $params[] = "%$buscar%";
     $params[] = "%$buscar%";
     $params[] = "%$buscar%";
 }
 
 $sql = "
-    SELECT * FROM ecommerce_cotizaciones 
+    SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono
+    FROM ecommerce_cotizaciones c
+    LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id
     WHERE " . implode(" AND ", $where) . "
-    ORDER BY fecha_creacion DESC
+    ORDER BY COALESCE(cc.nombre, c.nombre_cliente), c.fecha_creacion DESC
 ";
 
 $stmt = $pdo->prepare($sql);
@@ -157,15 +161,15 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <br><small class="text-muted"><?= $num_items ?> item(s)</small>
                                 </td>
                                 <td>
-                                    <strong><?= htmlspecialchars($cot['nombre_cliente']) ?></strong>
-                                    <?php if ($cot['empresa']): ?>
-                                        <br><small class="text-muted"><?= htmlspecialchars($cot['empresa']) ?></small>
+                                    <strong><?= htmlspecialchars($cot['cliente_nombre'] ?? $cot['nombre_cliente']) ?></strong>
+                                    <?php if (!empty($cot['cliente_empresa']) || $cot['empresa']): ?>
+                                        <br><small class="text-muted"><?= htmlspecialchars($cot['cliente_empresa'] ?? $cot['empresa']) ?></small>
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    📧 <?= htmlspecialchars($cot['email']) ?><br>
-                                    <?php if ($cot['telefono']): ?>
-                                        📞 <?= htmlspecialchars($cot['telefono']) ?>
+                                    📧 <?= htmlspecialchars($cot['cliente_email'] ?? $cot['email']) ?><br>
+                                    <?php if (!empty($cot['cliente_telefono']) || $cot['telefono']): ?>
+                                        📞 <?= htmlspecialchars($cot['cliente_telefono'] ?? $cot['telefono']) ?>
                                     <?php endif; ?>
                                 </td>
                                 <td>

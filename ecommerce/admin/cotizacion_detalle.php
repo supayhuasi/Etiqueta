@@ -4,7 +4,7 @@ require 'includes/header.php';
 $id = intval($_GET['id'] ?? 0);
 
 // Obtener cotización
-$stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
+$stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
 $stmt->execute([$id]);
 $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mensaje = "Estado actualizado";
             
             // Recargar
-            $stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
             $stmt->execute([$id]);
             $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -100,22 +100,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <table class="table table-sm table-borderless">
                     <tr>
                         <th width="30%">Nombre:</th>
-                        <td><?= htmlspecialchars($cotizacion['nombre_cliente']) ?></td>
+                        <td><?= htmlspecialchars($cotizacion['cliente_nombre'] ?? $cotizacion['nombre_cliente']) ?></td>
                     </tr>
-                    <?php if ($cotizacion['empresa']): ?>
+                    <?php if (!empty($cotizacion['cliente_empresa']) || $cotizacion['empresa']): ?>
                     <tr>
                         <th>Empresa:</th>
-                        <td><?= htmlspecialchars($cotizacion['empresa']) ?></td>
+                        <td><?= htmlspecialchars($cotizacion['cliente_empresa'] ?? $cotizacion['empresa']) ?></td>
                     </tr>
                     <?php endif; ?>
                     <tr>
                         <th>Email:</th>
-                        <td><a href="mailto:<?= htmlspecialchars($cotizacion['email']) ?>"><?= htmlspecialchars($cotizacion['email']) ?></a></td>
+                        <td><a href="mailto:<?= htmlspecialchars($cotizacion['cliente_email'] ?? $cotizacion['email']) ?>"><?= htmlspecialchars($cotizacion['cliente_email'] ?? $cotizacion['email']) ?></a></td>
                     </tr>
-                    <?php if ($cotizacion['telefono']): ?>
+                    <?php if (!empty($cotizacion['cliente_telefono']) || $cotizacion['telefono']): ?>
                     <tr>
                         <th>Teléfono:</th>
-                        <td><?= htmlspecialchars($cotizacion['telefono']) ?></td>
+                        <td><?= htmlspecialchars($cotizacion['cliente_telefono'] ?? $cotizacion['telefono']) ?></td>
                     </tr>
                     <?php endif; ?>
                 </table>

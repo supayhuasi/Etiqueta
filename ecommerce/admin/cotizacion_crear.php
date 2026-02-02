@@ -14,6 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
+        $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
+        $guardar_cliente = isset($_POST['guardar_cliente']) ? 1 : 0;
         
         // Validaciones
         if (empty($nombre_cliente)) {
@@ -24,6 +26,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("Email no válido");
         }
         
+        // Resolver cliente si corresponde
+        if ($cliente_id > 0) {
+            $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE id = ?");
+            $stmt->execute([$cliente_id]);
+            if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cliente_id = 0;
+            }
+        }
+
+        if ($cliente_id <= 0 && $guardar_cliente) {
+            $email_normalizado = $email ? strtolower(trim($email)) : '';
+            if ($email_normalizado) {
+                $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE email = ? LIMIT 1");
+                $stmt->execute([$email_normalizado]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($row) {
+                    $cliente_id = (int)$row['id'];
+                }
+            }
+
+            if ($cliente_id <= 0) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
+                    VALUES (?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([
+                    $nombre_cliente,
+                    $email ? $email : null,
+                    $telefono ? $telefono : null,
+                    $empresa ? $empresa : null
+                ]);
+                $cliente_id = (int)$pdo->lastInsertId();
+            }
+        }
+
         // Procesar items
         $items = [];
         $subtotal = 0;
@@ -92,8 +129,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Guardar cotización
         $stmt = $pdo->prepare("
             INSERT INTO ecommerce_cotizaciones 
-            (numero_cotizacion, nombre_cliente, email, telefono, empresa, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (numero_cotizacion, nombre_cliente, email, telefono, empresa, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $stmt->execute([
@@ -102,6 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email,
             $telefono,
             $empresa,
+            $cliente_id ?: null,
             $lista_precio_id,
             json_encode($items),
             $subtotal,
@@ -134,6 +172,10 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Listas de precios activas
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
 $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Clientes para cotizaciones
+$stmt = $pdo->query("SELECT id, nombre, email, telefono, empresa FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
+$clientes_cot = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
 $lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -179,8 +221,8 @@ foreach ($lista_cat_rows as $row) {
                         <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" required>
                     </div>
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email *</label>
-                        <input type="email" class="form-control" id="email" name="email" required>
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email">
                     </div>
                     <div class="mb-3">
                         <label for="telefono" class="form-label">Teléfono</label>
@@ -215,6 +257,22 @@ foreach ($lista_cat_rows as $row) {
                             <?php endforeach; ?>
                         </select>
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cliente_id" class="form-label">Cliente</label>
+                        <select class="form-select" id="cliente_id" name="cliente_id" onchange="autocompletarCliente()">
+                            <option value="">-- Seleccionar cliente --</option>
+                            <?php foreach ($clientes_cot as $cli): ?>
+                                <option value="<?= $cli['id'] ?>">
+                                    <?= htmlspecialchars($cli['nombre']) ?><?= !empty($cli['empresa']) ? ' - ' . htmlspecialchars($cli['empresa']) : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Si seleccionás un cliente, se completan los datos.</small>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="guardar_cliente" name="guardar_cliente">
+                        <label class="form-check-label" for="guardar_cliente">Guardar cliente en agenda</label>
                     </div>
                     <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
@@ -273,6 +331,7 @@ let itemIndex = 0;
 const productos = <?= json_encode($productos) ?>;
 const listaItems = <?= json_encode($lista_items_map) ?>;
 const listaCategorias = <?= json_encode($lista_cat_map) ?>;
+const clientesCot = <?= json_encode($clientes_cot) ?>;
 
 function productoLabel(p) {
     const precioLabel = p.tipo_precio === 'variable'
@@ -644,6 +703,27 @@ function aplicarListaPrecios() {
         precioInput.value = precioLista.toFixed(2);
     });
     calcularTotales();
+}
+
+function autocompletarCliente() {
+    const select = document.getElementById('cliente_id');
+    const clienteId = select ? parseInt(select.value || '0', 10) : 0;
+    if (!clienteId) {
+        return;
+    }
+    const cliente = clientesCot.find(c => String(c.id) === String(clienteId));
+    if (!cliente) {
+        return;
+    }
+    const nombreInput = document.getElementById('nombre_cliente');
+    const emailInput = document.getElementById('email');
+    const telefonoInput = document.getElementById('telefono');
+    const empresaInput = document.getElementById('empresa');
+
+    if (nombreInput && cliente.nombre) nombreInput.value = cliente.nombre;
+    if (emailInput && cliente.email) emailInput.value = cliente.email;
+    if (telefonoInput && cliente.telefono) telefonoInput.value = cliente.telefono;
+    if (empresaInput && cliente.empresa) empresaInput.value = cliente.empresa;
 }
 
 // Agregar primer item al cargar
