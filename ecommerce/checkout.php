@@ -104,6 +104,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($metodo_pago === 'Efectivo contra Entrega') {
                 $estado_pedido = 'esperando_envio';
             }
+
+            $estados_validos = [
+                'pendiente_pago',
+                'esperando_transferencia',
+                'esperando_envio',
+                'pagado',
+                'pago_pendiente',
+                'pago_autorizado',
+                'pago_en_proceso',
+                'pago_rechazado',
+                'pago_reembolsado',
+                'confirmado',
+                'preparando',
+                'enviado',
+                'entregado',
+                'cancelado'
+            ];
+            if (!in_array($estado_pedido, $estados_validos, true)) {
+                $estado_pedido = 'pendiente_pago';
+            }
             
             // Crear pedido
             $stmt = $pdo->prepare("
