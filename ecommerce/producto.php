@@ -423,11 +423,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php $attr_index++; ?>
                     <?php endforeach; ?>
 
-                    <?php if (!empty($atributos)): ?>
-                        <div class="my-3" id="attr_wizard_controls">
-                            <small class="text-muted" id="attr_progress">Atributo 1 de <?= count($atributos) ?></small>
-                        </div>
-                    <?php endif; ?>
 
                     <div class="mb-4">
                         <label for="cantidad" class="form-label fw-bold">Cantidad</label>
@@ -634,7 +629,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const steps = Array.from(document.querySelectorAll('.attr-step'));
     if (steps.length > 0) {
         let currentStep = 0;
-        const progress = document.getElementById('attr_progress');
 
         const setRequired = (stepEl, enabled) => {
             const fields = stepEl.querySelectorAll('input, select, textarea');
@@ -654,9 +648,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 s.style.display = i === idx ? 'block' : 'none';
                 setRequired(s, i === idx);
             });
-            if (progress) {
-                progress.textContent = `Atributo ${idx + 1} de ${steps.length}`;
-            }
         };
 
         const validateStep = (stepEl) => {
@@ -678,10 +669,12 @@ document.addEventListener('DOMContentLoaded', function() {
             fields.forEach(f => {
                 const handler = () => {
                     if (idx !== currentStep) return;
-                    if (validateStep(stepEl) && currentStep < steps.length - 1) {
-                        currentStep++;
-                        showStep(currentStep);
-                    }
+                    setTimeout(() => {
+                        if (validateStep(stepEl) && currentStep < steps.length - 1) {
+                            currentStep++;
+                            showStep(currentStep);
+                        }
+                    }, 0);
                 };
                 f.addEventListener('change', handler);
                 f.addEventListener('input', handler);
