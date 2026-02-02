@@ -503,7 +503,7 @@ function cargarAtributosProducto(productoId, index) {
                                     ${opciones.map((o, i) => {
                                         const optId = `opt_${attr.id}_${index}_${i}`;
                                         const colorBox = o.color ? `<span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:${o.color};border-radius:3px;"></span>` : '';
-                                        const imgTag = o.imagen ? `<img src="../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
+                                        const imgTag = o.imagen ? `<img src="../../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
                                         return `
                                             <label class="border rounded p-2 d-flex align-items-center gap-2" style="cursor:pointer;">
                                                 <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" ${requerido}>
