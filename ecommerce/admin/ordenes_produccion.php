@@ -76,7 +76,7 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= htmlspecialchars(str_replace('_',' ', $op['estado'])) ?></td>
                                 <td><?= !empty($op['fecha_entrega']) ? date('d/m/Y', strtotime($op['fecha_entrega'])) : '-' ?></td>
                                 <td><?= date('d/m/Y H:i', strtotime($op['fecha_creacion'])) ?></td>
-                                <td><a href="pedidos_detalle.php?id=<?= $op['pedido_id'] ?>" class="btn btn-sm btn-primary">Ver pedido</a></td>
+                                <td><a href="orden_produccion_detalle.php?pedido_id=<?= $op['pedido_id'] ?>" class="btn btn-sm btn-primary">Ver orden</a></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
