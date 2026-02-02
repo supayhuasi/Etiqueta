@@ -424,10 +424,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endforeach; ?>
 
                     <?php if (!empty($atributos)): ?>
-                        <div class="d-flex justify-content-between align-items-center my-3" id="attr_wizard_controls">
-                            <button type="button" class="btn btn-outline-secondary" id="attr_prev">← Anterior</button>
+                        <div class="my-3" id="attr_wizard_controls">
                             <small class="text-muted" id="attr_progress">Atributo 1 de <?= count($atributos) ?></small>
-                            <button type="button" class="btn btn-primary" id="attr_next">Siguiente →</button>
                         </div>
                     <?php endif; ?>
 
@@ -636,8 +634,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const steps = Array.from(document.querySelectorAll('.attr-step'));
     if (steps.length > 0) {
         let currentStep = 0;
-        const prevBtn = document.getElementById('attr_prev');
-        const nextBtn = document.getElementById('attr_next');
         const progress = document.getElementById('attr_progress');
 
         const setRequired = (stepEl, enabled) => {
@@ -661,8 +657,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (progress) {
                 progress.textContent = `Atributo ${idx + 1} de ${steps.length}`;
             }
-            if (prevBtn) prevBtn.disabled = idx === 0;
-            if (nextBtn) nextBtn.textContent = idx === steps.length - 1 ? 'Finalizar atributos' : 'Siguiente →';
         };
 
         const validateStep = (stepEl) => {
@@ -679,29 +673,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return true;
         };
 
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => {
-                if (currentStep > 0) {
-                    currentStep--;
-                    showStep(currentStep);
-                }
+        steps.forEach((stepEl, idx) => {
+            const fields = stepEl.querySelectorAll('input, select, textarea');
+            fields.forEach(f => {
+                const handler = () => {
+                    if (idx !== currentStep) return;
+                    if (validateStep(stepEl) && currentStep < steps.length - 1) {
+                        currentStep++;
+                        showStep(currentStep);
+                    }
+                };
+                f.addEventListener('change', handler);
+                f.addEventListener('input', handler);
             });
-        }
-
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => {
-                if (!validateStep(steps[currentStep])) {
-                    alert('Completá el atributo antes de continuar.');
-                    return;
-                }
-                if (currentStep < steps.length - 1) {
-                    currentStep++;
-                    showStep(currentStep);
-                } else {
-                    showStep(currentStep);
-                }
-            });
-        }
+        });
 
         showStep(currentStep);
     }
