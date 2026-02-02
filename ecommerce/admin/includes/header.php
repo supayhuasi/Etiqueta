@@ -100,6 +100,20 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <a href="compras.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['compras.php', 'compras_crear.php', 'compras_detalle.php']) ? 'active' : '' ?>">🧾 Compras</a>
             <a href="inventario_ajustes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'inventario_ajustes.php' ? 'active' : '' ?>">⚙️ Ajustes de Inventario</a>
             <hr class="bg-white">
+            <p class="text-white-50 small mb-3">ADMINISTRACIÓN</p>
+            <div class="ms-2">
+                <a href="../../index.php">🏠 Inicio</a>
+                <a href="../../scan.php">🔍 Escaneo</a>
+                <a href="../../dashboard.php">📊 Dashboard</a>
+                <a href="../../usuarios_lista.php">👥 Usuarios - Listar</a>
+                <a href="../../usuarios_crear.php">➕ Usuarios - Crear</a>
+                <a href="../../roles_usuarios.php">🛡️ Usuarios - Roles</a>
+                <a href="../../sueldos.php">💰 Sueldos</a>
+                <a href="../../cheques.php">🏦 Cheques</a>
+                <a href="../../gastos.php">💸 Gastos</a>
+                <a href="../../asistencias.php">📋 Asistencias</a>
+            </div>
+            <hr class="bg-white">
             <a href="../index.php" class="mt-3">🔗 Ir a Tienda</a>
         </div>
 
