@@ -501,10 +501,9 @@ function aplicarProducto(index, producto) {
     // Si es precio fijo, establecer precio inmediatamente
     if (producto.tipo_precio === 'fijo') {
         const precioBase = parseFloat(producto.precio_base);
-        const precioLista = calcularPrecioConLista(producto.id, precioBase);
         const precioInput = document.getElementById(`precio_${index}`);
         precioInput.dataset.base = precioBase.toFixed(2);
-        precioInput.value = precioLista.toFixed(2);
+        precioInput.value = precioBase.toFixed(2);
         document.getElementById(`precio-info-${index}`).innerHTML = '✓ Precio fijo del producto';
         document.getElementById(`precio-info-${index}`).style.display = 'block';
         calcularTotales();
@@ -641,10 +640,9 @@ function actualizarPrecioItem(index) {
                     }
 
                     const precioBase = parseFloat(data.precio);
-                    const precioLista = calcularPrecioConLista(productoId, precioBase);
                     const precioInput = document.getElementById(`precio_${index}`);
                     precioInput.dataset.base = precioBase.toFixed(2);
-                    precioInput.value = precioLista.toFixed(2);
+                    precioInput.value = precioBase.toFixed(2);
                     document.getElementById(`precio-info-${index}`).innerHTML = '✓ ' + data.precio_info;
                     document.getElementById(`precio-info-${index}`).style.display = 'block';
                     calcularTotales();
@@ -665,35 +663,38 @@ function eliminarItem(index) {
 
 function calcularTotales() {
     let subtotal = 0;
-    let subtotalBase = 0;
-    
+    let descuentoListaTotal = 0;
+
     document.querySelectorAll('.item-row').forEach(row => {
         const cantidad = parseFloat(row.querySelector('.item-cantidad')?.value || 0);
         const precio = parseFloat(row.querySelector('.item-precio')?.value || 0);
         const subtotalItem = cantidad * precio;
 
-        const precioBase = parseFloat(row.querySelector('.item-precio')?.dataset.base || 0) || precio;
-        const subtotalBaseItem = cantidad * precioBase;
-        
         // Actualizar subtotal del item
         const subtotalInput = row.querySelector('.item-subtotal');
         if (subtotalInput) {
             subtotalInput.value = subtotalItem.toFixed(2);
         }
-        
+
         subtotal += subtotalItem;
-        subtotalBase += subtotalBaseItem;
+
+        const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
+        const precioBase = parseFloat(row.querySelector('.item-precio')?.dataset.base || 0) || precio;
+        if (productoId) {
+            const precioLista = calcularPrecioConLista(productoId, precioBase);
+            const descUnit = Math.max(0, precioBase - precioLista);
+            descuentoListaTotal += descUnit * cantidad;
+        }
     });
 
     const listaId = obtenerListaSeleccionada();
     const descuentoInput = document.getElementById('descuento');
     const descuentoInfo = document.getElementById('descuento_lista_info');
-    const descuentoLista = Math.max(0, subtotalBase - subtotal);
 
     if (listaId && descuentoInput) {
-        descuentoInput.value = descuentoLista.toFixed(2);
+        descuentoInput.value = descuentoListaTotal.toFixed(2);
         if (descuentoInfo) {
-            descuentoInfo.textContent = `Base: $${subtotalBase.toFixed(2)} | Descuento lista: $${descuentoLista.toFixed(2)}`;
+            descuentoInfo.textContent = `Base: $${subtotal.toFixed(2)} | Descuento lista: $${descuentoListaTotal.toFixed(2)}`;
         }
     } else if (descuentoInfo) {
         descuentoInfo.textContent = '';
@@ -707,21 +708,6 @@ function calcularTotales() {
 }
 
 function aplicarListaPrecios() {
-    document.querySelectorAll('.item-row').forEach(row => {
-        const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
-        const precioInput = row.querySelector('.item-precio');
-        if (!productoId || !precioInput) {
-            return;
-        }
-
-        const precioBase = parseFloat(precioInput.dataset.base || 0);
-        if (!precioBase) {
-            return;
-        }
-
-        const precioLista = calcularPrecioConLista(productoId, precioBase);
-        precioInput.value = precioLista.toFixed(2);
-    });
     calcularTotales();
 }
 
