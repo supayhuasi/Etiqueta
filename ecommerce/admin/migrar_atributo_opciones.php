@@ -34,6 +34,16 @@ try {
         } else {
             echo "   ✓ Campo color ya existe\n";
         }
+
+        // Verificar si existe el campo costo_adicional
+        $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones LIKE 'costo_adicional'");
+        if ($stmt->rowCount() === 0) {
+            echo "   + Agregando campo costo_adicional...\n";
+            $pdo->exec("ALTER TABLE ecommerce_atributo_opciones ADD COLUMN costo_adicional DECIMAL(10,2) DEFAULT 0 AFTER color");
+            echo "   ✓ Campo costo_adicional agregado\n";
+        } else {
+            echo "   ✓ Campo costo_adicional ya existe\n";
+        }
     }
     
     echo "\n✓ Migración completada exitosamente\n";

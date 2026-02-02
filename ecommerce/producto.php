@@ -130,18 +130,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "El atributo '{$attr['nombre']}' es obligatorio";
                     break;
                 }
+                $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
                 $atributos_seleccionados[$attr['id']] = [
                     'nombre' => $attr['nombre'],
                     'valor' => $valor,
-                    'costo_adicional' => $attr['costo_adicional']
+                    'costo_adicional' => $costo_opcion
                 ];
             } else {
                 $valor = $_POST['attr_' . $attr['id']] ?? '';
                 if (!empty($valor)) {
+                    $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
                     $atributos_seleccionados[$attr['id']] = [
                         'nombre' => $attr['nombre'],
                         'valor' => $valor,
-                        'costo_adicional' => $attr['costo_adicional']
+                        'costo_adicional' => $costo_opcion
                     ];
                 }
             }
@@ -364,11 +366,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <div class="d-flex gap-2 flex-wrap mb-3">
                                         <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
                                                <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
+                                        <input type="hidden" id="attr_costo_<?= $attr['id'] ?>" name="attr_costo_<?= $attr['id'] ?>" value="0">
                                         <?php foreach ($opciones_attr as $opcion): ?>
                                             <div class="position-relative">
                                                 <label class="cursor-pointer position-relative" style="cursor: pointer;">
                                                     <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
-                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>"
+                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>"
                                                            onchange="actualizarPrecio()">
                                                     <div class="border-2 rounded p-1 transition-all" id="option_<?= $opcion['id'] ?>" 
                                                          style="border: 2px solid #ddd; cursor: pointer; transition: all 0.3s ease;">
@@ -408,6 +411,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 }
                                                 // Actualizar el hidden input
                                                 document.getElementById('attr_<?= $attr['id'] ?>').value = this.value;
+                                                const costoHidden = document.getElementById('attr_costo_<?= $attr['id'] ?>');
+                                                if (costoHidden) {
+                                                    costoHidden.value = this.dataset.costo || '0';
+                                                }
                                             });
                                         });
                                     </script>
@@ -579,8 +586,14 @@ function actualizarPrecio() {
     // Agregar costos adicionales de atributos
     atributosData.forEach(attr => {
         const valorInput = document.getElementById('attr_' + attr.id);
-        if (valorInput && valorInput.value && attr.costo_adicional > 0) {
-            precioFinal += parseFloat(attr.costo_adicional);
+        if (valorInput && valorInput.value) {
+            const costoHidden = document.getElementById('attr_costo_' + attr.id);
+            const costoOpcion = costoHidden ? parseFloat(costoHidden.value || 0) : 0;
+            if (costoOpcion > 0) {
+                precioFinal += costoOpcion;
+            } else if (attr.costo_adicional > 0) {
+                precioFinal += parseFloat(attr.costo_adicional);
+            }
         }
     });
     

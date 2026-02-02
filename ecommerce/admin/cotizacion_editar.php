@@ -321,6 +321,27 @@ function calcularPrecioConLista(productoId, precioBase) {
     return precioBase;
 }
 
+function actualizarCostoAtributo(index, attrId, costoBase, costoOpcion, valorSeleccionado) {
+    const inputCosto = document.getElementById(`attr_costo_${attrId}_${index}`);
+    if (!inputCosto) return;
+
+    const base = parseFloat(costoBase || 0);
+    const opcion = parseFloat(costoOpcion || 0);
+    const tieneValor = valorSeleccionado !== undefined && valorSeleccionado !== null && String(valorSeleccionado).trim() !== '';
+
+    if (!tieneValor) {
+        inputCosto.value = '0';
+    } else if (opcion > 0) {
+        inputCosto.value = opcion.toFixed(2);
+    } else if (base > 0) {
+        inputCosto.value = base.toFixed(2);
+    } else {
+        inputCosto.value = '0';
+    }
+
+    calcularTotales();
+}
+
 function asegurarDatalistProductos() {
     let datalist = document.getElementById('productos-datalist');
     if (!datalist) {
@@ -387,7 +408,7 @@ function agregarItem(itemData = null) {
                         <label class="form-label">Precio Unit. *</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control item-precio" id="precio_${itemIndex}" name="items[${itemIndex}][precio]" value="${item.precio_unitario || item.precio_base || ''}" step="0.01" min="0" required onchange="calcularTotales()">
+                            <input type="number" class="form-control item-precio" id="precio_${itemIndex}" name="items[${itemIndex}][precio]" value="${item.precio_unitario || item.precio_base || ''}" step="0.01" min="0" required onchange="actualizarBasePrecio(${itemIndex})">
                         </div>
                     </div>
                     <div class="col-md-2">
@@ -436,6 +457,13 @@ function limpiarProducto(index) {
     document.getElementById(`precio_${index}`).dataset.base = '';
     document.getElementById(`precio-info-${index}`).style.display = 'none';
     document.getElementById(`atributos-container-${index}`).style.display = 'none';
+    calcularTotales();
+}
+
+function actualizarBasePrecio(index) {
+    const precioInput = document.getElementById(`precio_${index}`);
+    if (!precioInput) return;
+    precioInput.dataset.base = precioInput.value || '';
     calcularTotales();
 }
 
@@ -500,17 +528,56 @@ function cargarAtributosProducto(productoId, index) {
                 data.atributos.forEach(attr => {
                     let inputHTML = '';
                     const fieldName = `items[${index}][atributos][${attr.id}]`;
+                    const requerido = attr.es_obligatorio ? 'required' : '';
                     
                     if (attr.tipo === 'text') {
-                        inputHTML = `<input type="text" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">`;
+                        inputHTML = `<input type="text" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" ${requerido} oninput="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, 0, this.value)">`;
                     } else if (attr.tipo === 'number') {
-                        inputHTML = `<input type="number" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" step="0.01" onchange="calcularTotales()">`;
+                        inputHTML = `<input type="number" class="form-control form-control-sm mb-2" name="${fieldName}[valor]" step="0.01" ${requerido} oninput="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, 0, this.value)">`;
+                    } else if (attr.tipo === 'color') {
+                        const inputId = `attr_${attr.id}_${index}`;
+                        const previewId = `color_preview_${attr.id}_${index}`;
+                        inputHTML = `
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <input type="color" class="form-control form-control-color" id="${inputId}" name="${fieldName}[valor]" value="#000000" ${requerido} oninput="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, 0, this.value)">
+                                <div class="border rounded" id="${previewId}" style="width: 28px; height: 28px; background-color: #000000;"></div>
+                            </div>
+                        `;
                     } else if (attr.tipo === 'select') {
-                        const opciones = attr.valores ? attr.valores.split(',') : [];
-                        inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" onchange="calcularTotales()">
-                            <option value="">-- Seleccionar --</option>
-                            ${opciones.map(o => `<option value="${o.trim()}">${o.trim()}</option>`).join('')}
-                        </select>`;
+                        const opciones = Array.isArray(attr.opciones) && attr.opciones.length > 0
+                            ? attr.opciones.map(o => ({
+                                valor: o.nombre,
+                                color: o.color,
+                                imagen: o.imagen,
+                                costo: o.costo_adicional
+                            }))
+                            : (attr.valores ? attr.valores.split(',').map(v => ({ valor: v.trim() })) : []);
+
+                        if (opciones.some(o => o.color || o.imagen)) {
+                            const inputId = `attr_${attr.id}_${index}`;
+                            inputHTML = `
+                                <input type="hidden" id="${inputId}" name="${fieldName}[valor]" ${requerido}>
+                                <div class="d-flex gap-2 flex-wrap mb-2">
+                                    ${opciones.map((o, i) => {
+                                        const optId = `opt_${attr.id}_${index}_${i}`;
+                                        const colorBox = o.color ? `<span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:${o.color};border-radius:3px;"></span>` : '';
+                                        const imgTag = o.imagen ? `<img src="../../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
+                                        return `
+                                            <label class="border rounded p-2 d-flex align-items-center gap-2" style="cursor:pointer;">
+                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value)">
+                                                ${imgTag || colorBox}
+                                                <small>${o.valor}</small>
+                                            </label>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            `;
+                        } else {
+                            inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.options[this.selectedIndex].dataset.costo, this.value)">
+                                <option value="">-- Seleccionar --</option>
+                                ${opciones.map(o => `<option value="${o.valor}" data-costo="${o.costo || 0}">${o.valor}</option>`).join('')}
+                            </select>`;
+                        }
                     }
                     
                     const attrHTML = `
@@ -521,10 +588,23 @@ function cargarAtributosProducto(productoId, index) {
                             </label>
                             ${inputHTML}
                             <input type="hidden" name="${fieldName}[nombre]" value="${attr.nombre}">
-                            <input type="hidden" name="${fieldName}[costo]" value="${attr.costo_adicional}">
+                            <input type="hidden" id="attr_costo_${attr.id}_${index}" name="${fieldName}[costo]" value="0" data-base="${attr.costo_adicional}">
                         </div>
                     `;
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
+
+                    if (attr.tipo === 'color') {
+                        const inputId = `attr_${attr.id}_${index}`;
+                        const previewId = `color_preview_${attr.id}_${index}`;
+                        const colorInput = document.getElementById(inputId);
+                        const preview = document.getElementById(previewId);
+                        if (colorInput && preview) {
+                            const updatePreview = () => { preview.style.backgroundColor = colorInput.value || '#000000'; };
+                            colorInput.addEventListener('input', updatePreview);
+                            updatePreview();
+                            actualizarCostoAtributo(index, attr.id, attr.costo_adicional, 0, colorInput.value);
+                        }
+                    }
                 });
             } else {
                 document.getElementById(`atributos-container-${index}`).style.display = 'none';
@@ -587,8 +667,21 @@ function calcularTotales() {
     
     document.querySelectorAll('.item-row').forEach(row => {
         const cantidad = parseFloat(row.querySelector('.item-cantidad')?.value || 0);
-        const precio = parseFloat(row.querySelector('.item-precio')?.value || 0);
-        const subtotalItem = cantidad * precio;
+        const precioInput = row.querySelector('.item-precio');
+        if (precioInput && (precioInput.dataset.base === undefined || precioInput.dataset.base === '')) {
+            precioInput.dataset.base = precioInput.value || '';
+        }
+        const precioBase = parseFloat(precioInput?.dataset.base || 0) || parseFloat(precioInput?.value || 0);
+        let costoAtributos = 0;
+        row.querySelectorAll('input[name*="[atributos]"][name$="[costo]"]').forEach(input => {
+            costoAtributos += parseFloat(input.value || 0);
+        });
+
+        const precioConAtributos = precioBase + costoAtributos;
+        if (precioInput) {
+            precioInput.value = precioConAtributos.toFixed(2);
+        }
+        const subtotalItem = cantidad * precioConAtributos;
         
         // Actualizar subtotal del item
         const subtotalInput = row.querySelector('.item-subtotal');
@@ -599,7 +692,6 @@ function calcularTotales() {
         subtotal += subtotalItem;
 
         const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
-        const precioBase = parseFloat(row.querySelector('.item-precio')?.dataset.base || 0) || precio;
         if (productoId) {
             const precioLista = calcularPrecioConLista(productoId, precioBase);
             const descUnit = Math.max(0, precioBase - precioLista);

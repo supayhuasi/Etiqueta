@@ -34,7 +34,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
             $ids = array_column($atributos, 'id');
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $stmt = $pdo->prepare("
-                SELECT id, atributo_id, nombre, color, imagen
+                SELECT id, atributo_id, nombre, color, imagen, costo_adicional
                 FROM ecommerce_atributo_opciones
                 WHERE atributo_id IN ($placeholders)
                 ORDER BY orden
@@ -206,6 +206,7 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
         $nombre = $_POST['opcion_nombre'];
         $color = $_POST['opcion_color'] ?? null;
         $orden = intval($_POST['opcion_orden'] ?? 0);
+        $costo_opcion = floatval($_POST['opcion_costo'] ?? 0);
         
         // Validar color hexadecimal si se proporciona
         if ($color && !preg_match('/^#[0-9A-F]{6}$/i', $color)) {
@@ -242,10 +243,10 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
                 // Actualizar opción existente
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_atributo_opciones 
-                    SET nombre = ?, color = ?, orden = ?
+                    SET nombre = ?, color = ?, orden = ?, costo_adicional = ?
                     WHERE id = ? AND atributo_id = ?
                 ");
-                $stmt->execute([$nombre, $color, $orden, $opcion_id, $atributo_id]);
+                $stmt->execute([$nombre, $color, $orden, $costo_opcion, $opcion_id, $atributo_id]);
                 
                 // Si hay nueva imagen, actualizar
                 if ($imagen) {
@@ -259,10 +260,10 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
             } else {
                 // Nueva opción
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, orden)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, costo_adicional, orden)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $orden]);
+                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $costo_opcion, $orden]);
             }
             
             // Recargar opciones
@@ -495,6 +496,12 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                             <label for="opcion_orden" class="form-label">Orden</label>
                             <input type="number" class="form-control" id="opcion_orden" name="opcion_orden" 
                                    value="<?= $opcion_editar['orden'] ?? 0 ?>">
+                        </div>
+                        <div class="mb-3">
+                            <label for="opcion_costo" class="form-label">Costo adicional ($)</label>
+                            <input type="number" step="0.01" class="form-control" id="opcion_costo" name="opcion_costo" 
+                                   value="<?= $opcion_editar['costo_adicional'] ?? 0 ?>">
+                            <small class="text-muted">Se suma al precio total cuando se elige esta opción</small>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <?= $opcion_editar ? '💾 Actualizar Opción' : '➕ Agregar Opción' ?>
