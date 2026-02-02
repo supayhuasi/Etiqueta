@@ -308,6 +308,7 @@ foreach ($lista_cat_rows as $row) {
                             </th>
                             <td class="text-end">
                                 <input type="number" class="form-control form-control-sm text-end" id="descuento" name="descuento" value="0" step="0.01" min="0" onchange="calcularTotales()">
+                                <small id="descuento_lista_info" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr class="table-primary">
@@ -664,11 +665,15 @@ function eliminarItem(index) {
 
 function calcularTotales() {
     let subtotal = 0;
+    let subtotalBase = 0;
     
     document.querySelectorAll('.item-row').forEach(row => {
         const cantidad = parseFloat(row.querySelector('.item-cantidad')?.value || 0);
         const precio = parseFloat(row.querySelector('.item-precio')?.value || 0);
         const subtotalItem = cantidad * precio;
+
+        const precioBase = parseFloat(row.querySelector('.item-precio')?.dataset.base || 0) || precio;
+        const subtotalBaseItem = cantidad * precioBase;
         
         // Actualizar subtotal del item
         const subtotalInput = row.querySelector('.item-subtotal');
@@ -677,11 +682,26 @@ function calcularTotales() {
         }
         
         subtotal += subtotalItem;
+        subtotalBase += subtotalBaseItem;
     });
-    
-    const descuento = parseFloat(document.getElementById('descuento').value || 0);
+
+    const listaId = obtenerListaSeleccionada();
+    const descuentoInput = document.getElementById('descuento');
+    const descuentoInfo = document.getElementById('descuento_lista_info');
+    const descuentoLista = Math.max(0, subtotalBase - subtotal);
+
+    if (listaId && descuentoInput) {
+        descuentoInput.value = descuentoLista.toFixed(2);
+        if (descuentoInfo) {
+            descuentoInfo.textContent = `Base: $${subtotalBase.toFixed(2)} | Descuento lista: $${descuentoLista.toFixed(2)}`;
+        }
+    } else if (descuentoInfo) {
+        descuentoInfo.textContent = '';
+    }
+
+    const descuento = parseFloat(descuentoInput?.value || 0);
     const total = subtotal - descuento;
-    
+
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('total').textContent = '$' + total.toFixed(2);
 }
