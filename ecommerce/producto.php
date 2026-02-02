@@ -371,7 +371,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                            onchange="actualizarPrecio()">
                                                     <div class="border-2 rounded p-1 transition-all" id="option_<?= $opcion['id'] ?>" 
                                                          style="border: 2px solid #ddd; cursor: pointer; transition: all 0.3s ease;">
-                                                        <?php if ($opcion['imagen']): ?>
+                                                        <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
+                                                            <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
+                                                        <?php elseif (!empty($opcion['imagen'])): ?>
                                                             <img src="uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
