@@ -17,7 +17,7 @@ if (!$producto) {
 // Guardar receta
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $material_ids = $_POST['material_id'] ?? [];
+        $material_ids = $_POST['material_producto_id'] ?? [];
         $tipos = $_POST['tipo_calculo'] ?? [];
         $factores = $_POST['factor'] ?? [];
         $mermas = $_POST['merma_pct'] ?? [];
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nota = trim($notas[$idx] ?? '');
 
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_producto_recetas (producto_id, material_id, tipo_calculo, factor, merma_pct, notas)
+                INSERT INTO ecommerce_producto_recetas_productos (producto_id, material_producto_id, tipo_calculo, factor, merma_pct, notas)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE tipo_calculo = VALUES(tipo_calculo), factor = VALUES(factor), merma_pct = VALUES(merma_pct), notas = VALUES(notas)
             ");
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($ids_validos)) {
             $placeholders = implode(',', array_fill(0, count($ids_validos), '?'));
             $params = array_merge([$producto_id], $ids_validos);
-            $stmt = $pdo->prepare("DELETE FROM ecommerce_producto_recetas WHERE producto_id = ? AND material_id NOT IN ($placeholders)");
+            $stmt = $pdo->prepare("DELETE FROM ecommerce_producto_recetas_productos WHERE producto_id = ? AND material_producto_id NOT IN ($placeholders)");
             $stmt->execute($params);
         }
 
@@ -54,13 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stmt = $pdo->query("SELECT * FROM ecommerce_materiales WHERE activo = 1 ORDER BY nombre");
+$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_productos WHERE activo = 1 AND es_material = 1 ORDER BY nombre");
 $materiales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
-    SELECT r.*, m.nombre, m.unidad
-    FROM ecommerce_producto_recetas r
-    JOIN ecommerce_materiales m ON r.material_id = m.id
+    SELECT r.*, m.nombre
+    FROM ecommerce_producto_recetas_productos r
+    JOIN ecommerce_productos m ON r.material_producto_id = m.id
     WHERE r.producto_id = ?
     ORDER BY m.nombre
 ");
@@ -68,7 +68,7 @@ $stmt->execute([$producto_id]);
 $receta = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $receta_map = [];
 foreach ($receta as $r) {
-    $receta_map[$r['material_id']] = $r;
+    $receta_map[$r['material_producto_id']] = $r;
 }
 ?>
 
@@ -97,8 +97,7 @@ foreach ($receta as $r) {
                     <table class="table table-sm">
                         <thead class="table-light">
                             <tr>
-                                <th>Material</th>
-                                <th>Unidad</th>
+                                <th>Material (Producto)</th>
                                 <th>Tipo cálculo</th>
                                 <th>Factor</th>
                                 <th>Merma %</th>
@@ -111,10 +110,9 @@ foreach ($receta as $r) {
                             ?>
                                 <tr>
                                     <td>
-                                        <input type="hidden" name="material_id[]" value="<?= $m['id'] ?>">
+                                        <input type="hidden" name="material_producto_id[]" value="<?= $m['id'] ?>">
                                         <strong><?= htmlspecialchars($m['nombre']) ?></strong>
                                     </td>
-                                    <td><?= htmlspecialchars($m['unidad']) ?></td>
                                     <td>
                                         <select name="tipo_calculo[]" class="form-select form-select-sm">
                                             <option value="fijo" <?= ($r['tipo_calculo'] ?? '') === 'fijo' ? 'selected' : '' ?>>Fijo</option>

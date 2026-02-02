@@ -27,8 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $orden = intval($_POST['orden'] ?? 0);
     $activo = isset($_POST['activo']) ? 1 : 0;
     $mostrar_ecommerce = isset($_POST['mostrar_ecommerce']) ? 1 : 0;
+    $es_material = isset($_POST['es_material']) ? 1 : 0;
     
-    if (empty($nombre) || empty($codigo) || $precio_base <= 0 || $categoria_id <= 0) {
+    if (empty($nombre) || empty($codigo) || $categoria_id <= 0 || ($precio_base <= 0 && !$es_material)) {
         $error = "Falta completar campos obligatorios";
     } else {
         try {
@@ -36,17 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_productos 
                     SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
-                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?
+                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $id]);
                 $mensaje = "Producto actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material]);
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
@@ -116,6 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-3">
                 <label for="orden" class="form-label">Orden</label>
                 <input type="number" class="form-control" id="orden" name="orden" value="<?= $producto['orden'] ?? 0 ?>">
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="es_material" id="es_material" <?= !empty($producto['es_material']) ? 'checked' : '' ?>>
+                <label class="form-check-label" for="es_material">Es material (para recetas)</label>
             </div>
 
             <div class="mb-3 form-check">

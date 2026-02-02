@@ -38,9 +38,9 @@ $recetas_map = [];
 if (!empty($producto_ids)) {
     $placeholders = implode(',', array_fill(0, count($producto_ids), '?'));
     $stmt = $pdo->prepare("
-        SELECT r.*, m.nombre AS material_nombre, m.unidad
-        FROM ecommerce_producto_recetas r
-        JOIN ecommerce_materiales m ON r.material_id = m.id
+        SELECT r.*, m.nombre AS material_nombre
+        FROM ecommerce_producto_recetas_productos r
+        JOIN ecommerce_productos m ON r.material_producto_id = m.id
         WHERE r.producto_id IN ($placeholders)
         ORDER BY m.nombre
     ");
@@ -146,7 +146,6 @@ if (!empty($producto_ids)) {
                                             <tr>
                                                 <th>Material</th>
                                                 <th>Consumo</th>
-                                                <th>Unidad</th>
                                                 <th>Detalle</th>
                                             </tr>
                                         </thead>
@@ -170,7 +169,6 @@ if (!empty($producto_ids)) {
                                                 <tr>
                                                     <td><?= htmlspecialchars($r['material_nombre']) ?></td>
                                                     <td><?= number_format($cantidad_total, 4, ',', '.') ?></td>
-                                                    <td><?= htmlspecialchars($r['unidad']) ?></td>
                                                     <td>
                                                         <?= htmlspecialchars($r['tipo_calculo']) ?>
                                                         <?= $merma > 0 ? ' + ' . $merma . '%' : '' ?>
