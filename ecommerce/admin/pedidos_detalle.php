@@ -149,7 +149,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
-<div class="card mb-4">
+<div class="card mb-4" id="pagos">
     <div class="card-header bg-success text-white">
         <h5 class="mb-0">💳 Pagos y Saldo</h5>
     </div>
