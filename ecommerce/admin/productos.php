@@ -10,6 +10,17 @@ $query = "
 ";
 $params = [];
 
+if (($_POST['accion'] ?? '') === 'toggle_receta') {
+    $producto_id = intval($_POST['producto_id'] ?? 0);
+    $usa_receta = isset($_POST['usa_receta']) ? 1 : 0;
+    if ($producto_id > 0) {
+        $stmt = $pdo->prepare("UPDATE ecommerce_productos SET usa_receta = ? WHERE id = ?");
+        $stmt->execute([$usa_receta, $producto_id]);
+    }
+    header("Location: productos.php");
+    exit;
+}
+
 if (!empty($categoria_filter)) {
     $query .= " AND p.categoria_id = ?";
     $params[] = $categoria_filter;
@@ -67,6 +78,7 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>Categoría</th>
                     <th>Precio Base</th>
                     <th>Tipo</th>
+                    <th>Receta</th>
                     <th>Ecommerce</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -83,6 +95,13 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <span class="badge bg-<?= $prod['tipo_precio'] === 'variable' ? 'warning' : 'info' ?>">
                                 <?= $prod['tipo_precio'] === 'variable' ? 'Variable' : 'Fijo' ?>
                             </span>
+                        </td>
+                        <td>
+                            <form method="POST">
+                                <input type="hidden" name="accion" value="toggle_receta">
+                                <input type="hidden" name="producto_id" value="<?= $prod['id'] ?>">
+                                <input type="checkbox" name="usa_receta" onchange="this.form.submit()" <?= !empty($prod['usa_receta']) ? 'checked' : '' ?>>
+                            </form>
                         </td>
                         <td>
                             <?php if (!empty($prod['mostrar_ecommerce'])): ?>

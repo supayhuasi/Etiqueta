@@ -54,6 +54,93 @@ if ($_POST['accion'] === 'cambiar_estado') {
         
         $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?");
         $stmt->execute([$nuevo_estado, $pedido_id]);
+
+        if ($nuevo_estado === 'confirmado') {
+            $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+            $stmt->execute([$pedido_id]);
+            $orden = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$orden) {
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
+                $stmt->execute([$pedido_id]);
+                $orden_id = $pdo->lastInsertId();
+                $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
+            }
+
+            if (empty($orden['materiales_descontados'])) {
+                // Descontar materiales según receta
+                $stmt = $pdo->prepare("
+                    SELECT pi.producto_id, pi.cantidad, pi.alto_cm, pi.ancho_cm, p.usa_receta
+                    FROM ecommerce_pedido_items pi
+                    JOIN ecommerce_productos p ON pi.producto_id = p.id
+                    WHERE pi.pedido_id = ?
+                ");
+                $stmt->execute([$pedido_id]);
+                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $producto_ids = array_unique(array_filter(array_map(function($i){ return (int)$i['producto_id']; }, $items)));
+                $recetas_map = [];
+                if (!empty($producto_ids)) {
+                    $placeholders = implode(',', array_fill(0, count($producto_ids), '?'));
+                    $stmt = $pdo->prepare("
+                        SELECT r.*, r.producto_id
+                        FROM ecommerce_producto_recetas_productos r
+                        WHERE r.producto_id IN ($placeholders)
+                    ");
+                    $stmt->execute($producto_ids);
+                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($rows as $r) {
+                        $recetas_map[$r['producto_id']][] = $r;
+                    }
+                }
+
+                $materiales = [];
+                foreach ($items as $it) {
+                    if (empty($it['usa_receta'])) {
+                        continue;
+                    }
+                    $recetas = $recetas_map[$it['producto_id']] ?? [];
+                    if (empty($recetas)) {
+                        continue;
+                    }
+
+                    $alto_m = !empty($it['alto_cm']) ? ((float)$it['alto_cm'] / 100) : 0;
+                    $ancho_m = !empty($it['ancho_cm']) ? ((float)$it['ancho_cm'] / 100) : 0;
+                    $area_m2 = $alto_m * $ancho_m;
+
+                    foreach ($recetas as $r) {
+                        $factor = (float)$r['factor'];
+                        $merma = (float)$r['merma_pct'];
+                        $cantidad_base = 0;
+                        if ($r['tipo_calculo'] === 'fijo') {
+                            $cantidad_base = $factor;
+                        } elseif ($r['tipo_calculo'] === 'por_area') {
+                            $cantidad_base = $area_m2 * $factor;
+                        } elseif ($r['tipo_calculo'] === 'por_ancho') {
+                            $cantidad_base = $ancho_m * $factor;
+                        } elseif ($r['tipo_calculo'] === 'por_alto') {
+                            $cantidad_base = $alto_m * $factor;
+                        }
+                        $cantidad_total = $cantidad_base * (1 + ($merma / 100));
+                        $cantidad_total = $cantidad_total * (int)$it['cantidad'];
+
+                        $mat_id = (int)$r['material_producto_id'];
+                        if (!isset($materiales[$mat_id])) {
+                            $materiales[$mat_id] = 0;
+                        }
+                        $materiales[$mat_id] += $cantidad_total;
+                    }
+                }
+
+                foreach ($materiales as $mat_id => $qty) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
+                    $stmt->execute([$qty, $mat_id]);
+                }
+
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
+                $stmt->execute([$orden['id']]);
+            }
+        }
         
         // Recargar
         header("Location: pedidos.php");

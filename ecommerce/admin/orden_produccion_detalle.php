@@ -55,6 +55,7 @@ if (!empty($producto_ids)) {
 <div class="row mb-4">
     <div class="col-md-12">
         <a href="ordenes_produccion.php" class="btn btn-outline-secondary">← Volver a Órdenes</a>
+        <a href="orden_produccion_imprimir.php?pedido_id=<?= $pedido_id ?>" class="btn btn-outline-primary" target="_blank">🖨️ Imprimir</a>
         <h1 class="mt-3">🏭 Orden de Producción</h1>
         <p class="text-muted mb-0">Pedido: <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
     </div>

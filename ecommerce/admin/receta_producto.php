@@ -18,6 +18,7 @@ if (!$producto) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $material_ids = $_POST['material_producto_id'] ?? [];
+        $usar = $_POST['usar'] ?? [];
         $tipos = $_POST['tipo_calculo'] ?? [];
         $factores = $_POST['factor'] ?? [];
         $mermas = $_POST['merma_pct'] ?? [];
@@ -26,6 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($material_ids as $idx => $material_id) {
             $material_id = intval($material_id);
             if ($material_id <= 0) continue;
+            if (empty($usar[$idx])) {
+                continue;
+            }
             $tipo = $tipos[$idx] ?? 'fijo';
             $factor = floatval($factores[$idx] ?? 0);
             $merma = floatval($mermas[$idx] ?? 0);
@@ -40,12 +44,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Eliminar materiales no enviados
-        $ids_validos = array_map('intval', $material_ids);
+        $ids_validos = [];
+        foreach ($material_ids as $idx => $material_id) {
+            if (!empty($usar[$idx])) {
+                $ids_validos[] = intval($material_id);
+            }
+        }
         if (!empty($ids_validos)) {
             $placeholders = implode(',', array_fill(0, count($ids_validos), '?'));
             $params = array_merge([$producto_id], $ids_validos);
             $stmt = $pdo->prepare("DELETE FROM ecommerce_producto_recetas_productos WHERE producto_id = ? AND material_producto_id NOT IN ($placeholders)");
             $stmt->execute($params);
+        } else {
+            $stmt = $pdo->prepare("DELETE FROM ecommerce_producto_recetas_productos WHERE producto_id = ?");
+            $stmt->execute([$producto_id]);
         }
 
         $mensaje = "✓ Receta actualizada";
@@ -91,12 +103,13 @@ foreach ($receta as $r) {
     <div class="card">
         <div class="card-body">
             <?php if (empty($materiales)): ?>
-                <div class="alert alert-info">No hay materiales cargados.</div>
+                <div class="alert alert-info">No hay productos marcados como material. Marcá productos con “Es material”.</div>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-sm">
                         <thead class="table-light">
                             <tr>
+                                <th>Usar</th>
                                 <th>Material (Producto)</th>
                                 <th>Tipo cálculo</th>
                                 <th>Factor</th>
@@ -109,6 +122,9 @@ foreach ($receta as $r) {
                                 $r = $receta_map[$m['id']] ?? null;
                             ?>
                                 <tr>
+                                    <td>
+                                        <input type="checkbox" name="usar[]" value="1" <?= $r ? 'checked' : '' ?>>
+                                    </td>
                                     <td>
                                         <input type="hidden" name="material_producto_id[]" value="<?= $m['id'] ?>">
                                         <strong><?= htmlspecialchars($m['nombre']) ?></strong>

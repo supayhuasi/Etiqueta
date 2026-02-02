@@ -85,7 +85,6 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <p class="text-white-50 small mb-3">CATÁLOGO</p>
             <a href="categorias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'categorias.php' ? 'active' : '' ?>">📁 Categorías</a>
             <a href="productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'productos.php' ? 'active' : '' ?>">📦 Productos</a>
-            <a href="receta_producto.php" class="<?= basename($_SERVER['PHP_SELF']) === 'receta_producto.php' ? 'active' : '' ?>">🧪 Recetas</a>
             <a href="matriz_precios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'matriz_precios.php' ? 'active' : '' ?>">📏 Matriz de Precios</a>
             <a href="listas_precios.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['listas_precios.php', 'listas_precios_crear.php', 'listas_precios_editar.php', 'listas_precios_items.php', 'listas_precios_items_agregar.php', 'listas_precios_categorias.php']) ? 'active' : '' ?>">💰 Listas de Precios</a>
             <a href="precios_ecommerce.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_ecommerce.php' ? 'active' : '' ?>">🛍️ Precios Ecommerce</a>
