@@ -22,7 +22,17 @@ $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_i
 $stmt->execute([$pedido_id]);
 $orden_produccion = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Procesar acciones de producción
+// Pagos del pedido
+$stmt = $pdo->prepare("SELECT * FROM ecommerce_pedido_pagos WHERE pedido_id = ? ORDER BY fecha_pago DESC");
+$stmt->execute([$pedido_id]);
+$pagos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$stmt = $pdo->prepare("SELECT SUM(monto) AS total_pagado FROM ecommerce_pedido_pagos WHERE pedido_id = ?");
+$stmt->execute([$pedido_id]);
+$total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
+$saldo = (float)$pedido['total'] - $total_pagado;
+
+// Procesar acciones de producción y pagos
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     try {
@@ -42,6 +52,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = ?, notas = ?, fecha_entrega = ? WHERE id = ?");
             $stmt->execute([$estado, $notas, $fecha_entrega, $orden_produccion['id']]);
+            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            exit;
+        } elseif ($accion === 'registrar_pago') {
+            $monto = (float)($_POST['monto'] ?? 0);
+            $metodo = trim($_POST['metodo'] ?? '');
+            $referencia = trim($_POST['referencia'] ?? '');
+            $notas = trim($_POST['notas'] ?? '');
+
+            if ($monto <= 0) {
+                throw new Exception('El monto debe ser mayor a 0');
+            }
+            if ($monto > $saldo) {
+                throw new Exception('El monto excede el saldo');
+            }
+            if ($metodo === '') {
+                throw new Exception('El método de pago es obligatorio');
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT INTO ecommerce_pedido_pagos (pedido_id, monto, metodo, referencia, notas, creado_por)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $pedido_id,
+                $monto,
+                $metodo,
+                $referencia ?: null,
+                $notas ?: null,
+                $_SESSION['user']['id'] ?? null
+            ]);
+
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
         }
@@ -107,6 +148,75 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <?php if (isset($error)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
+
+<div class="card mb-4">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0">💳 Pagos y Saldo</h5>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4"><strong>Total:</strong> $<?= number_format($pedido['total'], 2, ',', '.') ?></div>
+            <div class="col-md-4"><strong>Pagado:</strong> $<?= number_format($total_pagado, 2, ',', '.') ?></div>
+            <div class="col-md-4"><strong>Saldo:</strong> $<?= number_format($saldo, 2, ',', '.') ?></div>
+        </div>
+
+        <form method="POST" class="row g-3">
+            <input type="hidden" name="accion" value="registrar_pago">
+            <div class="col-md-3">
+                <label class="form-label">Monto</label>
+                <input type="number" step="0.01" min="0" class="form-control" name="monto" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Método</label>
+                <input type="text" class="form-control" name="metodo" placeholder="Efectivo, Transferencia..." required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Referencia</label>
+                <input type="text" class="form-control" name="referencia">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Notas</label>
+                <input type="text" class="form-control" name="notas">
+            </div>
+            <div class="col-md-12">
+                <button type="submit" class="btn btn-primary">Registrar Pago</button>
+            </div>
+        </form>
+
+        <hr>
+
+        <?php if (empty($pagos)): ?>
+            <div class="alert alert-info">No hay pagos registrados.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>Método</th>
+                            <th>Referencia</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pagos as $pago): ?>
+                            <tr>
+                                <td><?= date('d/m/Y H:i', strtotime($pago['fecha_pago'])) ?></td>
+                                <td>$<?= number_format($pago['monto'], 2, ',', '.') ?></td>
+                                <td><?= htmlspecialchars($pago['metodo']) ?></td>
+                                <td><?= htmlspecialchars($pago['referencia'] ?? '-') ?></td>
+                                <td>
+                                    <a href="pedido_pago_recibo.php?pago_id=<?= $pago['id'] ?>" class="btn btn-sm btn-outline-secondary" target="_blank">Recibo</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
 
 <div class="card mb-4">
     <div class="card-header bg-warning text-dark">
