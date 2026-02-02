@@ -52,9 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
-            
-            header("Location: productos.php");
-            exit;
+
+            $redirect_url = 'productos.php';
         } catch (Exception $e) {
             $error = "Error: " . $e->getMessage();
         }
@@ -66,6 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <?php if (isset($error)): ?>
     <div class="alert alert-danger"><?= $error ?></div>
+<?php endif; ?>
+<?php if (!empty($mensaje)): ?>
+    <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+<?php endif; ?>
+<?php if (!empty($redirect_url)): ?>
+    <script>window.location.href = "<?= $redirect_url ?>";</script>
 <?php endif; ?>
 
 <div class="card">

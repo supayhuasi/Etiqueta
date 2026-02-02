@@ -301,6 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endif; ?>
 
                     <!-- Atributos personalizados -->
+                    <?php $attr_index = 0; ?>
                     <?php foreach ($atributos as $attr): 
                         // Si es select, obtener opciones con imágenes
                         $opciones_attr = [];
@@ -323,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                     ?>
-                        <div class="mb-3">
+                        <div class="mb-3 attr-step" data-step="<?= $attr_index ?>">
                             <label for="attr_<?= $attr['id'] ?>" class="form-label">
                                 <?= htmlspecialchars($attr['nombre']) ?>
                                 <?php if ($attr['es_obligatorio']): ?>
@@ -374,7 +375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
+                                                            <img src="../uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>
@@ -419,7 +420,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php endif; ?>
                             <?php endif; ?>
                         </div>
+                        <?php $attr_index++; ?>
                     <?php endforeach; ?>
+
+                    <?php if (!empty($atributos)): ?>
+                        <div class="d-flex justify-content-between align-items-center my-3" id="attr_wizard_controls">
+                            <button type="button" class="btn btn-outline-secondary" id="attr_prev">← Anterior</button>
+                            <small class="text-muted" id="attr_progress">Atributo 1 de <?= count($atributos) ?></small>
+                            <button type="button" class="btn btn-primary" id="attr_next">Siguiente →</button>
+                        </div>
+                    <?php endif; ?>
 
                     <div class="mb-4">
                         <label for="cantidad" class="form-label fw-bold">Cantidad</label>
@@ -622,6 +632,79 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    const steps = Array.from(document.querySelectorAll('.attr-step'));
+    if (steps.length > 0) {
+        let currentStep = 0;
+        const prevBtn = document.getElementById('attr_prev');
+        const nextBtn = document.getElementById('attr_next');
+        const progress = document.getElementById('attr_progress');
+
+        const setRequired = (stepEl, enabled) => {
+            const fields = stepEl.querySelectorAll('input, select, textarea');
+            fields.forEach(f => {
+                if (f.hasAttribute('data-required')) {
+                    enabled ? f.setAttribute('required', 'required') : f.removeAttribute('required');
+                }
+            });
+        };
+
+        steps.forEach(step => {
+            step.querySelectorAll('[required]').forEach(f => f.setAttribute('data-required', '1'));
+        });
+
+        const showStep = (idx) => {
+            steps.forEach((s, i) => {
+                s.style.display = i === idx ? 'block' : 'none';
+                setRequired(s, i === idx);
+            });
+            if (progress) {
+                progress.textContent = `Atributo ${idx + 1} de ${steps.length}`;
+            }
+            if (prevBtn) prevBtn.disabled = idx === 0;
+            if (nextBtn) nextBtn.textContent = idx === steps.length - 1 ? 'Finalizar atributos' : 'Siguiente →';
+        };
+
+        const validateStep = (stepEl) => {
+            const requiredFields = stepEl.querySelectorAll('[required]');
+            for (const field of requiredFields) {
+                if (field.type === 'radio') {
+                    const group = stepEl.querySelectorAll(`input[name="${field.name}"]`);
+                    const checked = Array.from(group).some(r => r.checked);
+                    if (!checked) return false;
+                } else if (!field.value) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                if (currentStep > 0) {
+                    currentStep--;
+                    showStep(currentStep);
+                }
+            });
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                if (!validateStep(steps[currentStep])) {
+                    alert('Completá el atributo antes de continuar.');
+                    return;
+                }
+                if (currentStep < steps.length - 1) {
+                    currentStep++;
+                    showStep(currentStep);
+                } else {
+                    showStep(currentStep);
+                }
+            });
+        }
+
+        showStep(currentStep);
+    }
 });
 </script>
 
