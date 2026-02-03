@@ -1,94 +1,148 @@
 <?php
 require 'includes/header.php';
 
+$errores = [];
+
+function tabla_existe($pdo, $tabla) {
+    $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+    $stmt->execute([$tabla]);
+    return $stmt->rowCount() > 0;
+}
+
 // Producto más vendido
-$stmt = $pdo->query("
-    SELECT 
-        p.nombre,
-        p.imagen,
-        SUM(pi.cantidad) as total_vendido,
-        SUM(pi.subtotal) as monto_total,
-        COUNT(DISTINCT pi.pedido_id) as num_pedidos
-    FROM ecommerce_pedido_items pi
-    JOIN ecommerce_productos p ON pi.producto_id = p.id
-    JOIN ecommerce_pedidos ped ON pi.pedido_id = ped.id
-    WHERE ped.estado NOT IN ('cancelado')
-    GROUP BY pi.producto_id, p.nombre, p.imagen
-    ORDER BY total_vendido DESC
-    LIMIT 5
-");
-$productos_mas_vendidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$productos_mas_vendidos = [];
+try {
+    if (tabla_existe($pdo, 'ecommerce_pedido_items') && tabla_existe($pdo, 'ecommerce_productos') && tabla_existe($pdo, 'ecommerce_pedidos')) {
+        $stmt = $pdo->query("
+            SELECT 
+                p.nombre,
+                p.imagen,
+                SUM(pi.cantidad) as total_vendido,
+                SUM(pi.subtotal) as monto_total,
+                COUNT(DISTINCT pi.pedido_id) as num_pedidos
+            FROM ecommerce_pedido_items pi
+            JOIN ecommerce_productos p ON pi.producto_id = p.id
+            JOIN ecommerce_pedidos ped ON pi.pedido_id = ped.id
+            WHERE ped.estado NOT IN ('cancelado')
+            GROUP BY pi.producto_id, p.nombre, p.imagen
+            ORDER BY total_vendido DESC
+            LIMIT 5
+        ");
+        $productos_mas_vendidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $errores[] = "Productos más vendidos: " . $e->getMessage();
+}
 
 // Vendedor con más ventas (por cotizaciones convertidas)
-$stmt = $pdo->query("
-    SELECT 
-        u.nombre as vendedor,
-        COUNT(c.id) as total_cotizaciones,
-        SUM(CASE WHEN c.estado = 'convertida' THEN 1 ELSE 0 END) as cotizaciones_convertidas,
-        SUM(CASE WHEN c.estado = 'convertida' THEN c.total ELSE 0 END) as monto_convertido,
-        SUM(c.total) as monto_total_cotizaciones
-    FROM ecommerce_cotizaciones c
-    JOIN usuarios u ON c.creado_por = u.id
-    GROUP BY c.creado_por, u.nombre
-    ORDER BY cotizaciones_convertidas DESC, monto_convertido DESC
-    LIMIT 5
-");
-$vendedores = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$vendedores = [];
+try {
+    if (tabla_existe($pdo, 'ecommerce_cotizaciones') && tabla_existe($pdo, 'usuarios')) {
+        $stmt = $pdo->query("
+            SELECT 
+                u.nombre as vendedor,
+                COUNT(c.id) as total_cotizaciones,
+                SUM(CASE WHEN c.estado = 'convertida' THEN 1 ELSE 0 END) as cotizaciones_convertidas,
+                SUM(CASE WHEN c.estado = 'convertida' THEN c.total ELSE 0 END) as monto_convertido,
+                SUM(c.total) as monto_total_cotizaciones
+            FROM ecommerce_cotizaciones c
+            JOIN usuarios u ON c.creado_por = u.id
+            GROUP BY c.creado_por, u.nombre
+            ORDER BY cotizaciones_convertidas DESC, monto_convertido DESC
+            LIMIT 5
+        ");
+        $vendedores = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $errores[] = "Mejores vendedores: " . $e->getMessage();
+}
 
 // Cliente que más compró
-$stmt = $pdo->query("
-    SELECT 
-        c.nombre,
-        c.email,
-        COUNT(p.id) as total_pedidos,
-        SUM(p.total) as monto_total,
-        MAX(p.fecha_creacion) as ultima_compra
-    FROM ecommerce_pedidos p
-    JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    WHERE p.estado NOT IN ('cancelado')
-    GROUP BY p.cliente_id, c.nombre, c.email
-    ORDER BY monto_total DESC
-    LIMIT 5
-");
-$mejores_clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$mejores_clientes = [];
+try {
+    if (tabla_existe($pdo, 'ecommerce_pedidos') && tabla_existe($pdo, 'ecommerce_clientes')) {
+        $stmt = $pdo->query("
+            SELECT 
+                c.nombre,
+                c.email,
+                COUNT(p.id) as total_pedidos,
+                SUM(p.total) as monto_total,
+                MAX(p.fecha_creacion) as ultima_compra
+            FROM ecommerce_pedidos p
+            JOIN ecommerce_clientes c ON p.cliente_id = c.id
+            WHERE p.estado NOT IN ('cancelado')
+            GROUP BY p.cliente_id, c.nombre, c.email
+            ORDER BY monto_total DESC
+            LIMIT 5
+        ");
+        $mejores_clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $errores[] = "Mejores clientes: " . $e->getMessage();
+}
 
 // Estadísticas generales
-$stmt = $pdo->query("
-    SELECT 
-        COUNT(*) as total_pedidos,
-        SUM(total) as monto_total_pedidos,
-        AVG(total) as promedio_pedido
-    FROM ecommerce_pedidos
-    WHERE estado NOT IN ('cancelado')
-");
-$stats_pedidos = $stmt->fetch(PDO::FETCH_ASSOC);
+$stats_pedidos = ['total_pedidos' => 0, 'monto_total_pedidos' => 0, 'promedio_pedido' => 0];
+$stats_cotizaciones = ['total_cotizaciones' => 0, 'cotizaciones_convertidas' => 0, 'monto_total_cotizaciones' => 0];
+$stats_mes = ['pedidos_mes' => 0, 'monto_mes' => 0];
 
-$stmt = $pdo->query("
-    SELECT 
-        COUNT(*) as total_cotizaciones,
-        SUM(CASE WHEN estado = 'convertida' THEN 1 ELSE 0 END) as cotizaciones_convertidas,
-        SUM(total) as monto_total_cotizaciones
-    FROM ecommerce_cotizaciones
-");
-$stats_cotizaciones = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    if (tabla_existe($pdo, 'ecommerce_pedidos')) {
+        $stmt = $pdo->query("
+            SELECT 
+                COUNT(*) as total_pedidos,
+                SUM(total) as monto_total_pedidos,
+                AVG(total) as promedio_pedido
+            FROM ecommerce_pedidos
+            WHERE estado NOT IN ('cancelado')
+        ");
+        $stats_pedidos = $stmt->fetch(PDO::FETCH_ASSOC) ?: $stats_pedidos;
 
-// Ventas del mes actual
-$stmt = $pdo->query("
-    SELECT 
-        COUNT(*) as pedidos_mes,
-        SUM(total) as monto_mes
-    FROM ecommerce_pedidos
-    WHERE MONTH(fecha_creacion) = MONTH(CURRENT_DATE())
-    AND YEAR(fecha_creacion) = YEAR(CURRENT_DATE())
-    AND estado NOT IN ('cancelado')
-");
-$stats_mes = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->query("
+            SELECT 
+                COUNT(*) as pedidos_mes,
+                SUM(total) as monto_mes
+            FROM ecommerce_pedidos
+            WHERE MONTH(fecha_creacion) = MONTH(CURRENT_DATE())
+            AND YEAR(fecha_creacion) = YEAR(CURRENT_DATE())
+            AND estado NOT IN ('cancelado')
+        ");
+        $stats_mes = $stmt->fetch(PDO::FETCH_ASSOC) ?: $stats_mes;
+    }
+} catch (Throwable $e) {
+    $errores[] = "Estadísticas de pedidos: " . $e->getMessage();
+}
+
+try {
+    if (tabla_existe($pdo, 'ecommerce_cotizaciones')) {
+        $stmt = $pdo->query("
+            SELECT 
+                COUNT(*) as total_cotizaciones,
+                SUM(CASE WHEN estado = 'convertida' THEN 1 ELSE 0 END) as cotizaciones_convertidas,
+                SUM(total) as monto_total_cotizaciones
+            FROM ecommerce_cotizaciones
+        ");
+        $stats_cotizaciones = $stmt->fetch(PDO::FETCH_ASSOC) ?: $stats_cotizaciones;
+    }
+} catch (Throwable $e) {
+    $errores[] = "Estadísticas de cotizaciones: " . $e->getMessage();
+}
 ?>
 
 <div class="row mb-4">
     <div class="col-md-12">
         <h1>📊 Tablero de Control</h1>
         <p class="text-muted">Estadísticas y métricas de ventas</p>
+        <?php if (!empty($errores)): ?>
+            <div class="alert alert-warning mt-3">
+                <strong>Algunas métricas no pudieron cargarse:</strong>
+                <ul class="mb-0">
+                    <?php foreach ($errores as $err): ?>
+                        <li><?= htmlspecialchars($err) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
