@@ -90,7 +90,7 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <div class="col-md-6">
                 <div class="ratio ratio-16x9">
-                    <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" allowfullscreen="" loading="lazy"></iframe>
+                    <iframe src="https://www.youtube.com/embed/iohBEiZP2qY" allowfullscreen="" loading="lazy"></iframe>
                 </div>
             </div>
         </div>
