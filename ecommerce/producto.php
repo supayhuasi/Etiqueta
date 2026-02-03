@@ -363,6 +363,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php elseif ($attr['tipo'] === 'select'): ?>
                                 <?php if (!empty($opciones_attr)): ?>
                                     <!-- Selector con imágenes -->
+                                    <style>
+                                        .attr-option {
+                                            border: 2px solid #ddd;
+                                            border-radius: 6px;
+                                            padding: 4px;
+                                            transition: all 0.2s ease;
+                                            background: #fff;
+                                        }
+                                        .attr-option.selected {
+                                            border-color: #0d6efd;
+                                            box-shadow: 0 0 0 2px rgba(13,110,253,.2);
+                                            background: #e7f1ff;
+                                        }
+                                    </style>
                                     <div class="d-flex gap-2 flex-wrap mb-3">
                                         <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
                                                <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
@@ -373,8 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                            class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>"
                                                            onchange="actualizarPrecio()">
-                                                    <div class="border-2 rounded p-1 transition-all position-relative" id="option_<?= $opcion['id'] ?>" 
-                                                         style="border: 2px solid #ddd; cursor: pointer; transition: all 0.3s ease;">
+                                                    <div class="attr-option position-relative" id="option_<?= $opcion['id'] ?>" style="cursor: pointer;">
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
@@ -403,14 +416,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 document.querySelectorAll('input[name="attr_<?= $attr['id'] ?>"]').forEach(r => {
                                                     const option = r.closest('label').querySelector('div[id^="option_"]');
                                                     if (option) {
-                                                        option.style.borderColor = '#ddd';
-                                                        option.style.backgroundColor = 'transparent';
+                                                        option.classList.remove('selected');
                                                     }
                                                 });
                                                 const selectedOption = this.closest('label').querySelector('div[id^="option_"]');
                                                 if (selectedOption) {
-                                                    selectedOption.style.borderColor = '#007bff';
-                                                    selectedOption.style.backgroundColor = '#e7f1ff';
+                                                    selectedOption.classList.add('selected');
                                                 }
                                                 // Actualizar el hidden input
                                                 document.getElementById('attr_<?= $attr['id'] ?>').value = this.value;

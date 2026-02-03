@@ -169,6 +169,21 @@ foreach ($lista_cat_rows as $row) {
 <?php endif; ?>
 
 <form method="POST" id="formCotizacion">
+    <style>
+        .attr-option-item {
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #fff;
+        }
+        .attr-option-item.selected {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 2px rgba(13,110,253,.2);
+            background: #e7f1ff;
+        }
+    </style>
     <div class="row">
         <!-- Información del Cliente -->
         <div class="col-md-6">
@@ -563,8 +578,8 @@ function cargarAtributosProducto(productoId, index) {
                                         const colorBox = o.color ? `<span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:${o.color};border-radius:3px;"></span>` : '';
                                         const imgTag = o.imagen ? `<img src="../../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
                                         return `
-                                            <label class="border rounded p-2 d-flex align-items-center gap-2" style="cursor:pointer;">
-                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value)">
+                                            <label class="attr-option-item d-flex align-items-center gap-2" data-attr-id="${attr.id}" data-index="${index}">
+                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
                                                 ${imgTag || colorBox}
                                                 <small>${o.valor}</small>
                                             </label>
@@ -717,6 +732,20 @@ function calcularTotales() {
     
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('total').textContent = '$' + total.toFixed(2);
+}
+
+function marcarOpcionAtributo(radio) {
+    const label = radio.closest('label');
+    if (!label) return;
+    const attrId = label.getAttribute('data-attr-id');
+    const index = label.getAttribute('data-index');
+    if (!attrId || !index) return;
+
+    document.querySelectorAll(`label.attr-option-item[data-attr-id="${attrId}"][data-index="${index}"]`).forEach(l => {
+        l.classList.remove('selected');
+    });
+
+    label.classList.add('selected');
 }
 
 function aplicarListaPrecios() {
