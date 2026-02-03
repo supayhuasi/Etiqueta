@@ -2,24 +2,39 @@
 require '../config.php';
 
 try {
-    // Agregar columnas a ecommerce_materiales
-    $pdo->exec("
-        ALTER TABLE ecommerce_materiales 
-        ADD COLUMN IF NOT EXISTS tipo_origen ENUM('fabricacion_propia', 'compra') DEFAULT 'compra',
-        ADD COLUMN IF NOT EXISTS stock_minimo DECIMAL(10,2) DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS proveedor_habitual_id INT NULL,
-        ADD COLUMN IF NOT EXISTS unidad_medida VARCHAR(20) DEFAULT 'unidad'
-    ");
-    echo "✓ Columnas agregadas a ecommerce_materiales<br>";
+    // Agregar columnas a ecommerce_materiales (compatible con MySQL 5.7+)
+    $columnsMateriales = $pdo->query("SHOW COLUMNS FROM ecommerce_materiales")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('tipo_origen', $columnsMateriales, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN tipo_origen ENUM('fabricacion_propia', 'compra') DEFAULT 'compra'");
+        echo "✓ Columna tipo_origen agregada en ecommerce_materiales<br>";
+    }
+    if (!in_array('stock_minimo', $columnsMateriales, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN stock_minimo DECIMAL(10,2) DEFAULT 0");
+        echo "✓ Columna stock_minimo agregada en ecommerce_materiales<br>";
+    }
+    if (!in_array('proveedor_habitual_id', $columnsMateriales, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN proveedor_habitual_id INT NULL");
+        echo "✓ Columna proveedor_habitual_id agregada en ecommerce_materiales<br>";
+    }
+    if (!in_array('unidad_medida', $columnsMateriales, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN unidad_medida VARCHAR(20) DEFAULT 'unidad'");
+        echo "✓ Columna unidad_medida agregada en ecommerce_materiales<br>";
+    }
 
-    // Agregar columnas a ecommerce_productos
-    $pdo->exec("
-        ALTER TABLE ecommerce_productos 
-        ADD COLUMN IF NOT EXISTS tipo_origen ENUM('fabricacion_propia', 'compra') DEFAULT 'fabricacion_propia',
-        ADD COLUMN IF NOT EXISTS stock_minimo DECIMAL(10,2) DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS proveedor_habitual_id INT NULL
-    ");
-    echo "✓ Columnas agregadas a ecommerce_productos<br>";
+    // Agregar columnas a ecommerce_productos (compatible con MySQL 5.7+)
+    $columnsProductos = $pdo->query("SHOW COLUMNS FROM ecommerce_productos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('tipo_origen', $columnsProductos, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN tipo_origen ENUM('fabricacion_propia', 'compra') DEFAULT 'fabricacion_propia'");
+        echo "✓ Columna tipo_origen agregada en ecommerce_productos<br>";
+    }
+    if (!in_array('stock_minimo', $columnsProductos, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN stock_minimo DECIMAL(10,2) DEFAULT 0");
+        echo "✓ Columna stock_minimo agregada en ecommerce_productos<br>";
+    }
+    if (!in_array('proveedor_habitual_id', $columnsProductos, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_productos ADD COLUMN proveedor_habitual_id INT NULL");
+        echo "✓ Columna proveedor_habitual_id agregada en ecommerce_productos<br>";
+    }
 
     // Tabla de alertas de inventario
     $pdo->exec("
