@@ -80,7 +80,8 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
         <!-- Sidebar -->
         <div class="col-md-2 sidebar">
             <h5 class="text-white mb-4">📊 Menú</h5>
-            <a href="index.php" class="<?= basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : '' ?>">📈 Dashboard</a>
+            <a href="index.php" class="<?= basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : '' ?>">📈 Inicio</a>
+            <a href="dashboard.php" class="<?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">📊 Tablero de Control</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">CATÁLOGO</p>
             <a href="categorias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'categorias.php' ? 'active' : '' ?>">📁 Categorías</a>

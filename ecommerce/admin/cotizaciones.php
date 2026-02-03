@@ -4,13 +4,21 @@ require 'includes/header.php';
 // Filtros
 $estado_filtro = $_GET['estado'] ?? '';
 $buscar = $_GET['buscar'] ?? '';
+$ver_todas = isset($_GET['ver_todas']) ? true : false;
+$usuario_id = $_SESSION['user']['id'] ?? 0;
 
 // Construir query
 $where = ["1=1"];
 $params = [];
 
+// Filtrar por usuario logueado por defecto
+if (!$ver_todas && $usuario_id > 0) {
+    $where[] = "c.creado_por = ?";
+    $params[] = $usuario_id;
+}
+
 if ($estado_filtro) {
-    $where[] = "estado = ?";
+    $where[] = "c.estado = ?";
     $params[] = $estado_filtro;
 }
 
@@ -24,18 +32,21 @@ if ($buscar) {
 }
 
 $sql = "
-    SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono
+    SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono,
+           u.nombre AS vendedor_nombre
     FROM ecommerce_cotizaciones c
     LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id
+    LEFT JOIN usuarios u ON c.creado_por = u.id
     WHERE " . implode(" AND ", $where) . "
-    ORDER BY COALESCE(cc.nombre, c.nombre_cliente), c.fecha_creacion DESC
+    ORDER BY c.fecha_creacion DESC
 ";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Estadísticas
+// Estadísticas (con filtro de usuario)
+$stats_where = $ver_todas ? "1=1" : "creado_por = " . intval($usuario_id);
 $stmt = $pdo->query("
     SELECT 
         COUNT(*) as total,
@@ -44,6 +55,7 @@ $stmt = $pdo->query("
         SUM(CASE WHEN estado = 'aceptada' THEN 1 ELSE 0 END) as aceptadas,
         SUM(CASE WHEN estado = 'convertida' THEN 1 ELSE 0 END) as convertidas
     FROM ecommerce_cotizaciones
+    WHERE {$stats_where}
 ");
 $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 ?>
@@ -106,11 +118,11 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 <div class="card mb-4">
     <div class="card-body">
         <form method="GET" class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">Buscar</label>
                 <input type="text" name="buscar" class="form-control" value="<?= htmlspecialchars($buscar) ?>" placeholder="Número, cliente, email...">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Estado</label>
                 <select name="estado" class="form-select">
                     <option value="">Todos</option>
@@ -121,11 +133,23 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                     <option value="convertida" <?= $estado_filtro === 'convertida' ? 'selected' : '' ?>>Convertida a Pedido</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label class="form-label">Mostrar</label>
+                <select name="ver_todas" class="form-select" onchange="this.form.submit()">
+                    <option value="" <?= !$ver_todas ? 'selected' : '' ?>>Mis cotizaciones</option>
+                    <option value="1" <?= $ver_todas ? 'selected' : '' ?>>Todas</option>
+                </select>
+            </div>
             <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary me-2">🔍 Filtrar</button>
                 <a href="cotizaciones.php" class="btn btn-secondary">🔄 Limpiar</a>
             </div>
         </form>
+        <?php if (!$ver_todas): ?>
+            <div class="alert alert-info mt-3 mb-0">
+                📋 Mostrando solo tus cotizaciones. <a href="?ver_todas=1">Ver todas las cotizaciones</a>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -144,6 +168,9 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                             <th>Número</th>
                             <th>Cliente</th>
                             <th>Contacto</th>
+                            <?php if ($ver_todas): ?>
+                                <th>Vendedor</th>
+                            <?php endif; ?>
                             <th>Fecha</th>
                             <th>Total</th>
                             <th>Estado</th>
@@ -172,6 +199,11 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                         📞 <?= htmlspecialchars($cot['cliente_telefono'] ?? $cot['telefono']) ?>
                                     <?php endif; ?>
                                 </td>
+                                <?php if ($ver_todas): ?>
+                                    <td>
+                                        <small class="text-muted">👤 <?= htmlspecialchars($cot['vendedor_nombre'] ?? 'N/A') ?></small>
+                                    </td>
+                                <?php endif; ?>
                                 <td>
                                     <?= date('d/m/Y', strtotime($cot['fecha_creacion'])) ?><br>
                                     <small class="text-muted"><?= date('H:i', strtotime($cot['fecha_creacion'])) ?></small>
