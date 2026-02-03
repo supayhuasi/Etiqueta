@@ -23,7 +23,14 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 $image_path = 'uploads/';
 
 // Construir query de productos
-$query = "SELECT * FROM ecommerce_productos WHERE activo = 1 AND mostrar_ecommerce = 1";
+$query = "SELECT p.*, pi.imagen AS imagen
+FROM ecommerce_productos p
+LEFT JOIN (
+    SELECT producto_id, imagen
+    FROM ecommerce_producto_imagenes
+    WHERE es_principal = 1
+) pi ON pi.producto_id = p.id
+WHERE p.activo = 1 AND p.mostrar_ecommerce = 1";
 $params = [];
 
 if ($categoria_filtro !== 'todos') {

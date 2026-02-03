@@ -423,7 +423,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="<?= $image_path . 'atributos/' . htmlspecialchars($opcion['imagen']) ?>" 
+                                                            <img src="<?= $image_path . '/atributos/' . htmlspecialchars($opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>
