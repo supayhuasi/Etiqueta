@@ -785,6 +785,7 @@ document.addEventListener('change', function(e) {
     }
 });
 
+
 function aplicarListaPrecios() {
     calcularTotales();
 }

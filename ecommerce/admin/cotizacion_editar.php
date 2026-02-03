@@ -773,6 +773,7 @@ document.addEventListener('change', function(e) {
     }
 });
 
+
 // Cargar items existentes al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
     if (itemsExistentes.length > 0) {
