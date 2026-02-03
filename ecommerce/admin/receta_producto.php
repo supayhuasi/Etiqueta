@@ -23,6 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $factores = $_POST['factor'] ?? [];
         $mermas = $_POST['merma_pct'] ?? [];
         $notas = $_POST['notas'] ?? [];
+        $con_condicion = $_POST['con_condicion'] ?? [];
+        $condicion_tipo = $_POST['condicion_tipo'] ?? [];
+        $condicion_operador = $_POST['condicion_operador'] ?? [];
+        $condicion_valor = $_POST['condicion_valor'] ?? [];
+        $condicion_atributo = $_POST['condicion_atributo_id'] ?? [];
 
         foreach ($material_ids as $idx => $material_id) {
             $material_id = intval($material_id);
@@ -34,13 +39,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $factor = floatval($factores[$idx] ?? 0);
             $merma = floatval($mermas[$idx] ?? 0);
             $nota = trim($notas[$idx] ?? '');
+            
+            // Procesar condición
+            $tiene_condicion = isset($con_condicion[$idx]) ? 1 : 0;
+            $cond_tipo = null;
+            $cond_operador = null;
+            $cond_valor = null;
+            $cond_atributo_id = null;
+            
+            if ($tiene_condicion) {
+                $cond_tipo = $condicion_tipo[$idx] ?? null;
+                $cond_operador = $condicion_operador[$idx] ?? null;
+                $cond_valor = !empty($condicion_valor[$idx]) ? trim($condicion_valor[$idx]) : null;
+                $cond_atributo_id = !empty($condicion_atributo[$idx]) ? intval($condicion_atributo[$idx]) : null;
+            }
 
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_producto_recetas_productos (producto_id, material_producto_id, tipo_calculo, factor, merma_pct, notas)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE tipo_calculo = VALUES(tipo_calculo), factor = VALUES(factor), merma_pct = VALUES(merma_pct), notas = VALUES(notas)
+                INSERT INTO ecommerce_producto_recetas_productos 
+                (producto_id, material_producto_id, tipo_calculo, factor, merma_pct, notas, con_condicion, condicion_tipo, condicion_operador, condicion_valor, condicion_atributo_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    tipo_calculo = VALUES(tipo_calculo), 
+                    factor = VALUES(factor), 
+                    merma_pct = VALUES(merma_pct), 
+                    notas = VALUES(notas),
+                    con_condicion = VALUES(con_condicion),
+                    condicion_tipo = VALUES(condicion_tipo),
+                    condicion_operador = VALUES(condicion_operador),
+                    condicion_valor = VALUES(condicion_valor),
+                    condicion_atributo_id = VALUES(condicion_atributo_id)
             ");
-            $stmt->execute([$producto_id, $material_id, $tipo, $factor, $merma, $nota ?: null]);
+            $stmt->execute([$producto_id, $material_id, $tipo, $factor, $merma, $nota ?: null, $tiene_condicion, $cond_tipo, $cond_operador, $cond_valor, $cond_atributo_id]);
         }
 
         // Eliminar materiales no enviados
@@ -68,6 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_productos WHERE activo = 1 AND es_material = 1 ORDER BY nombre");
 $materiales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Obtener atributos del producto (para usar en condiciones)
+$stmt = $pdo->prepare("
+    SELECT id, nombre, tipo FROM ecommerce_producto_atributos 
+    WHERE producto_id = ? 
+    ORDER BY nombre
+");
+$stmt->execute([$producto_id]);
+$atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
     SELECT r.*, m.nombre
@@ -115,10 +153,17 @@ foreach ($receta as $r) {
                                 <th>Factor</th>
                                 <th>Merma %</th>
                                 <th>Notas</th>
+                                <th colspan="3">Condición (Opcional)</th>
+                            </tr>
+                            <tr style="background-color: #f8f9fa; font-size: 0.85em;">
+                                <th colspan="6"></th>
+                                <th>Tipo</th>
+                                <th>Operador</th>
+                                <th>Valor</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($materiales as $m):
+                            <?php foreach ($materiales as $idx => $m):
                                 $r = $receta_map[$m['id']] ?? null;
                             ?>
                                 <tr>
@@ -140,6 +185,41 @@ foreach ($receta as $r) {
                                     <td><input type="number" step="0.0001" class="form-control form-control-sm" name="factor[]" value="<?= htmlspecialchars($r['factor'] ?? 0) ?>"></td>
                                     <td><input type="number" step="0.01" class="form-control form-control-sm" name="merma_pct[]" value="<?= htmlspecialchars($r['merma_pct'] ?? 0) ?>"></td>
                                     <td><input type="text" class="form-control form-control-sm" name="notas[]" value="<?= htmlspecialchars($r['notas'] ?? '') ?>"></td>
+                                    <td>
+                                        <input type="checkbox" name="con_condicion[]" value="1" <?= ($r['con_condicion'] ?? 0) ? 'checked' : '' ?> class="condicion-toggle" data-idx="<?= $idx ?>">
+                                        <span class="small text-muted">Usar</span>
+                                    </td>
+                                    <td>
+                                        <select name="condicion_tipo[]" class="form-select form-select-sm condicion-select" data-idx="<?= $idx ?>" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                            <option value="">--</option>
+                                            <option value="ancho" <?= ($r['condicion_tipo'] ?? '') === 'ancho' ? 'selected' : '' ?>>Ancho (cm)</option>
+                                            <option value="alto" <?= ($r['condicion_tipo'] ?? '') === 'alto' ? 'selected' : '' ?>>Alto (cm)</option>
+                                            <option value="area" <?= ($r['condicion_tipo'] ?? '') === 'area' ? 'selected' : '' ?>>Área (m²)</option>
+                                            <?php if (!empty($atributos)): ?>
+                                                <optgroup label="Atributos">
+                                                    <?php foreach ($atributos as $attr): ?>
+                                                        <option value="atributo_<?= $attr['id'] ?>" <?= ($r['condicion_tipo'] ?? '') === 'atributo_' . $attr['id'] ? 'selected' : '' ?>>
+                                                            <?= htmlspecialchars($attr['nombre']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </optgroup>
+                                            <?php endif; ?>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="condicion_operador[]" class="form-select form-select-sm" data-idx="<?= $idx ?>" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                            <option value="">--</option>
+                                            <option value="igual" <?= ($r['condicion_operador'] ?? '') === 'igual' ? 'selected' : '' ?>>=</option>
+                                            <option value="mayor" <?= ($r['condicion_operador'] ?? '') === 'mayor' ? 'selected' : '' ?>>&gt;</option>
+                                            <option value="mayor_igual" <?= ($r['condicion_operador'] ?? '') === 'mayor_igual' ? 'selected' : '' ?>>&gt;=</option>
+                                            <option value="menor" <?= ($r['condicion_operador'] ?? '') === 'menor' ? 'selected' : '' ?>>&lt;</option>
+                                            <option value="menor_igual" <?= ($r['condicion_operador'] ?? '') === 'menor_igual' ? 'selected' : '' ?>>&lt;=</option>
+                                            <option value="diferente" <?= ($r['condicion_operador'] ?? '') === 'diferente' ? 'selected' : '' ?>>&ne;</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="Valor" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -152,5 +232,25 @@ foreach ($receta as $r) {
         </div>
     </div>
 </form>
+
+<script>
+document.querySelectorAll('.condicion-toggle').forEach(toggle => {
+    toggle.addEventListener('change', function() {
+        const idx = this.dataset.idx;
+        const isChecked = this.checked;
+        
+        // Obtener todos los campos de condición para este índice
+        document.querySelectorAll(`select[data-idx="${idx}"]`).forEach(field => {
+            field.disabled = !isChecked;
+        });
+        
+        document.querySelectorAll(`input[type="text"][placeholder="Valor"][name="condicion_valor[]"]`).forEach((field, i) => {
+            if (i === parseInt(idx) || (document.querySelectorAll('input.condicion-toggle').length > parseInt(idx) && field.parentElement.closest('tr') === document.querySelectorAll('.condicion-toggle')[idx].closest('tr'))) {
+                field.disabled = !isChecked;
+            }
+        });
+    });
+});
+</script>
 
 <?php require 'includes/footer.php'; ?>

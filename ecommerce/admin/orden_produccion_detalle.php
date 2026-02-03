@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require '../includes/funciones_recetas.php';
 
 $pedido_id = $_GET['pedido_id'] ?? 0;
 
@@ -32,22 +33,29 @@ $stmt = $pdo->prepare("
 $stmt->execute([$pedido_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Recetas por producto
-$producto_ids = array_unique(array_filter(array_map(function($i){ return (int)$i['producto_id']; }, $items)));
+// Recetas por producto con evaluación de condiciones
 $recetas_map = [];
-if (!empty($producto_ids)) {
-    $placeholders = implode(',', array_fill(0, count($producto_ids), '?'));
-    $stmt = $pdo->prepare("
-        SELECT r.*, m.nombre AS material_nombre
-        FROM ecommerce_producto_recetas_productos r
-        JOIN ecommerce_productos m ON r.material_producto_id = m.id
-        WHERE r.producto_id IN ($placeholders)
-        ORDER BY m.nombre
-    ");
-    $stmt->execute($producto_ids);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as $r) {
-        $recetas_map[$r['producto_id']][] = $r;
+if (!empty($items)) {
+    foreach ($items as $item) {
+        $producto_id = (int)$item['producto_id'];
+        
+        // Obtener atributos del item
+        $atributos_seleccionados = [];
+        if (!empty($item['atributos'])) {
+            $atributos_seleccionados = json_decode($item['atributos'], true) ?: [];
+        }
+        
+        // Obtener receta con condiciones evaluadas
+        $ancho = floatval($item['ancho'] ?? 0);
+        $alto = floatval($item['alto'] ?? 0);
+        
+        $recetas_map[$producto_id] = obtener_receta_con_condiciones(
+            $pdo,
+            $producto_id,
+            $ancho,
+            $alto,
+            $atributos_seleccionados
+        );
     }
 }
 ?>

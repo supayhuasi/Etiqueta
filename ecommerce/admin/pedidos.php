@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require '../includes/funciones_recetas.php';
 
 $estado_filter = $_GET['estado'] ?? '';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
@@ -70,7 +71,7 @@ if ($_POST['accion'] === 'cambiar_estado') {
             if (empty($orden['materiales_descontados'])) {
                 // Descontar materiales según receta
                 $stmt = $pdo->prepare("
-                    SELECT pi.producto_id, pi.cantidad, pi.alto_cm, pi.ancho_cm, p.usa_receta
+                    SELECT pi.*, p.usa_receta
                     FROM ecommerce_pedido_items pi
                     JOIN ecommerce_productos p ON pi.producto_id = p.id
                     WHERE pi.pedido_id = ?
@@ -78,34 +79,37 @@ if ($_POST['accion'] === 'cambiar_estado') {
                 $stmt->execute([$pedido_id]);
                 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-                $producto_ids = array_unique(array_filter(array_map(function($i){ return (int)$i['producto_id']; }, $items)));
-                $recetas_map = [];
-                if (!empty($producto_ids)) {
-                    $placeholders = implode(',', array_fill(0, count($producto_ids), '?'));
-                    $stmt = $pdo->prepare("
-                        SELECT r.*, r.producto_id
-                        FROM ecommerce_producto_recetas_productos r
-                        WHERE r.producto_id IN ($placeholders)
-                    ");
-                    $stmt->execute($producto_ids);
-                    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                    foreach ($rows as $r) {
-                        $recetas_map[$r['producto_id']][] = $r;
-                    }
-                }
-
                 $materiales = [];
                 foreach ($items as $it) {
                     if (empty($it['usa_receta'])) {
                         continue;
                     }
-                    $recetas = $recetas_map[$it['producto_id']] ?? [];
+                    
+                    // Obtener atributos del item
+                    $atributos_seleccionados = [];
+                    if (!empty($it['atributos'])) {
+                        $atributos_seleccionados = json_decode($it['atributos'], true) ?: [];
+                    }
+                    
+                    $producto_id = (int)$it['producto_id'];
+                    $ancho_cm = floatval($it['ancho_cm'] ?? 0);
+                    $alto_cm = floatval($it['alto_cm'] ?? 0);
+                    
+                    // Obtener receta con condiciones evaluadas
+                    $recetas = obtener_receta_con_condiciones(
+                        $pdo,
+                        $producto_id,
+                        $ancho_cm,
+                        $alto_cm,
+                        $atributos_seleccionados
+                    );
+                    
                     if (empty($recetas)) {
                         continue;
                     }
 
-                    $alto_m = !empty($it['alto_cm']) ? ((float)$it['alto_cm'] / 100) : 0;
-                    $ancho_m = !empty($it['ancho_cm']) ? ((float)$it['ancho_cm'] / 100) : 0;
+                    $alto_m = $alto_cm / 100;
+                    $ancho_m = $ancho_cm / 100;
                     $area_m2 = $alto_m * $ancho_m;
 
                     foreach ($recetas as $r) {
