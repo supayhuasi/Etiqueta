@@ -46,7 +46,7 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="carousel-inner">
         <?php foreach ($slideshows as $key => $slide): ?>
             <div class="carousel-item <?= $key === 0 ? 'active' : '' ?>">
-                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 400px; object-fit: cover;">
+                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 600px; object-fit: cover;">
                 <div class="carousel-caption d-none d-md-block">
                     <h1><?= htmlspecialchars($slide['titulo']) ?></h1>
                     <p><?= htmlspecialchars($slide['descripcion']) ?></p>
