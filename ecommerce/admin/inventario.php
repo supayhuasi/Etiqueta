@@ -1,6 +1,26 @@
 <?php
 require 'includes/header.php';
 
+function get_columns($pdo, $tabla) {
+    $stmt = $pdo->query("SHOW COLUMNS FROM {$tabla}");
+    return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+}
+
+$cols_materiales = get_columns($pdo, 'ecommerce_materiales');
+$cols_productos = get_columns($pdo, 'ecommerce_productos');
+
+$faltantes = [];
+foreach (['stock','stock_minimo','tipo_origen','proveedor_habitual_id','unidad_medida'] as $col) {
+    if (!in_array($col, $cols_materiales, true)) {
+        $faltantes[] = "ecommerce_materiales.{$col}";
+    }
+}
+foreach (['stock','stock_minimo','tipo_origen','proveedor_habitual_id'] as $col) {
+    if (!in_array($col, $cols_productos, true)) {
+        $faltantes[] = "ecommerce_productos.{$col}";
+    }
+}
+
 // Filtros
 $tipo_filtro = $_GET['tipo'] ?? 'todos'; // todos, materiales, productos
 $alerta_filtro = $_GET['alerta'] ?? 'todos'; // todos, bajo_minimo, negativo, sin_alerta
@@ -16,7 +36,7 @@ if ($buscar) {
     $params_materiales[] = "%$buscar%";
 }
 
-if ($origen_filtro !== 'todos') {
+if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_materiales, true)) {
     $where_materiales[] = "tipo_origen = ?";
     $params_materiales[] = $origen_filtro;
 }
@@ -26,15 +46,15 @@ $sql_materiales = "
         'material' as tipo_item,
         id,
         nombre,
-        stock,
-        stock_minimo,
-        tipo_origen,
-        unidad_medida,
-        proveedor_habitual_id,
+        " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " as stock,
+        " . (in_array('stock_minimo', $cols_materiales, true) ? "stock_minimo" : "0") . " as stock_minimo,
+        " . (in_array('tipo_origen', $cols_materiales, true) ? "tipo_origen" : "'compra'") . " as tipo_origen,
+        " . (in_array('unidad_medida', $cols_materiales, true) ? "unidad_medida" : "'unidad'") . " as unidad_medida,
+        " . (in_array('proveedor_habitual_id', $cols_materiales, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
-            WHEN stock < 0 THEN 'negativo'
-            WHEN stock = 0 THEN 'sin_stock'
-            WHEN stock <= stock_minimo THEN 'bajo_minimo'
+            WHEN " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " < 0 THEN 'negativo'
+            WHEN " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " = 0 THEN 'sin_stock'
+            WHEN " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " <= " . (in_array('stock_minimo', $cols_materiales, true) ? "stock_minimo" : "0") . " THEN 'bajo_minimo'
             ELSE 'normal'
         END as estado_alerta
     FROM ecommerce_materiales
@@ -53,7 +73,7 @@ if ($buscar) {
     $params_productos[] = "%$buscar%";
 }
 
-if ($origen_filtro !== 'todos') {
+if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_productos, true)) {
     $where_productos[] = "tipo_origen = ?";
     $params_productos[] = $origen_filtro;
 }
@@ -63,15 +83,15 @@ $sql_productos = "
         'producto' as tipo_item,
         id,
         nombre,
-        stock,
-        stock_minimo,
-        tipo_origen,
+        " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " as stock,
+        " . (in_array('stock_minimo', $cols_productos, true) ? "stock_minimo" : "0") . " as stock_minimo,
+        " . (in_array('tipo_origen', $cols_productos, true) ? "tipo_origen" : "'fabricacion_propia'") . " as tipo_origen,
         'unidad' as unidad_medida,
-        proveedor_habitual_id,
+        " . (in_array('proveedor_habitual_id', $cols_productos, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
-            WHEN stock < 0 THEN 'negativo'
-            WHEN stock = 0 THEN 'sin_stock'
-            WHEN stock <= stock_minimo THEN 'bajo_minimo'
+            WHEN " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " < 0 THEN 'negativo'
+            WHEN " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " = 0 THEN 'sin_stock'
+            WHEN " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " <= " . (in_array('stock_minimo', $cols_productos, true) ? "stock_minimo" : "0") . " THEN 'bajo_minimo'
             ELSE 'normal'
         END as estado_alerta
     FROM ecommerce_productos
@@ -117,6 +137,14 @@ $items_negativo = count(array_filter($inventario, fn($i) => $i['estado_alerta'] 
 $items_bajo_minimo = count(array_filter($inventario, fn($i) => $i['estado_alerta'] === 'bajo_minimo'));
 $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta'] === 'sin_stock'));
 ?>
+
+<?php if (!empty($faltantes)): ?>
+    <div class="alert alert-warning">
+        ⚠️ Faltan columnas de inventario. Ejecutá el setup actualizado para completar el esquema.
+        <div class="mt-2"><strong>Faltantes:</strong> <?= htmlspecialchars(implode(', ', $faltantes)) ?></div>
+        <div class="mt-2">Archivo: ecommerce/setup_inventario_avanzado.php</div>
+    </div>
+<?php endif; ?>
 
 <div class="row mb-4">
     <div class="col-md-12">

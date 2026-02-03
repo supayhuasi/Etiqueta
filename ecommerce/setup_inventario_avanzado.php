@@ -8,6 +8,10 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN tipo_origen ENUM('fabricacion_propia', 'compra') DEFAULT 'compra'");
         echo "✓ Columna tipo_origen agregada en ecommerce_materiales<br>";
     }
+    if (!in_array('stock', $columnsMateriales, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN stock DECIMAL(10,2) DEFAULT 0");
+        echo "✓ Columna stock agregada en ecommerce_materiales<br>";
+    }
     if (!in_array('stock_minimo', $columnsMateriales, true)) {
         $pdo->exec("ALTER TABLE ecommerce_materiales ADD COLUMN stock_minimo DECIMAL(10,2) DEFAULT 0");
         echo "✓ Columna stock_minimo agregada en ecommerce_materiales<br>";
