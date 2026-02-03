@@ -568,31 +568,35 @@ function cargarAtributosProducto(productoId, index) {
                             }))
                             : (attr.valores ? attr.valores.split(',').map(v => ({ valor: v.trim() })) : []);
 
-                        if (opciones.some(o => o.color || o.imagen)) {
-                            const inputId = `attr_${attr.id}_${index}`;
-                            inputHTML = `
-                                <input type="hidden" id="${inputId}" name="${fieldName}[valor]" ${requerido}>
-                                <div class="d-flex gap-2 flex-wrap mb-2">
-                                    ${opciones.map((o, i) => {
-                                        const optId = `opt_${attr.id}_${index}_${i}`;
-                                        const colorBox = o.color ? `<span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:${o.color};border-radius:3px;"></span>` : '';
-                                        const imgTag = o.imagen ? `<img src="../../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">` : '';
-                                        return `
-                                            <label class="attr-option-item d-flex align-items-center gap-2" data-attr-id="${attr.id}" data-index="${index}">
-                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
-                                                ${imgTag || colorBox}
-                                                <small>${o.valor}</small>
+                        // Siempre mostrar como botones visuales (como en el ecommerce)
+                        const inputId = `attr_${attr.id}_${index}`;
+                        inputHTML = `
+                            <input type="hidden" id="${inputId}" name="${fieldName}[valor]" ${requerido}>
+                            <div class="d-flex gap-2 flex-wrap mb-2">
+                                ${opciones.map((o, i) => {
+                                    const optId = `opt_${attr.id}_${index}_${i}`;
+                                    const hasColor = o.color && /^#[0-9A-Fa-f]{6}$/.test(o.color);
+                                    const colorBox = hasColor ? `<div class="rounded" style="width: 80px; height: 80px; background-color: ${o.color}; border: 1px solid #ddd;"></div>` : '';
+                                    const imgTag = o.imagen ? `<img src="../../uploads/atributos/${o.imagen}" alt="${o.valor}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">` : '';
+                                    const placeholder = !hasColor && !o.imagen ? `<div class="d-flex align-items-center justify-content-center bg-light rounded" style="width: 80px; height: 80px;"><small class="text-center text-muted">${o.valor}</small></div>` : '';
+                                    const costoBadge = o.costo > 0 ? `<span class="badge bg-success position-absolute" style="top: -8px; right: -8px;">+$${parseFloat(o.costo).toFixed(2)}</span>` : '';
+                                    const label = `<small class="d-block text-center mt-1 text-muted">${o.valor}</small>`;
+                                    
+                                    return `
+                                        <div class="position-relative">
+                                            <label class="cursor-pointer position-relative" style="cursor: pointer;">
+                                                <input type="radio" name="${fieldName}[valor]" value="${o.valor}" class="d-none attr-radio" data-attr-id="${attr.id}" data-index="${index}" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
+                                                <div class="attr-option position-relative" id="${optId}" style="cursor: pointer; border: 2px solid #ddd; border-radius: 6px; padding: 4px; transition: all 0.2s ease; background: #fff;">
+                                                    ${colorBox || imgTag || placeholder}
+                                                    ${costoBadge}
+                                                    ${label}
+                                                </div>
                                             </label>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            `;
-                        } else {
-                            inputHTML = `<select class="form-select form-select-sm mb-2" name="${fieldName}[valor]" ${requerido} onchange="actualizarCostoAtributo(${index}, ${attr.id}, ${attr.costo_adicional}, this.options[this.selectedIndex].dataset.costo, this.value)">
-                                <option value="">-- Seleccionar --</option>
-                                ${opciones.map(o => `<option value="${o.valor}" data-costo="${o.costo || 0}">${o.valor}</option>`).join('')}
-                            </select>`;
-                        }
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        `;
                     }
                     
                     const attrHTML = `
@@ -735,40 +739,48 @@ function calcularTotales() {
 }
 
 function marcarOpcionAtributo(radio) {
+    if (!radio || !radio.name) return;
+    
+    // Encontrar el contenedor de opciones del atributo (el padre más cercano con flex wrap)
     const label = radio.closest('label');
     if (!label) return;
-    const attrId = label.getAttribute('data-attr-id');
-    const index = label.getAttribute('data-index');
-    if (!attrId || !index) return;
-
-    document.querySelectorAll(`label.attr-option-item[data-attr-id="${attrId}"][data-index="${index}"]`).forEach(l => {
-        l.classList.remove('selected');
+    
+    const divPadre = label.parentElement;
+    if (!divPadre || !divPadre.parentElement) return;
+    
+    const contenedorOpciones = divPadre.parentElement;
+    
+    // Desmarcar todas las opciones del mismo atributo
+    contenedorOpciones.querySelectorAll('input[type="radio"][name="' + radio.name + '"]').forEach(r => {
+        const l = r.closest('label');
+        if (l) {
+            const divOpcion = l.querySelector('.attr-option');
+            if (divOpcion) {
+                divOpcion.style.borderColor = '#ddd';
+                divOpcion.style.boxShadow = 'none';
+                divOpcion.style.background = '#fff';
+            }
+        }
     });
-
-    label.classList.add('selected');
+    
+    // Marcar la opción seleccionada
+    if (radio.checked) {
+        const divOpcion = label.querySelector('.attr-option');
+        if (divOpcion) {
+            divOpcion.style.borderColor = '#0d6efd';
+            divOpcion.style.boxShadow = '0 0 0 2px rgba(13,110,253,.2)';
+            divOpcion.style.background = '#e7f1ff';
+        }
+    }
 }
 
 function aplicarListaPrecios() {
     calcularTotales();
 }
 
-function marcarOpcionAtributo(radio) {
-    const label = radio.closest('label');
-    if (!label) return;
-    const attrId = label.getAttribute('data-attr-id');
-    const index = label.getAttribute('data-index');
-    if (!attrId || !index) return;
-
-    document.querySelectorAll(`label.attr-option-item[data-attr-id="${attrId}"][data-index="${index}"]`).forEach(l => {
-        l.classList.remove('selected');
-    });
-
-    label.classList.add('selected');
-}
-
 document.addEventListener('change', function(e) {
     const radio = e.target;
-    if (radio && radio.matches('label.attr-option-item input[type="radio"]')) {
+    if (radio && radio.matches('input[type="radio"].attr-radio')) {
         marcarOpcionAtributo(radio);
     }
 });
