@@ -752,6 +752,27 @@ function aplicarListaPrecios() {
     calcularTotales();
 }
 
+function marcarOpcionAtributo(radio) {
+    const label = radio.closest('label');
+    if (!label) return;
+    const attrId = label.getAttribute('data-attr-id');
+    const index = label.getAttribute('data-index');
+    if (!attrId || !index) return;
+
+    document.querySelectorAll(`label.attr-option-item[data-attr-id="${attrId}"][data-index="${index}"]`).forEach(l => {
+        l.classList.remove('selected');
+    });
+
+    label.classList.add('selected');
+}
+
+document.addEventListener('change', function(e) {
+    const radio = e.target;
+    if (radio && radio.matches('label.attr-option-item input[type="radio"]')) {
+        marcarOpcionAtributo(radio);
+    }
+});
+
 // Cargar items existentes al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
     if (itemsExistentes.length > 0) {

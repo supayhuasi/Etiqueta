@@ -778,6 +778,13 @@ function marcarOpcionAtributo(radio) {
     label.classList.add('selected');
 }
 
+document.addEventListener('change', function(e) {
+    const radio = e.target;
+    if (radio && radio.matches('label.attr-option-item input[type="radio"]')) {
+        marcarOpcionAtributo(radio);
+    }
+});
+
 function aplicarListaPrecios() {
     calcularTotales();
 }

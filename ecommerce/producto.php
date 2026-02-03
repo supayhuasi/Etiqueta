@@ -663,6 +663,18 @@ function actualizarPrecio() {
 
 // Actualizar precio cuando cambia un atributo con costo adicional
 document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.classList.contains('attr-radio')) {
+            const name = e.target.name;
+            document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+                const option = r.closest('label')?.querySelector('.attr-option');
+                if (option) option.classList.remove('selected');
+            });
+            const selectedOption = e.target.closest('label')?.querySelector('.attr-option');
+            if (selectedOption) selectedOption.classList.add('selected');
+        }
+    });
+
     atributosData.forEach(attr => {
         if (attr.costo_adicional > 0) {
             const valorInput = document.getElementById('attr_' + attr.id);
