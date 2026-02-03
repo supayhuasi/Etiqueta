@@ -207,6 +207,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="row">
         <!-- Galería de imágenes -->
         <div class="col-md-5">
+            <?php 
+            // Si no hay imágenes en la tabla dedicada, usar la imagen principal del producto
+            if (empty($imagenes) && !empty($producto['imagen'])) {
+                $imagenes = [['imagen' => $producto['imagen']]];
+            }
+            ?>
             <?php if (!empty($imagenes)): ?>
                 <div id="imageCarousel" class="carousel slide" data-bs-ride="carousel">
                     <div class="carousel-inner rounded overflow-hidden">
