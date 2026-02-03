@@ -4,12 +4,7 @@ require 'includes/header.php';
 require 'includes/precios_publico.php';
 
 // Determinar la ruta correcta para las imágenes
-$image_base = dirname($_SERVER['SCRIPT_NAME']);
-if (strpos($image_base, '/ecommerce') !== false) {
-    $image_path = '/../uploads/';
-} else {
-    $image_path = '/uploads/';
-}
+$image_path = '/uploads/';
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");

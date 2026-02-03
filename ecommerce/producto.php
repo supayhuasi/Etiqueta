@@ -6,12 +6,7 @@ require 'includes/precios_publico.php';
 $producto_id = $_GET['id'] ?? 0;
 
 // Determinar la ruta correcta para las imágenes
-$image_base = dirname($_SERVER['SCRIPT_NAME']);
-if (strpos($image_base, '/ecommerce') !== false) {
-    $image_path = '/../uploads/';
-} else {
-    $image_path = '/uploads/';
-}
+$image_path = '/uploads/';
 
 // Configuración de lista de precios pública
 $lista_publica_id = obtener_lista_precio_publica($pdo);

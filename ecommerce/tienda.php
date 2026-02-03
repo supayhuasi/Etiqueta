@@ -19,17 +19,12 @@ $busqueda = $_GET['busqueda'] ?? '';
 $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
+// Determinar la ruta correcta para las imágenes
+$image_path = '/uploads/';
+
 // Construir query de productos
 $query = "SELECT * FROM ecommerce_productos WHERE activo = 1 AND mostrar_ecommerce = 1";
 $params = [];
-
-// Determinar la ruta correcta para las imágenes
-$image_base = dirname($_SERVER['SCRIPT_NAME']);
-if (strpos($image_base, '/ecommerce') !== false) {
-    $image_path = '/../uploads/';
-} else {
-    $image_path = '/uploads/';
-}
 
 if ($categoria_filtro !== 'todos') {
     $query .= " AND categoria_id = ?";
