@@ -74,15 +74,14 @@ if (!empty($estado_filter)) {
     }
 }
 
-$query .= " ORDER BY p.orden, p.nombre LIMIT ? OFFSET ?";
-$params[] = $productos_por_pagina;
-$params[] = $offset;
-
-// Obtener total de productos
+// Obtener total de productos ANTES de agregar LIMIT/OFFSET
 $stmt = $pdo->prepare($count_query);
-$stmt->execute(array_slice($params, 0, count($params) - 2));
+$stmt->execute($params);
 $total_productos = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 $total_paginas = ceil($total_productos / $productos_por_pagina);
+
+// Agregar LIMIT/OFFSET a la query de productos
+$query .= " ORDER BY p.orden, p.nombre LIMIT " . intval($productos_por_pagina) . " OFFSET " . intval($offset);
 
 // Obtener productos paginados
 $stmt = $pdo->prepare($query);
