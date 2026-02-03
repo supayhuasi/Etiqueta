@@ -27,31 +27,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $condicion_tipo = $_POST['condicion_tipo'] ?? [];
         $condicion_operador = $_POST['condicion_operador'] ?? [];
         $condicion_valor = $_POST['condicion_valor'] ?? [];
-        $condicion_atributo = $_POST['condicion_atributo_id'] ?? [];
 
-        foreach ($material_ids as $idx => $material_id) {
+        foreach ($material_ids as $material_id) {
             $material_id = intval($material_id);
             if ($material_id <= 0) continue;
-            if (empty($usar[$idx])) {
+            if (empty($usar[$material_id])) {
                 continue;
             }
-            $tipo = $tipos[$idx] ?? 'fijo';
-            $factor = floatval($factores[$idx] ?? 0);
-            $merma = floatval($mermas[$idx] ?? 0);
-            $nota = trim($notas[$idx] ?? '');
+            $tipo = $tipos[$material_id] ?? 'fijo';
+            $factor = floatval($factores[$material_id] ?? 0);
+            $merma = floatval($mermas[$material_id] ?? 0);
+            $nota = trim($notas[$material_id] ?? '');
             
             // Procesar condición
-            $tiene_condicion = isset($con_condicion[$idx]) ? 1 : 0;
+            $tiene_condicion = isset($con_condicion[$material_id]) ? 1 : 0;
             $cond_tipo = null;
             $cond_operador = null;
             $cond_valor = null;
             $cond_atributo_id = null;
             
             if ($tiene_condicion) {
-                $cond_tipo = $condicion_tipo[$idx] ?? null;
-                $cond_operador = $condicion_operador[$idx] ?? null;
-                $cond_valor = !empty($condicion_valor[$idx]) ? trim($condicion_valor[$idx]) : null;
-                $cond_atributo_id = !empty($condicion_atributo[$idx]) ? intval($condicion_atributo[$idx]) : null;
+                $cond_tipo = $condicion_tipo[$material_id] ?? null;
+                $cond_operador = $condicion_operador[$material_id] ?? null;
+                $cond_valor = !empty($condicion_valor[$material_id]) ? trim($condicion_valor[$material_id]) : null;
+                if (!empty($cond_tipo) && str_starts_with($cond_tipo, 'atributo_')) {
+                    $cond_atributo_id = intval(str_replace('atributo_', '', $cond_tipo));
+                    $cond_tipo = 'atributo';
+                }
             }
 
             $stmt = $pdo->prepare("
@@ -74,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Eliminar materiales no enviados
         $ids_validos = [];
-        foreach ($material_ids as $idx => $material_id) {
-            if (!empty($usar[$idx])) {
+        foreach ($material_ids as $material_id) {
+            if (!empty($usar[$material_id])) {
                 $ids_validos[] = intval($material_id);
             }
         }
@@ -163,34 +165,34 @@ foreach ($receta as $r) {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($materiales as $idx => $m):
+                            <?php foreach ($materiales as $m):
                                 $r = $receta_map[$m['id']] ?? null;
                             ?>
                                 <tr>
                                     <td>
-                                        <input type="checkbox" name="usar[]" value="1" <?= $r ? 'checked' : '' ?>>
+                                        <input type="checkbox" name="usar[<?= $m['id'] ?>]" value="1" <?= $r ? 'checked' : '' ?>>
                                     </td>
                                     <td>
                                         <input type="hidden" name="material_producto_id[]" value="<?= $m['id'] ?>">
                                         <strong><?= htmlspecialchars($m['nombre']) ?></strong>
                                     </td>
                                     <td>
-                                        <select name="tipo_calculo[]" class="form-select form-select-sm">
+                                        <select name="tipo_calculo[<?= $m['id'] ?>]" class="form-select form-select-sm">
                                             <option value="fijo" <?= ($r['tipo_calculo'] ?? '') === 'fijo' ? 'selected' : '' ?>>Fijo</option>
                                             <option value="por_area" <?= ($r['tipo_calculo'] ?? '') === 'por_area' ? 'selected' : '' ?>>Por área (m²)</option>
                                             <option value="por_ancho" <?= ($r['tipo_calculo'] ?? '') === 'por_ancho' ? 'selected' : '' ?>>Por ancho (m)</option>
                                             <option value="por_alto" <?= ($r['tipo_calculo'] ?? '') === 'por_alto' ? 'selected' : '' ?>>Por alto (m)</option>
                                         </select>
                                     </td>
-                                    <td><input type="number" step="0.0001" class="form-control form-control-sm" name="factor[]" value="<?= htmlspecialchars($r['factor'] ?? 0) ?>"></td>
-                                    <td><input type="number" step="0.01" class="form-control form-control-sm" name="merma_pct[]" value="<?= htmlspecialchars($r['merma_pct'] ?? 0) ?>"></td>
-                                    <td><input type="text" class="form-control form-control-sm" name="notas[]" value="<?= htmlspecialchars($r['notas'] ?? '') ?>"></td>
+                                    <td><input type="number" step="0.0001" class="form-control form-control-sm" name="factor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['factor'] ?? 0) ?>"></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" name="merma_pct[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['merma_pct'] ?? 0) ?>"></td>
+                                    <td><input type="text" class="form-control form-control-sm" name="notas[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['notas'] ?? '') ?>"></td>
                                     <td>
-                                        <input type="checkbox" name="con_condicion[]" value="1" <?= ($r['con_condicion'] ?? 0) ? 'checked' : '' ?> class="condicion-toggle" data-idx="<?= $idx ?>">
+                                        <input type="checkbox" name="con_condicion[<?= $m['id'] ?>]" value="1" <?= ($r['con_condicion'] ?? 0) ? 'checked' : '' ?> class="condicion-toggle">
                                         <span class="small text-muted">Usar</span>
                                     </td>
                                     <td>
-                                        <select name="condicion_tipo[]" class="form-select form-select-sm condicion-select" data-idx="<?= $idx ?>" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                        <select name="condicion_tipo[<?= $m['id'] ?>]" class="form-select form-select-sm condicion-select" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
                                             <option value="">--</option>
                                             <option value="ancho" <?= ($r['condicion_tipo'] ?? '') === 'ancho' ? 'selected' : '' ?>>Ancho (cm)</option>
                                             <option value="alto" <?= ($r['condicion_tipo'] ?? '') === 'alto' ? 'selected' : '' ?>>Alto (cm)</option>
@@ -207,7 +209,7 @@ foreach ($receta as $r) {
                                         </select>
                                     </td>
                                     <td>
-                                        <select name="condicion_operador[]" class="form-select form-select-sm" data-idx="<?= $idx ?>" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                        <select name="condicion_operador[<?= $m['id'] ?>]" class="form-select form-select-sm" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
                                             <option value="">--</option>
                                             <option value="igual" <?= ($r['condicion_operador'] ?? '') === 'igual' ? 'selected' : '' ?>>=</option>
                                             <option value="mayor" <?= ($r['condicion_operador'] ?? '') === 'mayor' ? 'selected' : '' ?>>&gt;</option>
@@ -218,7 +220,7 @@ foreach ($receta as $r) {
                                         </select>
                                     </td>
                                     <td>
-                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="Valor" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="Valor" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -236,16 +238,12 @@ foreach ($receta as $r) {
 <script>
 document.querySelectorAll('.condicion-toggle').forEach(toggle => {
     toggle.addEventListener('change', function() {
-        const idx = this.dataset.idx;
+        const row = this.closest('tr');
         const isChecked = this.checked;
-        
-        // Obtener todos los campos de condición para este índice
-        document.querySelectorAll(`select[data-idx="${idx}"]`).forEach(field => {
-            field.disabled = !isChecked;
-        });
-        
-        document.querySelectorAll(`input[type="text"][placeholder="Valor"][name="condicion_valor[]"]`).forEach((field, i) => {
-            if (i === parseInt(idx) || (document.querySelectorAll('input.condicion-toggle').length > parseInt(idx) && field.parentElement.closest('tr') === document.querySelectorAll('.condicion-toggle')[idx].closest('tr'))) {
+        if (!row) return;
+
+        row.querySelectorAll('select, input[type="text"]').forEach(field => {
+            if (field.name && (field.name.includes('condicion_tipo') || field.name.includes('condicion_operador') || field.name.includes('condicion_valor'))) {
                 field.disabled = !isChecked;
             }
         });
