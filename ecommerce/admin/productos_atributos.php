@@ -534,7 +534,14 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                             </div>
                                         <?php endif; ?>
                                         <div class="card-body">
-                                            <h6 class="card-title"><?= htmlspecialchars($opcion['nombre']) ?></h6>
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h6 class="card-title mb-0"><?= htmlspecialchars($opcion['nombre']) ?></h6>
+                                                <?php if ((float)($opcion['costo_adicional'] ?? 0) > 0): ?>
+                                                    <span class="badge bg-success">+$<?= number_format($opcion['costo_adicional'], 2) ?></span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-light text-dark">Gratis</span>
+                                                <?php endif; ?>
+                                            </div>
                                             <?php if ($opcion['color']): ?>
                                                 <div class="mb-2">
                                                     <span class="badge" style="background-color: <?= htmlspecialchars($opcion['color']) ?>; color: white;">

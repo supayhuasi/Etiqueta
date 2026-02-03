@@ -373,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                     <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                            class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>"
                                                            onchange="actualizarPrecio()">
-                                                    <div class="border-2 rounded p-1 transition-all" id="option_<?= $opcion['id'] ?>" 
+                                                    <div class="border-2 rounded p-1 transition-all position-relative" id="option_<?= $opcion['id'] ?>" 
                                                          style="border: 2px solid #ddd; cursor: pointer; transition: all 0.3s ease;">
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
@@ -386,6 +386,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                                  style="width: 80px; height: 80px;">
                                                                 <small class="text-center text-muted"><?= htmlspecialchars($opcion['nombre']) ?></small>
                                                             </div>
+                                                        <?php endif; ?>
+                                                        <?php if ((float)($opcion['costo_adicional'] ?? 0) > 0): ?>
+                                                            <span class="badge bg-success position-absolute" style="top: -8px; right: -8px;">+$<?= number_format($opcion['costo_adicional'], 2) ?></span>
                                                         <?php endif; ?>
                                                         <small class="d-block text-center mt-1 text-muted"><?= htmlspecialchars($opcion['nombre']) ?></small>
                                                     </div>
@@ -559,6 +562,7 @@ function actualizarPrecio() {
     let precioTotal = precioBase;
     let medidaOriginal = null;
     let distanciaMinima = Infinity;
+    let costosAdicionales = [];
     
     // Si es producto variable, buscar el precio más cercano
     if (matrizPrecios.length > 0) {
@@ -591,8 +595,16 @@ function actualizarPrecio() {
             const costoOpcion = costoHidden ? parseFloat(costoHidden.value || 0) : 0;
             if (costoOpcion > 0) {
                 precioFinal += costoOpcion;
+                costosAdicionales.push({
+                    nombre: valorInput.value,
+                    costo: costoOpcion
+                });
             } else if (attr.costo_adicional > 0) {
                 precioFinal += parseFloat(attr.costo_adicional);
+                costosAdicionales.push({
+                    nombre: attr.nombre,
+                    costo: parseFloat(attr.costo_adicional)
+                });
             }
         }
     });
@@ -603,18 +615,29 @@ function actualizarPrecio() {
         minimumFractionDigits: 2
     }).replace('ARS', '$');
 
+    let precioDisplayHTML = '';
+    
     if (precioConDescuento.descuento > 0) {
         const precioOriginalFormatado = precioTotal.toLocaleString('es-AR', {
             style: 'currency',
             currency: 'ARS',
             minimumFractionDigits: 2
         }).replace('ARS', '$');
-        document.getElementById('precio_display').innerHTML = 
-            `Precio: <span class="text-muted text-decoration-line-through">${precioOriginalFormatado}</span> <strong>${precioFormatado}</strong>`;
+        precioDisplayHTML = `Precio: <span class="text-muted text-decoration-line-through">${precioOriginalFormatado}</span> <strong>${precioFormatado}</strong>`;
     } else {
-        document.getElementById('precio_display').innerHTML = 
-            `Precio: <strong>${precioFormatado}</strong>`;
+        precioDisplayHTML = `Precio: <strong>${precioFormatado}</strong>`;
     }
+    
+    // Agregar desglose de costos adicionales si existen
+    if (costosAdicionales.length > 0) {
+        precioDisplayHTML += '<br><small class="text-muted mt-2 d-block">';
+        costosAdicionales.forEach((costo, idx) => {
+            precioDisplayHTML += `<span class="badge bg-light text-dark ms-${idx > 0 ? 2 : 0}">+ ${costo.nombre}: $${costo.costo.toFixed(2)}</span>`;
+        });
+        precioDisplayHTML += '</small>';
+    }
+    
+    document.getElementById('precio_display').innerHTML = precioDisplayHTML;
     
     const infoDiv = document.getElementById('medidas_info');
     if (medidaOriginal && distanciaMinima > 0) {

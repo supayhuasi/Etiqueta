@@ -78,11 +78,16 @@ $total = $subtotal + $envio;
                                         <?php foreach ($carrito as $item_key => $item): 
                                             $precio_item = $item['precio'];
                                             $costo_atributos = 0;
+                                            $desglose_atributos = [];
                                             
                                             if (isset($item['atributos']) && is_array($item['atributos'])) {
                                                 foreach ($item['atributos'] as $attr) {
                                                     if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
                                                         $costo_atributos += $attr['costo_adicional'];
+                                                        $desglose_atributos[] = [
+                                                            'valor' => $attr['valor'] ?? '',
+                                                            'costo' => $attr['costo_adicional']
+                                                        ];
                                                     }
                                                 }
                                             }
@@ -100,7 +105,7 @@ $total = $subtotal + $envio;
                                                         <br><small class="text-muted">
                                                             <?php foreach ($item['atributos'] as $attr): ?>
                                                                 <div><?= htmlspecialchars($attr['nombre']) ?>: <?= htmlspecialchars($attr['valor']) ?>
-                                                                    <?php if ($attr['costo_adicional'] > 0): ?>
+                                                                    <?php if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0): ?>
                                                                         <span class="badge bg-success">+$<?= number_format($attr['costo_adicional'], 2, ',', '.') ?></span>
                                                                     <?php endif; ?>
                                                                 </div>
@@ -108,7 +113,13 @@ $total = $subtotal + $envio;
                                                         </small>
                                                     <?php endif; ?>
                                                 </td>
-                                                <td>$<?= number_format($item['precio'], 2, ',', '.') ?></td>
+                                                <td>
+                                                    <div>$<?= number_format($item['precio'], 2, ',', '.') ?></div>
+                                                    <?php if ($costo_atributos > 0): ?>
+                                                        <small class="text-muted d-block">+$<?= number_format($costo_atributos, 2, ',', '.') ?></small>
+                                                        <small class="text-success fw-bold">$<?= number_format($precio_item, 2, ',', '.') ?></small>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td>
                                                     <input type="number" class="form-control" style="width: 80px;" name="cantidades[<?= $item_key ?>]" value="<?= $item['cantidad'] ?>" min="1">
                                                 </td>
