@@ -723,21 +723,26 @@ document.addEventListener('DOMContentLoaded', function() {
             return true;
         };
 
-        steps.forEach((stepEl, idx) => {
-            const fields = stepEl.querySelectorAll('input, select, textarea');
-            fields.forEach(f => {
-                const handler = () => {
-                    if (idx !== currentStep) return;
-                    setTimeout(() => {
-                        if (validateStep(stepEl) && currentStep < steps.length - 1) {
-                            currentStep++;
-                            showStep(currentStep);
-                        }
-                    }, 0);
-                };
-                f.addEventListener('change', handler);
-                f.addEventListener('input', handler);
-            });
+        document.addEventListener('change', function(e) {
+            const stepEl = e.target.closest('.attr-step');
+            if (!stepEl || steps[currentStep] !== stepEl) return;
+            setTimeout(() => {
+                if (validateStep(stepEl) && currentStep < steps.length - 1) {
+                    currentStep++;
+                    showStep(currentStep);
+                }
+            }, 0);
+        });
+
+        document.addEventListener('input', function(e) {
+            const stepEl = e.target.closest('.attr-step');
+            if (!stepEl || steps[currentStep] !== stepEl) return;
+            setTimeout(() => {
+                if (validateStep(stepEl) && currentStep < steps.length - 1) {
+                    currentStep++;
+                    showStep(currentStep);
+                }
+            }, 0);
         });
 
         showStep(currentStep);
