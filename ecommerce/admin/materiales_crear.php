@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $unidad = trim($_POST['unidad'] ?? '');
     $costo = $_POST['costo'] !== '' ? floatval($_POST['costo']) : null;
     $activo = isset($_POST['activo']) ? 1 : 0;
+    $tipo_origen = $_POST['tipo_origen'] ?? 'compra';
+    $stock_minimo = floatval($_POST['stock_minimo'] ?? 0);
+    $proveedor_habitual_id = !empty($_POST['proveedor_habitual_id']) ? intval($_POST['proveedor_habitual_id']) : null;
+    $unidad_medida = trim($_POST['unidad_medida'] ?? $unidad);
 
     if ($nombre === '' || $unidad === '') {
         echo "<div class='alert alert-danger'>Nombre y unidad son obligatorios</div>";
@@ -28,17 +32,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($editar) {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_materiales
-                    SET nombre = ?, unidad = ?, costo = ?, activo = ?
+                    SET nombre = ?, unidad = ?, costo = ?, activo = ?, tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?, unidad_medida = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nombre, $unidad, $costo, $activo, $_GET['id']]);
+                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida, $_GET['id']]);
                 $mensaje = "✓ Material actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_materiales (nombre, unidad, costo, activo)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO ecommerce_materiales (nombre, unidad, costo, activo, tipo_origen, stock_minimo, proveedor_habitual_id, unidad_medida)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$nombre, $unidad, $costo, $activo]);
+                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida]);
                 $mensaje = "✓ Material creado";
             }
             echo "<div class='alert alert-success'>$mensaje</div>";
@@ -73,6 +77,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Tipo de Origen *</label>
+                    <select name="tipo_origen" class="form-select" id="tipo_origen" onchange="toggleProveedor()">
+                        <option value="compra" <?= ($material['tipo_origen'] ?? 'compra') === 'compra' ? 'selected' : '' ?>>🛒 Compra</option>
+                        <option value="fabricacion_propia" <?= ($material['tipo_origen'] ?? '') === 'fabricacion_propia' ? 'selected' : '' ?>>🏭 Fabricación Propia</option>
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Stock Mínimo</label>
+                    <input type="number" step="0.01" name="stock_minimo" class="form-control" value="<?= htmlspecialchars($material['stock_minimo'] ?? '0') ?>">
+                    <small class="text-muted">Generar alerta cuando stock sea menor</small>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Unidad de Medida</label>
+                    <input type="text" name="unidad_medida" class="form-control" placeholder="metros, kg, unidades" value="<?= htmlspecialchars($material['unidad_medida'] ?? $material['unidad'] ?? '') ?>">
+                </div>
+                <div class="col-md-3 mb-3" id="proveedor_container">
+                    <label class="form-label">Proveedor Habitual</label>
+                    <select name="proveedor_habitual_id" class="form-select">
+                        <option value="">-- Ninguno --</option>
+                        <?php
+                        $stmt_prov = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo = 1 ORDER BY nombre");
+                        while ($prov = $stmt_prov->fetch(PDO::FETCH_ASSOC)):
+                        ?>
+                            <option value="<?= $prov['id'] ?>" <?= ($material['proveedor_habitual_id'] ?? 0) == $prov['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($prov['nombre']) ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+            </div>
+
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" name="activo" id="activo" <?= !isset($material) || $material['activo'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="activo">Activo</label>
@@ -82,5 +119,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </div>
+
+<script>
+function toggleProveedor() {
+    const tipoOrigen = document.getElementById('tipo_origen').value;
+    const proveedorContainer = document.getElementById('proveedor_container');
+    if (tipoOrigen === 'compra') {
+        proveedorContainer.style.display = 'block';
+    } else {
+        proveedorContainer.style.display = 'none';
+    }
+}
+// Ejecutar al cargar
+toggleProveedor();
+</script>
 
 <?php require 'includes/footer.php'; ?>

@@ -93,6 +93,7 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <p class="text-white-50 small mb-3">EMPRESA</p>
             <a href="empresa.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empresa.php' ? 'active' : '' ?>">🏪 Información</a>
             <a href="mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>">💳 Mercado Pago</a>
+            <a href="inventario.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['inventario.php', 'inventario_reporte_reponer.php', 'inventario_movimientos.php']) ? 'active' : '' ?>">📦 Inventario</a>
             <a href="pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>">📋 Pedidos</a>
             <a href="ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>">🏭 Órdenes de Producción</a>
             <a href="facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>">💳 Facturación</a>
