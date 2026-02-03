@@ -28,8 +28,8 @@ if ($_POST['accion'] === 'generar' && isset($_POST['precio_base_matriz'])) {
         $pdo->prepare("DELETE FROM ecommerce_matriz_precios WHERE producto_id = ?")->execute([$producto_id]);
         
         // Generar nueva matriz
-        for ($alto = 10; $alto <= 300; $alto += 10) {
-            for ($ancho = 10; $ancho <= 300; $ancho += 10) {
+        for ($alto = 10; $alto <= 600; $alto += 10) {
+            for ($ancho = 10; $ancho <= 600; $ancho += 10) {
                 $area_cm2 = ($alto * $ancho) / 100; // convertir a dm²
                 $precio = $precio_base * ($area_cm2 / 100); // precio base por dm²
                 
@@ -141,7 +141,7 @@ if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
 
             while (($row = fgetcsv($handle, 0, $delim)) !== false) {
                 $alto_cm = isset($row[0]) ? intval(str_replace(',', '.', $row[0])) : 0;
-                if ($alto_cm < 10 || $alto_cm > 300) {
+                if ($alto_cm < 10 || $alto_cm > 600) {
                     continue;
                 }
 
@@ -151,7 +151,7 @@ if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
                     $precio = isset($row[$i]) ? floatval(str_replace(',', '.', $row[$i])) : 0;
                     $stock = 0;
 
-                    if ($ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+                    if ($ancho_cm < 10 || $ancho_cm > 600 || $precio <= 0) {
                         $omitidos++;
                         continue;
                     }
@@ -186,7 +186,7 @@ if ($_POST['accion'] === 'importar' && isset($_FILES['archivo_csv'])) {
                 $precio = isset($row[$index['precio']]) ? floatval(str_replace(',', '.', $row[$index['precio']])) : 0;
                 $stock = isset($row[$index['stock']]) ? intval($row[$index['stock']]) : 0;
 
-                if ($alto_cm < 10 || $alto_cm > 300 || $ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+                if ($alto_cm < 10 || $alto_cm > 600 || $ancho_cm < 10 || $ancho_cm > 600 || $precio <= 0) {
                     $omitidos++;
                     continue;
                 }
@@ -233,7 +233,7 @@ if ($_POST['accion'] === 'guardar' && isset($_POST['alto_cm'])) {
         $precio = floatval($_POST['precio']);
         $stock = intval($_POST['stock'] ?? 0);
         
-        if ($alto_cm < 10 || $alto_cm > 300 || $ancho_cm < 10 || $ancho_cm > 300 || $precio <= 0) {
+        if ($alto_cm < 10 || $alto_cm > 600 || $ancho_cm < 10 || $ancho_cm > 600 || $precio <= 0) {
             $error = "Dimensiones o precio inválido";
         } else {
             if ($id > 0) {
@@ -347,7 +347,7 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
                         <label for="alto_cm" class="form-label">Alto (cm)</label>
                         <select class="form-select" id="alto_cm" name="alto_cm" required>
                             <option value="">Seleccionar...</option>
-                            <?php for ($i = 10; $i <= 300; $i += 10): ?>
+                            <?php for ($i = 10; $i <= 600; $i += 10): ?>
                                 <option value="<?= $i ?>"><?= $i ?> cm</option>
                             <?php endfor; ?>
                         </select>
@@ -356,7 +356,7 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
                         <label for="ancho_cm" class="form-label">Ancho (cm)</label>
                         <select class="form-select" id="ancho_cm" name="ancho_cm" required>
                             <option value="">Seleccionar...</option>
-                            <?php for ($i = 10; $i <= 300; $i += 10): ?>
+                            <?php for ($i = 10; $i <= 600; $i += 10): ?>
                                 <option value="<?= $i ?>"><?= $i ?> cm</option>
                             <?php endfor; ?>
                         </select>

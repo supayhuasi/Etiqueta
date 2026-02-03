@@ -181,6 +181,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 
 <div class="container py-5">
+    <style>
+        .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+            color: #fff;
+        }
+        .btn-outline-secondary {
+            color: #495057;
+            border-color: #6c757d;
+        }
+        .btn-outline-secondary:hover,
+        .btn-outline-secondary:focus {
+            color: #fff;
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+    </style>
     <div class="row">
         <!-- Galería de imágenes -->
         <div class="col-md-5">
@@ -291,13 +314,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label for="ancho" class="form-label fw-bold">Ancho (cm) *</label>
-                                <input type="number" class="form-control" id="ancho" name="ancho" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
-                                <small class="text-muted">Rango: 10 a 300 cm</small>
+                                <input type="number" class="form-control" id="ancho" name="ancho" min="10" max="600" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <small class="text-muted">Rango: 10 a 600 cm</small>
                             </div>
                             <div class="col-md-6">
                                 <label for="alto" class="form-label fw-bold">Alto (cm) *</label>
-                                <input type="number" class="form-control" id="alto" name="alto" min="10" max="300" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
-                                <small class="text-muted">Rango: 10 a 300 cm</small>
+                                <input type="number" class="form-control" id="alto" name="alto" min="10" max="600" step="1" required onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <small class="text-muted">Rango: 10 a 600 cm</small>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -459,70 +482,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Matriz de precios expandible -->
-    <?php if ($tipo_precio === 'variable' && !empty($matriz_precios)): ?>
-        <div class="row mt-5">
-            <div class="col-12">
-                <div class="accordion" id="accordionMatriz">
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#matrizPrecios">
-                                📊 Ver Matriz de Precios Completa
-                            </button>
-                        </h2>
-                        <div id="matrizPrecios" class="accordion-collapse collapse" data-bs-parent="#accordionMatriz">
-                            <div class="accordion-body">
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-bordered">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th class="text-center">Alto \ Ancho</th>
-                                                <?php 
-                                                $anchos_unicos = array_unique(array_column($matriz_precios, 'ancho_cm'));
-                                                sort($anchos_unicos);
-                                                foreach ($anchos_unicos as $ancho): 
-                                                ?>
-                                                    <th class="text-center"><?= $ancho ?> cm</th>
-                                                <?php endforeach; ?>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php 
-                                            $altos_unicos = array_unique(array_column($matriz_precios, 'alto_cm'));
-                                            sort($altos_unicos);
-                                            foreach ($altos_unicos as $alto): 
-                                            ?>
-                                                <tr>
-                                                    <td class="fw-bold text-center"><?= $alto ?> cm</td>
-                                                    <?php foreach ($anchos_unicos as $ancho): 
-                                                        $precio_item = null;
-                                                        foreach ($matriz_precios as $mp) {
-                                                            if ($mp['alto_cm'] == $alto && $mp['ancho_cm'] == $ancho) {
-                                                                $precio_item = $mp['precio'];
-                                                                break;
-                                                            }
-                                                        }
-                                                    ?>
-                                                        <td class="text-center">
-                                                            <?php if ($precio_item !== null): ?>
-                                                                <strong>$<?= number_format($precio_item, 2, ',', '.') ?></strong>
-                                                            <?php else: ?>
-                                                                <span class="text-muted">-</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                    <?php endforeach; ?>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
 </div>
 
 <script>

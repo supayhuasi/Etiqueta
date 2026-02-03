@@ -81,6 +81,30 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <div class="container mb-5">
+    <style>
+        .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+            color: #fff;
+        }
+        .btn-outline-primary {
+            color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .btn-outline-primary:hover,
+        .btn-outline-primary:focus,
+        .btn-outline-primary.active {
+            color: #fff;
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+    </style>
     <div class="row">
         <!-- Sidebar de categorías y búsqueda -->
         <div class="col-md-3">
