@@ -4,7 +4,7 @@ require 'includes/header.php';
 require 'includes/precios_publico.php';
 
 // Determinar la ruta correcta para las imágenes
-$image_path = '/../uploads/';
+$image_path = '../uploads/';
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
