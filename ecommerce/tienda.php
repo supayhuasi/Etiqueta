@@ -20,7 +20,7 @@ $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
 // Determinar la ruta correcta para las imágenes
-$image_path = '/uploads/';
+$image_path = '/../uploads/';
 
 // Construir query de productos
 $query = "SELECT * FROM ecommerce_productos WHERE activo = 1 AND mostrar_ecommerce = 1";
