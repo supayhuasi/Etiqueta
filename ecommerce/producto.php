@@ -685,68 +685,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    const steps = Array.from(document.querySelectorAll('.attr-step'));
-    if (steps.length > 0) {
-        let currentStep = 0;
-
-        const setRequired = (stepEl, enabled) => {
-            const fields = stepEl.querySelectorAll('input, select, textarea');
-            fields.forEach(f => {
-                if (f.hasAttribute('data-required')) {
-                    enabled ? f.setAttribute('required', 'required') : f.removeAttribute('required');
-                }
-            });
-        };
-
-        steps.forEach(step => {
-            step.querySelectorAll('[required]').forEach(f => f.setAttribute('data-required', '1'));
-        });
-
-        const showStep = (idx) => {
-            steps.forEach((s, i) => {
-                s.style.display = i === idx ? 'block' : 'none';
-                setRequired(s, i === idx);
-            });
-        };
-
-        const validateStep = (stepEl) => {
-            const requiredFields = stepEl.querySelectorAll('[required]');
-            for (const field of requiredFields) {
-                if (field.type === 'radio') {
-                    const group = stepEl.querySelectorAll(`input[name="${field.name}"]`);
-                    const checked = Array.from(group).some(r => r.checked);
-                    if (!checked) return false;
-                } else if (!field.value) {
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        document.addEventListener('change', function(e) {
-            const stepEl = e.target.closest('.attr-step');
-            if (!stepEl || steps[currentStep] !== stepEl) return;
-            setTimeout(() => {
-                if (validateStep(stepEl) && currentStep < steps.length - 1) {
-                    currentStep++;
-                    showStep(currentStep);
-                }
-            }, 0);
-        });
-
-        document.addEventListener('input', function(e) {
-            const stepEl = e.target.closest('.attr-step');
-            if (!stepEl || steps[currentStep] !== stepEl) return;
-            setTimeout(() => {
-                if (validateStep(stepEl) && currentStep < steps.length - 1) {
-                    currentStep++;
-                    showStep(currentStep);
-                }
-            }, 0);
-        });
-
-        showStep(currentStep);
-    }
 });
 </script>
 
