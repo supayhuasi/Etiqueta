@@ -17,6 +17,10 @@ if ($id > 0) {
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Obtener proveedores
+$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo = 1 ORDER BY nombre");
+$proveedores = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $codigo = $_POST['codigo'] ?? '';
     $nombre = $_POST['nombre'] ?? '';
@@ -29,6 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mostrar_ecommerce = isset($_POST['mostrar_ecommerce']) ? 1 : 0;
     $es_material = isset($_POST['es_material']) ? 1 : 0;
     $usa_receta = isset($_POST['usa_receta']) ? 1 : 0;
+    $tipo_origen = $_POST['tipo_origen'] ?? 'fabricacion_propia';
+    $stock_minimo = floatval($_POST['stock_minimo'] ?? 0);
+    $proveedor_habitual_id = !empty($_POST['proveedor_habitual_id']) ? intval($_POST['proveedor_habitual_id']) : null;
     
     if (empty($nombre) || empty($codigo) || $categoria_id <= 0 || ($precio_base <= 0 && !$es_material)) {
         $error = "Falta completar campos obligatorios";
@@ -38,17 +45,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_productos 
                     SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
-                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?, usa_receta = ?
+                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?, usa_receta = ?,
+                        tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $id]);
                 $mensaje = "Producto actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, usa_receta)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, usa_receta, tipo_origen, stock_minimo, proveedor_habitual_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id]);
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
@@ -120,6 +128,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="tipo_origen" class="form-label">Tipo de Origen *</label>
+                    <select class="form-select" id="tipo_origen" name="tipo_origen" onchange="toggleProveedorProducto()">
+                        <option value="fabricacion_propia" <?= ($producto['tipo_origen'] ?? 'fabricacion_propia') === 'fabricacion_propia' ? 'selected' : '' ?>>🏭 Fabricación Propia</option>
+                        <option value="compra" <?= ($producto['tipo_origen'] ?? '') === 'compra' ? 'selected' : '' ?>>🛒 Compra</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="stock_minimo" class="form-label">Stock Mínimo</label>
+                    <input type="number" step="0.01" class="form-control" id="stock_minimo" name="stock_minimo" value="<?= htmlspecialchars($producto['stock_minimo'] ?? '0') ?>">
+                    <small class="text-muted">Generar alerta cuando stock sea menor</small>
+                </div>
+                <div class="col-md-4 mb-3" id="proveedor_producto_container">
+                    <label for="proveedor_habitual_id" class="form-label">Proveedor Habitual</label>
+                    <select class="form-select" id="proveedor_habitual_id" name="proveedor_habitual_id">
+                        <option value="">-- Ninguno --</option>
+                        <?php foreach ($proveedores as $prov): ?>
+                            <option value="<?= $prov['id'] ?>" <?= ($producto['proveedor_habitual_id'] ?? 0) == $prov['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($prov['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <label for="orden" class="form-label">Orden</label>
                 <input type="number" class="form-control" id="orden" name="orden" value="<?= $producto['orden'] ?? 0 ?>">
@@ -155,5 +189,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </div>
+
+<script>
+function toggleProveedorProducto() {
+    const tipoOrigen = document.getElementById('tipo_origen')?.value || 'fabricacion_propia';
+    const cont = document.getElementById('proveedor_producto_container');
+    if (!cont) return;
+    cont.style.display = (tipoOrigen === 'compra') ? 'block' : 'none';
+}
+toggleProveedorProducto();
+</script>
 
 <?php require 'includes/footer.php'; ?>
