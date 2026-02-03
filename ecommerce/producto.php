@@ -5,6 +5,14 @@ require 'includes/precios_publico.php';
 
 $producto_id = $_GET['id'] ?? 0;
 
+// Determinar la ruta correcta para las imágenes
+$image_base = dirname($_SERVER['SCRIPT_NAME']);
+if (strpos($image_base, '/ecommerce') !== false) {
+    $image_path = '/../uploads/';
+} else {
+    $image_path = '/uploads/';
+}
+
 // Configuración de lista de precios pública
 $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
@@ -218,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="carousel-inner rounded overflow-hidden">
                         <?php foreach ($imagenes as $idx => $img): ?>
                             <div class="carousel-item <?= $idx === 0 ? 'active' : '' ?>">
-                                <img src="../uploads/<?= htmlspecialchars($img['imagen']) ?>" 
+                                <img src="<?= $image_path . htmlspecialchars($img['imagen']) ?>" 
                                      class="d-block w-100" 
                                      alt="<?= htmlspecialchars($producto['nombre']) ?>"
                                      style="object-fit: cover; height: 500px;">
@@ -238,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="row mt-3 g-2">
                             <?php foreach ($imagenes as $idx => $img): ?>
                                 <div class="col-4 col-sm-3">
-                                    <img src="../uploads/<?= htmlspecialchars($img['imagen']) ?>" 
+                                    <img src="<?= $image_path . htmlspecialchars($img['imagen']) ?>" 
                                          class="img-thumbnail cursor-pointer" 
                                          alt="Miniatura"
                                          style="cursor: pointer; object-fit: cover; height: 80px;">
@@ -420,7 +428,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="../uploads/atributos/<?= htmlspecialchars($opcion['imagen']) ?>" 
+                                                            <img src="<?= $image_path . 'atributos/' . htmlspecialchars($opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>

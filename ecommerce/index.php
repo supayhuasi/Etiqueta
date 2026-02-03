@@ -3,6 +3,14 @@ require 'config.php';
 require 'includes/header.php';
 require 'includes/precios_publico.php';
 
+// Determinar la ruta correcta para las imágenes
+$image_base = dirname($_SERVER['SCRIPT_NAME']);
+if (strpos($image_base, '/ecommerce') !== false) {
+    $image_path = '/../uploads/';
+} else {
+    $image_path = '/uploads/';
+}
+
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -46,7 +54,7 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="carousel-inner">
         <?php foreach ($slideshows as $key => $slide): ?>
             <div class="carousel-item <?= $key === 0 ? 'active' : '' ?>">
-                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 600px; object-fit: cover;">
+                <img src="<?= $image_path . htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 600px; object-fit: cover;">
                 <div class="carousel-caption d-none d-md-block">
                     <h1><?= htmlspecialchars($slide['titulo']) ?></h1>
                     <p><?= htmlspecialchars($slide['descripcion']) ?></p>
@@ -107,7 +115,7 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="card product-card h-100">
                         <?php if (!empty($producto['imagen_principal'])): ?>
                             <div style="position: relative;">
-                                <img src="uploads/<?= htmlspecialchars($producto['imagen_principal']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
+                                <img src="<?= $image_path . htmlspecialchars($producto['imagen_principal']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>" style="height: 250px; object-fit: cover;">
                                 <!-- Mostrar descuento si existe -->
                                 <?php
                                 $precio_info = calcular_precio_publico(
@@ -173,10 +181,10 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="col-md-2 text-center mb-3">
                     <?php if ($cliente['enlace']): ?>
                         <a href="<?= htmlspecialchars($cliente['enlace']) ?>" target="_blank" title="<?= htmlspecialchars($cliente['nombre']) ?>">
-                            <img src="uploads/<?= htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
+                            <img src="<?= $image_path . htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
                         </a>
                     <?php else: ?>
-                        <img src="uploads/<?= htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
+                        <img src="<?= $image_path . htmlspecialchars($cliente['logo_url']) ?>" alt="<?= htmlspecialchars($cliente['nombre']) ?>" style="max-height: 60px; max-width: 100%;">
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
