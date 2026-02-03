@@ -52,7 +52,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="carousel-inner">
         <?php foreach ($slideshows as $key => $slide): ?>
             <div class="carousel-item <?= $key === 0 ? 'active' : '' ?>">
-                <img src="uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 320px; object-fit: cover;">
+                <img src="/ecommerce/uploads/<?= htmlspecialchars($slide['imagen_url']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($slide['titulo']) ?>" style="height: 320px; object-fit: cover;">
                 <div class="carousel-caption d-none d-md-block">
                     <h2><?= htmlspecialchars($slide['titulo']) ?></h2>
                     <p><?= htmlspecialchars($slide['descripcion']) ?></p>
@@ -161,7 +161,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <div class="card product-card h-100">
                                 <?php if (!empty($producto['imagen'])): ?>
                                     <div style="position: relative;">
-                                        <img src="uploads/<?= htmlspecialchars($producto['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>">
+                                        <img src="/ecommerce/uploads/<?= htmlspecialchars($producto['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($producto['nombre']) ?>">
                                         <?php if ($precio_info['descuento_pct'] > 0): ?>
                                             <span class="badge bg-danger" style="position: absolute; top: 10px; right: 10px; font-size: 14px;">
                                                 -<?= $precio_info['descuento_pct'] ?>%

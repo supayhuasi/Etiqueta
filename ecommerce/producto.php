@@ -212,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="carousel-inner rounded overflow-hidden">
                         <?php foreach ($imagenes as $idx => $img): ?>
                             <div class="carousel-item <?= $idx === 0 ? 'active' : '' ?>">
-                                <img src="uploads/<?= htmlspecialchars($img['imagen']) ?>" 
+                                <img src="/ecommerce/uploads/<?= htmlspecialchars($img['imagen']) ?>" 
                                      class="d-block w-100" 
                                      alt="<?= htmlspecialchars($producto['nombre']) ?>"
                                      style="object-fit: cover; height: 500px;">
@@ -232,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="row mt-3 g-2">
                             <?php foreach ($imagenes as $idx => $img): ?>
                                 <div class="col-4 col-sm-3">
-                                    <img src="uploads/<?= htmlspecialchars($img['imagen']) ?>" 
+                                    <img src="/ecommerce/uploads/<?= htmlspecialchars($img['imagen']) ?>" 
                                          class="img-thumbnail cursor-pointer" 
                                          alt="Miniatura"
                                          style="cursor: pointer; object-fit: cover; height: 80px;">
