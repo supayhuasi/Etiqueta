@@ -36,6 +36,18 @@ $stmt = $pdo->query("
     LIMIT 6
 ");
 $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Obtener fotos de trabajos (galería)
+$trabajos = [];
+$trabajos_dir = __DIR__ . '/uploads/trabajos';
+if (is_dir($trabajos_dir)) {
+    $archivos = glob($trabajos_dir . '/*.{jpg,jpeg,png,webp,gif}', GLOB_BRACE);
+    if ($archivos) {
+        foreach ($archivos as $file) {
+            $trabajos[] = 'uploads/trabajos/' . basename($file);
+        }
+    }
+}
 ?>
 
 <!-- Slideshow/Carrusel -->
@@ -165,6 +177,29 @@ $productos_destacados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 </section>
+
+<!-- Trabajos realizados -->
+<?php if (!empty($trabajos)): ?>
+<section class="py-5">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-1">Trabajos Realizados</h2>
+                <p class="text-muted mb-0">Algunas instalaciones y proyectos recientes</p>
+            </div>
+        </div>
+        <div class="row g-3">
+            <?php foreach (array_slice($trabajos, 0, 12) as $foto): ?>
+                <div class="col-6 col-md-4 col-lg-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <img src="<?= htmlspecialchars($foto) ?>" class="card-img-top" alt="Trabajo" style="height: 200px; object-fit: cover;">
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <!-- Nuestros Clientes -->
 <?php if (!empty($clientes)): ?>
