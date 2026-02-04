@@ -165,7 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['carrito'] = [];
         }
         
-        $attrs_json = json_encode($atributos_seleccionados);
+        // Convertir atributos seleccionados a array simple (sin claves de ID)
+        $atributos_para_carrito = array_values($atributos_seleccionados);
+        
+        $attrs_json = json_encode($atributos_para_carrito);
         $item_key = $producto_id . '_' . $alto . '_' . $ancho . '_' . md5($attrs_json);
         
         if (isset($_SESSION['carrito'][$item_key])) {
@@ -179,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'alto' => $alto,
                 'ancho' => $ancho,
                 'medidas_originales' => $medidas_info,
-                'atributos' => $atributos_seleccionados,
+                'atributos' => $atributos_para_carrito,
                 'imagen' => !empty($imagenes) ? $imagenes[0]['imagen'] : $producto['imagen']
             ];
         }
@@ -387,10 +390,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php if ($attr['tipo'] === 'text'): ?>
                                 <input type="text" class="form-control" id="attr_<?= $attr['id'] ?>" 
                                        name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <input type="hidden" name="attr_costo_<?= $attr['id'] ?>" value="<?= (float)($attr['costo_adicional'] ?? 0) ?>">
                             
                             <?php elseif ($attr['tipo'] === 'number'): ?>
                                 <input type="number" class="form-control" id="attr_<?= $attr['id'] ?>" 
                                        name="attr_<?= $attr['id'] ?>" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()" onkeyup="actualizarPrecio()">
+                                <input type="hidden" name="attr_costo_<?= $attr['id'] ?>" value="<?= (float)($attr['costo_adicional'] ?? 0) ?>">
 
                             <?php elseif ($attr['tipo'] === 'color'): ?>
                                 <div class="d-flex align-items-center gap-3">
@@ -398,6 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                            name="attr_<?= $attr['id'] ?>" value="#000000" <?= $attr['es_obligatorio'] ? 'required' : '' ?> onchange="actualizarPrecio()">
                                     <div class="border rounded" id="color_preview_<?= $attr['id'] ?>" style="width: 36px; height: 36px; background-color: #000000;"></div>
                                 </div>
+                                <input type="hidden" name="attr_costo_<?= $attr['id'] ?>" value="<?= (float)($attr['costo_adicional'] ?? 0) ?>">
                                 <script>
                                     (function() {
                                         const colorInput = document.getElementById('attr_<?= $attr['id'] ?>');
@@ -430,7 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <div class="d-flex gap-2 flex-wrap mb-3">
                                              <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
                                                  <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
-                                             <input type="hidden" id="attr_costo_<?= $attr['id'] ?>" name="attr_costo_<?= $attr['id'] ?>" value="0">
+                                             <input type="hidden" id="attr_costo_<?= $attr['id'] ?>" name="attr_costo_<?= $attr['id'] ?>" value="<?= (float)($attr['costo_adicional'] ?? 0) ?>">
                                              <input type="hidden" id="attr_opcion_id_<?= $attr['id'] ?>" name="attr_opcion_id_<?= $attr['id'] ?>" value="">
                                         <?php foreach ($opciones_attr as $opcion): ?>
                                             <div class="position-relative">
