@@ -40,8 +40,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($accion === 'crear_orden' && !$orden_produccion) {
             $fecha_entrega = !empty($_POST['fecha_entrega']) ? $_POST['fecha_entrega'] : null;
-            $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, notas, fecha_entrega) VALUES (?, 'pendiente', ?, ?)");
+            
+            // Crear orden de producción
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, notas, fecha_entrega, materiales_descontados) VALUES (?, 'pendiente', ?, ?, 0)");
             $stmt->execute([$pedido_id, $_POST['notas'] ?? null, $fecha_entrega]);
+            $orden_id = $pdo->lastInsertId();
+            
+            // Descontar materiales inmediatamente
+            require '../includes/funciones_recetas.php';
+            
+            $stmt_items = $pdo->prepare("
+                SELECT pi.*, p.usa_receta
+                FROM ecommerce_pedido_items pi
+                JOIN ecommerce_productos p ON pi.producto_id = p.id
+                WHERE pi.pedido_id = ?
+            ");
+            $stmt_items->execute([$pedido_id]);
+            $items = $stmt_items->fetchAll(PDO::FETCH_ASSOC);
+            
+            foreach ($items as $it) {
+                if (empty($it['usa_receta'])) continue;
+                
+                $atributos_seleccionados = [];
+                if (!empty($it['atributos'])) {
+                    $atributos_seleccionados = json_decode($it['atributos'], true) ?: [];
+                }
+                
+                $producto_id = (int)$it['producto_id'];
+                $ancho_cm = floatval($it['ancho_cm'] ?? 0);
+                $alto_cm = floatval($it['alto_cm'] ?? 0);
+                
+                $recetas = obtener_receta_con_condiciones($pdo, $producto_id, $ancho_cm, $alto_cm, $atributos_seleccionados);
+                if (empty($recetas)) continue;
+                
+                $alto_m = $alto_cm / 100;
+                $ancho_m = $ancho_cm / 100;
+                $area_m2 = $alto_m * $ancho_m;
+                
+                foreach ($recetas as $r) {
+                    $factor = (float)$r['factor'];
+                    $merma = (float)$r['merma_pct'];
+                    $cantidad_base = 0;
+                    
+                    if ($r['tipo_calculo'] === 'fijo') {
+                        $cantidad_base = $factor;
+                    } elseif ($r['tipo_calculo'] === 'por_area') {
+                        $cantidad_base = $area_m2 * $factor;
+                    } elseif ($r['tipo_calculo'] === 'por_ancho') {
+                        $cantidad_base = $ancho_m * $factor;
+                    } elseif ($r['tipo_calculo'] === 'por_alto') {
+                        $cantidad_base = $alto_m * $factor;
+                    }
+                    
+                    $cantidad_total = $cantidad_base * (1 + ($merma / 100));
+                    $cantidad_total = $cantidad_total * (int)$it['cantidad'];
+                    $mat_id = (int)$r['material_producto_id'];
+                    
+                    // Obtener stock actual
+                    $stmt_stock = $pdo->prepare("SELECT stock FROM ecommerce_productos WHERE id = ?");
+                    $stmt_stock->execute([$mat_id]);
+                    $stock_anterior = (float)($stmt_stock->fetchColumn() ?: 0);
+                    $stock_nuevo = $stock_anterior - $cantidad_total;
+                    
+                    // Descontar stock
+                    $stmt_update = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
+                    $stmt_update->execute([$cantidad_total, $mat_id]);
+                    
+                    // Registrar movimiento
+                    $stmt_mov = $pdo->prepare("
+                        INSERT INTO ecommerce_inventario_movimientos 
+                        (tipo_item, item_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia, pedido_id, orden_produccion_id, usuario_id)
+                        VALUES ('producto', ?, 'salida', ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt_mov->execute([
+                        $mat_id,
+                        $cantidad_total,
+                        $stock_anterior,
+                        $stock_nuevo,
+                        'Orden de producción #' . $orden_id,
+                        $pedido_id,
+                        $orden_id,
+                        $_SESSION['user']['id'] ?? null
+                    ]);
+                }
+            }
+            
+            // Marcar materiales como descontados
+            $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
+            $stmt->execute([$orden_id]);
+            
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
         } elseif ($accion === 'actualizar_orden' && $orden_produccion) {
