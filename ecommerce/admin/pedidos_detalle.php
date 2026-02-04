@@ -1,5 +1,23 @@
 <?php
-require 'config.php';
+// Inicialización sin salida para permitir redirects
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Resolver ruta a config.php desde este archivo
+$base_path = dirname(dirname(dirname(dirname(__FILE__))));
+require $base_path . '/config.php';
+
+// Verificar que esté logueado
+if (!isset($_SESSION['user'])) {
+    header("Location: /ecommerce/admin/auth/login.php");
+    exit;
+}
+
+// Verificar que sea admin
+if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
+    die("Acceso denegado. Solo administradores pueden acceder.");
+}
 
 $pedido_id = $_GET['id'] ?? 0;
 

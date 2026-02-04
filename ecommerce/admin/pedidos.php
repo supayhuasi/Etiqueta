@@ -306,6 +306,7 @@ unset($pedido);
                             <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>">Ver detalle</a>
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="pedido_remito.php?id=<?= $pedido['id'] ?>" target="_blank">Remito</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
