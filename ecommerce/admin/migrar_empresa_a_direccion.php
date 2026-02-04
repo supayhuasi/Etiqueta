@@ -4,7 +4,7 @@
  * Ejecutar una sola vez para actualizar la estructura de las tablas
  */
 
-require 'config.php';
+require 'includes/header.php';
 
 echo "<h2>Migración: Cambiar 'empresa' por 'dirección'</h2>";
 
