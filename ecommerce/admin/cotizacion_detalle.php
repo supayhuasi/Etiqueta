@@ -84,13 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Compatibilidad con empresa/direccion
                 $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
 
-                if ($email === '') {
-                    throw new Exception('Email requerido para crear cliente del pedido');
+                if ($telefono === '') {
+                    throw new Exception('Teléfono requerido para crear cliente del pedido');
                 }
 
-                // Buscar si ya existe un cliente con ese email en ecommerce_clientes
-                $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ? LIMIT 1");
-                $stmt->execute([$email]);
+                // Buscar si ya existe un cliente con ese teléfono en ecommerce_clientes
+                $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
+                $stmt->execute([$telefono]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($row) {
@@ -99,17 +99,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Actualizar datos del cliente con la info más reciente
                     $stmt = $pdo->prepare("
                         UPDATE ecommerce_clientes 
-                        SET nombre = ?, telefono = ?
+                        SET nombre = ?, email = ?
                         WHERE id = ?
                     ");
-                    $stmt->execute([$nombre ?: $email, $telefono ?: null, $cliente_id]);
+                    $stmt->execute([$nombre ?: $telefono, $email ?: null, $cliente_id]);
                 } else {
                     // Cliente no existe, crear uno nuevo
                     $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_clientes (email, nombre, telefono)
+                        INSERT INTO ecommerce_clientes (telefono, nombre, email)
                         VALUES (?, ?, ?)
                     ");
-                    $stmt->execute([$email, $nombre ?: $email, $telefono ?: null]);
+                    $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: null]);
                     $cliente_id = (int)$pdo->lastInsertId();
                 }
 
