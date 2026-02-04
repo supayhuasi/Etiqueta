@@ -19,6 +19,9 @@ if ($_POST['ejecutar_migracion'] ?? false) {
                     atributo_id INT NOT NULL,
                     nombre VARCHAR(100) NOT NULL,
                     imagen VARCHAR(255),
+                    color VARCHAR(7),
+                    costo_adicional DECIMAL(10,2) DEFAULT 0,
+                    stock DECIMAL(10,2) DEFAULT 0,
                     orden INT DEFAULT 0,
                     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (atributo_id) REFERENCES ecommerce_producto_atributos(id) ON DELETE CASCADE,
@@ -75,7 +78,7 @@ if ($_POST['ejecutar_migracion'] ?? false) {
                 <div class="alert alert-info">
                     <h6>Cambios que realiza:</h6>
                     <ul class="mb-0">
-                        <li>Crea tabla <code>ecommerce_atributo_opciones</code> con campos: id, atributo_id, nombre, imagen, orden</li>
+                        <li>Crea tabla <code>ecommerce_atributo_opciones</code> con campos: id, atributo_id, nombre, imagen, color, costo_adicional, stock, orden</li>
                         <li>Crea directorio <code>/uploads/atributos/</code> para guardar imágenes</li>
                         <li>Establece relación con tabla <code>ecommerce_producto_atributos</code></li>
                     </ul>

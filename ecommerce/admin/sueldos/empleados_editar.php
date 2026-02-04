@@ -1,6 +1,5 @@
 <?php
-header('Location: /ecommerce/admin/sueldos/empleados_editar.php?id=' . urlencode($_GET['id'] ?? ''));
-exit;
+require '../includes/header.php';
 
 $empleado_id = $_GET['id'] ?? 0;
 
@@ -165,4 +164,4 @@ if (!$empleado) {
     </div>
 </div>
 
-<?php require 'includes/footer.php'; ?>
+<?php require '../includes/footer.php'; ?>

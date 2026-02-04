@@ -15,6 +15,8 @@ try {
                 nombre VARCHAR(100) NOT NULL,
                 imagen VARCHAR(255),
                 color VARCHAR(7),
+                costo_adicional DECIMAL(10,2) DEFAULT 0,
+                stock DECIMAL(10,2) DEFAULT 0,
                 orden INT DEFAULT 0,
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (atributo_id) REFERENCES ecommerce_producto_atributos(id) ON DELETE CASCADE,
@@ -43,6 +45,16 @@ try {
             echo "   ✓ Campo costo_adicional agregado\n";
         } else {
             echo "   ✓ Campo costo_adicional ya existe\n";
+        }
+
+        // Verificar si existe el campo stock
+        $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones LIKE 'stock'");
+        if ($stmt->rowCount() === 0) {
+            echo "   + Agregando campo stock...\n";
+            $pdo->exec("ALTER TABLE ecommerce_atributo_opciones ADD COLUMN stock DECIMAL(10,2) DEFAULT 0 AFTER costo_adicional");
+            echo "   ✓ Campo stock agregado\n";
+        } else {
+            echo "   ✓ Campo stock ya existe\n";
         }
     }
     

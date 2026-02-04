@@ -134,19 +134,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
                 $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
+                $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
                 $atributos_seleccionados[$attr['id']] = [
+                    'id' => $attr['id'],
                     'nombre' => $attr['nombre'],
                     'valor' => $valor,
-                    'costo_adicional' => $costo_opcion
+                    'costo_adicional' => $costo_opcion,
+                    'opcion_id' => $opcion_id !== null && $opcion_id !== '' ? (int)$opcion_id : null
                 ];
             } else {
                 $valor = $_POST['attr_' . $attr['id']] ?? '';
                 if (!empty($valor)) {
                     $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
+                    $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
                     $atributos_seleccionados[$attr['id']] = [
+                        'id' => $attr['id'],
                         'nombre' => $attr['nombre'],
                         'valor' => $valor,
-                        'costo_adicional' => $costo_opcion
+                        'costo_adicional' => $costo_opcion,
+                        'opcion_id' => $opcion_id !== null && $opcion_id !== '' ? (int)$opcion_id : null
                     ];
                 }
             }
@@ -410,14 +416,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         }
                                     </style>
                                     <div class="d-flex gap-2 flex-wrap mb-3">
-                                        <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
-                                               <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
-                                        <input type="hidden" id="attr_costo_<?= $attr['id'] ?>" name="attr_costo_<?= $attr['id'] ?>" value="0">
+                                             <input type="hidden" id="attr_<?= $attr['id'] ?>" name="attr_<?= $attr['id'] ?>" 
+                                                 <?= $attr['es_obligatorio'] ? 'required' : '' ?>>
+                                             <input type="hidden" id="attr_costo_<?= $attr['id'] ?>" name="attr_costo_<?= $attr['id'] ?>" value="0">
+                                             <input type="hidden" id="attr_opcion_id_<?= $attr['id'] ?>" name="attr_opcion_id_<?= $attr['id'] ?>" value="">
                                         <?php foreach ($opciones_attr as $opcion): ?>
                                             <div class="position-relative">
                                                 <label class="cursor-pointer position-relative" style="cursor: pointer;">
-                                                    <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
-                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>"
+                                                       <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
+                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>" data-opcion-id="<?= (int)$opcion['id'] ?>"
                                                            onchange="actualizarPrecio()">
                                                     <div class="attr-option position-relative" id="option_<?= $opcion['id'] ?>" style="cursor: pointer;">
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
@@ -460,6 +467,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 const costoHidden = document.getElementById('attr_costo_<?= $attr['id'] ?>');
                                                 if (costoHidden) {
                                                     costoHidden.value = this.dataset.costo || '0';
+                                                }
+                                                const opcionHidden = document.getElementById('attr_opcion_id_<?= $attr['id'] ?>');
+                                                if (opcionHidden) {
+                                                    opcionHidden.value = this.dataset.opcionId || '';
                                                 }
                                             });
                                         });

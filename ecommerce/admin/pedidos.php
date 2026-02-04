@@ -80,6 +80,8 @@ if ($_POST['accion'] === 'cambiar_estado') {
                 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 $materiales = [];
+                $materiales_color = [];
+                $color_cache = [];
                 foreach ($items as $it) {
                     if (empty($it['usa_receta'])) {
                         continue;
@@ -94,6 +96,17 @@ if ($_POST['accion'] === 'cambiar_estado') {
                     $producto_id = (int)$it['producto_id'];
                     $ancho_cm = floatval($it['ancho_cm'] ?? 0);
                     $alto_cm = floatval($it['alto_cm'] ?? 0);
+
+                    // Buscar atributo de color seleccionado (si existe)
+                    $color_val = null;
+                    if (is_array($atributos_seleccionados)) {
+                        foreach ($atributos_seleccionados as $attr) {
+                            if (!empty($attr['nombre']) && stripos($attr['nombre'], 'color') !== false) {
+                                $color_val = $attr['valor'] ?? null;
+                                break;
+                            }
+                        }
+                    }
                     
                     // Obtener receta con condiciones evaluadas
                     $recetas = obtener_receta_con_condiciones(
@@ -129,10 +142,51 @@ if ($_POST['accion'] === 'cambiar_estado') {
                         $cantidad_total = $cantidad_total * (int)$it['cantidad'];
 
                         $mat_id = (int)$r['material_producto_id'];
-                        if (!isset($materiales[$mat_id])) {
-                            $materiales[$mat_id] = 0;
+
+                        // Si hay color seleccionado, intentar descontar stock por opción de color del material
+                        $opcion_id = null;
+                        if (!empty($color_val)) {
+                            $cache_key = $mat_id . '|' . strtolower(trim($color_val));
+                            if (array_key_exists($cache_key, $color_cache)) {
+                                $opcion_id = $color_cache[$cache_key];
+                            } else {
+                                $stmtOpt = $pdo->prepare("
+                                    SELECT o.id
+                                    FROM ecommerce_atributo_opciones o
+                                    JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+                                    WHERE a.producto_id = ?
+                                      AND a.tipo = 'select'
+                                      AND LOWER(a.nombre) LIKE '%color%'
+                                      AND (LOWER(o.nombre) = LOWER(?) OR o.color = ?)
+                                    LIMIT 1
+                                ");
+                                $stmtOpt->execute([$mat_id, $color_val, $color_val]);
+                                $opcion_id = $stmtOpt->fetchColumn() ?: null;
+                                $color_cache[$cache_key] = $opcion_id;
+                            }
                         }
-                        $materiales[$mat_id] += $cantidad_total;
+
+                        if (!empty($opcion_id)) {
+                            if (!isset($materiales_color[$mat_id])) {
+                                $materiales_color[$mat_id] = [];
+                            }
+                            if (!isset($materiales_color[$mat_id][$opcion_id])) {
+                                $materiales_color[$mat_id][$opcion_id] = 0;
+                            }
+                            $materiales_color[$mat_id][$opcion_id] += $cantidad_total;
+                        } else {
+                            if (!isset($materiales[$mat_id])) {
+                                $materiales[$mat_id] = 0;
+                            }
+                            $materiales[$mat_id] += $cantidad_total;
+                        }
+                    }
+                }
+
+                foreach ($materiales_color as $mat_id => $opciones) {
+                    foreach ($opciones as $opcion_id => $qty) {
+                        $stmt = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock - ? WHERE id = ?");
+                        $stmt->execute([$qty, $opcion_id]);
                     }
                 }
 

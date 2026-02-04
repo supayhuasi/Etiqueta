@@ -1,17 +1,13 @@
 <?php
-header('Location: /ecommerce/admin/sueldos/empleados_editar.php?id=' . urlencode($_GET['id'] ?? ''));
-exit;
-
-$empleado_id = $_GET['id'] ?? 0;
+require '../includes/header.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $stmt = $pdo->prepare("
-            UPDATE empleados 
-            SET nombre = ?, email = ?, documento = ?, tipo_documento = ?, telefono = ?,
-                direccion = ?, ciudad = ?, provincia = ?, codigo_postal = ?,
-                puesto = ?, departamento = ?, fecha_ingreso = ?, sueldo_base = ?
-            WHERE id = ?
+            INSERT INTO empleados (nombre, email, documento, tipo_documento, telefono, direccion, 
+                                   ciudad, provincia, codigo_postal, puesto, departamento, 
+                                   fecha_ingreso, sueldo_base, activo, fecha_creacion) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
         ");
         $stmt->execute([
             $_POST['nombre'],
@@ -26,31 +22,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['puesto'] ?? null,
             $_POST['departamento'] ?? null,
             $_POST['fecha_ingreso'] ?? null,
-            floatval($_POST['sueldo_base']),
-            $empleado_id
+            floatval($_POST['sueldo_base'])
         ]);
         
-        header("Location: sueldos.php?success=Empleado actualizado");
+        header("Location: sueldos.php?success=Empleado creado");
         exit;
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
     }
-}
-
-// Obtener datos del empleado
-$stmt = $pdo->prepare("SELECT * FROM empleados WHERE id = ?");
-$stmt->execute([$empleado_id]);
-$empleado = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$empleado) {
-    die("<div class='container mt-4'><div class='alert alert-danger'>Empleado no encontrado</div></div>");
 }
 ?>
 
 <div class="container mt-4">
     <div class="row">
         <div class="col-md-8 offset-md-2">
-            <h2>Editar Empleado</h2>
+            <h2>Crear Nuevo Empleado</h2>
             
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><?= $error ?></div>
@@ -66,14 +52,14 @@ if (!$empleado) {
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Nombre Completo *</label>
-                                <input type="text" class="form-control" name="nombre" value="<?= htmlspecialchars($empleado['nombre']) ?>" required>
+                                <input type="text" class="form-control" name="nombre" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Tipo de Documento</label>
                                 <select class="form-select" name="tipo_documento">
-                                    <option value="DNI" <?= ($empleado['tipo_documento'] ?? 'DNI') === 'DNI' ? 'selected' : '' ?>>DNI</option>
-                                    <option value="CUIT" <?= ($empleado['tipo_documento'] ?? 'DNI') === 'CUIT' ? 'selected' : '' ?>>CUIT</option>
-                                    <option value="Pasaporte" <?= ($empleado['tipo_documento'] ?? 'DNI') === 'Pasaporte' ? 'selected' : '' ?>>Pasaporte</option>
+                                    <option value="DNI">DNI</option>
+                                    <option value="CUIT">CUIT</option>
+                                    <option value="Pasaporte">Pasaporte</option>
                                 </select>
                             </div>
                         </div>
@@ -81,18 +67,18 @@ if (!$empleado) {
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Número de Documento</label>
-                                <input type="text" class="form-control" name="documento" value="<?= htmlspecialchars($empleado['documento'] ?? '') ?>">
+                                <input type="text" class="form-control" name="documento" placeholder="Ej: 12345678">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Email *</label>
-                                <input type="email" class="form-control" name="email" value="<?= htmlspecialchars($empleado['email']) ?>" required>
+                                <input type="email" class="form-control" name="email" required>
                             </div>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Teléfono</label>
-                                <input type="tel" class="form-control" name="telefono" value="<?= htmlspecialchars($empleado['telefono'] ?? '') ?>">
+                                <input type="tel" class="form-control" name="telefono" placeholder="Ej: +54 9 3624 123456">
                             </div>
                         </div>
                     </div>
@@ -106,21 +92,21 @@ if (!$empleado) {
                     <div class="card-body">
                         <div class="mb-3">
                             <label class="form-label">Dirección</label>
-                            <input type="text" class="form-control" name="direccion" value="<?= htmlspecialchars($empleado['direccion'] ?? '') ?>">
+                            <input type="text" class="form-control" name="direccion" placeholder="Calle y número">
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Ciudad</label>
-                                <input type="text" class="form-control" name="ciudad" value="<?= htmlspecialchars($empleado['ciudad'] ?? '') ?>">
+                                <input type="text" class="form-control" name="ciudad">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label class="form-label">Provincia</label>
-                                <input type="text" class="form-control" name="provincia" value="<?= htmlspecialchars($empleado['provincia'] ?? '') ?>">
+                                <input type="text" class="form-control" name="provincia">
                             </div>
                             <div class="col-md-2 mb-3">
                                 <label class="form-label">C.P.</label>
-                                <input type="text" class="form-control" name="codigo_postal" value="<?= htmlspecialchars($empleado['codigo_postal'] ?? '') ?>">
+                                <input type="text" class="form-control" name="codigo_postal">
                             </div>
                         </div>
                     </div>
@@ -135,29 +121,29 @@ if (!$empleado) {
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Puesto</label>
-                                <input type="text" class="form-control" name="puesto" value="<?= htmlspecialchars($empleado['puesto'] ?? '') ?>">
+                                <input type="text" class="form-control" name="puesto" placeholder="Ej: Vendedor">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Departamento</label>
-                                <input type="text" class="form-control" name="departamento" value="<?= htmlspecialchars($empleado['departamento'] ?? '') ?>">
+                                <input type="text" class="form-control" name="departamento" placeholder="Ej: Ventas">
                             </div>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Fecha de Ingreso</label>
-                                <input type="date" class="form-control" name="fecha_ingreso" value="<?= $empleado['fecha_ingreso'] ?? '' ?>">
+                                <input type="date" class="form-control" name="fecha_ingreso">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Sueldo Base ($) *</label>
-                                <input type="number" class="form-control" name="sueldo_base" step="0.01" value="<?= $empleado['sueldo_base'] ?>" required>
+                                <input type="number" class="form-control" name="sueldo_base" step="0.01" required>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                    <button type="submit" class="btn btn-primary">Guardar Empleado</button>
                     <a href="sueldos.php" class="btn btn-secondary">Cancelar</a>
                 </div>
             </form>
@@ -165,4 +151,4 @@ if (!$empleado) {
     </div>
 </div>
 
-<?php require 'includes/footer.php'; ?>
+<?php require '../includes/footer.php'; ?>

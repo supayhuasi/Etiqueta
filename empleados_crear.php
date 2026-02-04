@@ -1,6 +1,6 @@
 <?php
-require 'config.php';
-require 'includes/header.php';
+header('Location: /ecommerce/admin/sueldos/empleados_crear.php');
+exit;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {

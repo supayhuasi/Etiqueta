@@ -207,6 +207,7 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
         $color = $_POST['opcion_color'] ?? null;
         $orden = intval($_POST['opcion_orden'] ?? 0);
         $costo_opcion = floatval($_POST['opcion_costo'] ?? 0);
+        $stock_opcion = floatval($_POST['opcion_stock'] ?? 0);
         
         // Validar color hexadecimal si se proporciona
         if ($color && !preg_match('/^#[0-9A-F]{6}$/i', $color)) {
@@ -243,10 +244,10 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
                 // Actualizar opción existente
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_atributo_opciones 
-                    SET nombre = ?, color = ?, orden = ?, costo_adicional = ?
+                    SET nombre = ?, color = ?, orden = ?, costo_adicional = ?, stock = ?
                     WHERE id = ? AND atributo_id = ?
                 ");
-                $stmt->execute([$nombre, $color, $orden, $costo_opcion, $opcion_id, $atributo_id]);
+                $stmt->execute([$nombre, $color, $orden, $costo_opcion, $stock_opcion, $opcion_id, $atributo_id]);
                 
                 // Si hay nueva imagen, actualizar
                 if ($imagen) {
@@ -260,10 +261,10 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
             } else {
                 // Nueva opción
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, costo_adicional, orden)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, costo_adicional, stock, orden)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $costo_opcion, $orden]);
+                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $costo_opcion, $stock_opcion, $orden]);
             }
             
             // Recargar opciones
@@ -503,6 +504,12 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                    value="<?= $opcion_editar['costo_adicional'] ?? 0 ?>">
                             <small class="text-muted">Se suma al precio total cuando se elige esta opción</small>
                         </div>
+                        <div class="mb-3">
+                            <label for="opcion_stock" class="form-label">Stock (por color/opción)</label>
+                            <input type="number" step="0.01" class="form-control" id="opcion_stock" name="opcion_stock" 
+                                   value="<?= htmlspecialchars($opcion_editar['stock'] ?? 0) ?>">
+                            <small class="text-muted">Stock específico para esta opción</small>
+                        </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <?= $opcion_editar ? '💾 Actualizar Opción' : '➕ Agregar Opción' ?>
                         </button>
@@ -550,6 +557,7 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                                 </div>
                                             <?php endif; ?>
                                             <small class="text-muted d-block">Orden: <?= $opcion['orden'] ?></small>
+                                            <small class="text-muted d-block">Stock: <?= number_format((float)($opcion['stock'] ?? 0), 2, ',', '.') ?></small>
                                         </div>
                                         <div class="card-footer bg-light">
                                             <div class="d-grid gap-2">
