@@ -293,7 +293,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </td>
                         <td>
                             <?php if ($item['alto_cm'] && $item['ancho_cm']): ?>
-                                <small><?= $item['alto_cm'] ?>cm × <?= $item['ancho_cm'] ?>cm</small>
+                                <small><?= $item['ancho_cm'] ?>cm × <?= $item['alto_cm'] ?>cm</small>
                             <?php else: ?>
                                 <small class="text-muted">-</small>
                             <?php endif; ?>

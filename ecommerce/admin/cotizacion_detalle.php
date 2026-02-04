@@ -141,6 +141,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 header("Location: pedidos_detalle.php?id=" . $pedido_id . "&mensaje=convertida");
                 exit;
+                
+        } elseif ($accion === 'cambiar_estado') {
+            $nuevo_estado = $_POST['estado'];
+            $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = ? WHERE id = ?");
+            $stmt->execute([$nuevo_estado, $id]);
+            
+            if ($nuevo_estado === 'enviada') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET fecha_envio = NOW() WHERE id = ?");
+                $stmt->execute([$id]);
+            }
+            
             $mensaje = "Estado actualizado";
             
             // Recargar

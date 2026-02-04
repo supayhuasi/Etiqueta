@@ -131,7 +131,7 @@ $pdf->SetFont('Arial', '', 9);
 foreach ($items as $item) {
     $medidas = '';
     if (!empty($item['ancho_cm']) || !empty($item['alto_cm'])) {
-        $medidas = ($item['alto_cm'] ?? '-') . 'x' . ($item['ancho_cm'] ?? '-') . ' cm';
+        $medidas = ($item['ancho_cm'] ?? '-') . 'x' . ($item['alto_cm'] ?? '-') . ' cm';
     }
 
     $pdf->Cell(90, 6, utf8_decode(substr($item['producto_nombre'] ?? 'Producto', 0, 45)), 1);
