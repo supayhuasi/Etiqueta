@@ -274,14 +274,14 @@ unset($pedido);
     <div class="alert alert-info">No hay pedidos</div>
 <?php else: ?>
     <div class="table-responsive">
-        <table class="table table-hover">
-            <table class="table table-hover align-middle">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
                 <tr>
                     <th>Número</th>
                     <th>Cliente</th>
                     <th>Fecha</th>
-                        <th>Fecha</th>
-                        <th>Importe</th>
+                    <th>Importe</th>
+                    <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -290,127 +290,24 @@ unset($pedido);
                     <tr>
                         <td><strong><?= htmlspecialchars($pedido['numero_pedido']) ?></strong></td>
                         <td>
-                            <div><?= htmlspecialchars($pedido['cliente_nombre']) ?></div>
-                                <div><?= htmlspecialchars($pedido['cliente_nombre'] ?? 'Sin cliente') ?></div>
-                                <?php if (!empty($pedido['cliente_email'])): ?>
-                                    <small class="text-muted"><?= htmlspecialchars($pedido['cliente_email']) ?></small>
-                                <?php endif; ?>
+                            <div><?= htmlspecialchars($pedido['cliente_nombre'] ?? 'Sin cliente') ?></div>
+                            <?php if (!empty($pedido['cliente_email'])): ?>
+                                <small class="text-muted"><?= htmlspecialchars($pedido['cliente_email']) ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?></td>
+                        <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                         <td>
-                            <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                             <span class="badge bg-<?= $colores[$pedido['estado']] ?>">
                                 <?= ucfirst($pedido['estado']) ?>
                             </span>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detalle<?= $pedido['id'] ?>">Ver Detalle</button>
-                                <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>">Ver detalle</a>
-                                <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
-                                <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
-                                <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                    Cambiar Estado
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <?php foreach ($estados as $est): ?>
-                                        <?php if ($est !== $pedido['estado']): ?>
-                                            <li>
-                                                <form method="POST" style="display: inline;">
-                                                    <input type="hidden" name="accion" value="cambiar_estado">
-                                                    <input type="hidden" name="pedido_id" value="<?= $pedido['id'] ?>">
-                                                    <input type="hidden" name="nuevo_estado" value="<?= $est ?>">
-                                                    <button type="submit" class="dropdown-item">
-                                                        → <?= ucfirst($est) ?>
-                                                    </button>
-                                                </form>
-                                            </li>
-                                        <?php endif; ?>
-                                    <?php endforeach; ?>
-                                </ul>
-                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>">Ver detalle</a>
+                            <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
+                            <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
                         </td>
                     </tr>
-
-                    <!-- Modal Detalle -->
-                    <div class="modal fade" id="detalle<?= $pedido['id'] ?>" tabindex="-1">
-                        <div class="modal-dialog modal-lg">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Detalle - <?= htmlspecialchars($pedido['numero_pedido']) ?></h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div class="row mb-3">
-                                        <div class="col-md-6">
-                                            <h6>Datos del Cliente</h6>
-                                            <p><strong><?= htmlspecialchars($pedido['cliente_nombre']) ?></strong><br>
-                                            <?= htmlspecialchars($pedido['cliente_email']) ?><br>
-                                            <?php if (!empty($pedido['cliente_telefono'])): ?>
-                                                <?= htmlspecialchars($pedido['cliente_telefono']) ?>
-                                            <?php endif; ?></p>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <h6>Datos del Pedido</h6>
-                                            <p><strong>Fecha:</strong> <?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?><br>
-                                            <strong>Método de Pago:</strong> <?= ucfirst($pedido['metodo_pago']) ?><br>
-                                            <strong>Estado:</strong> <span class="badge bg-<?= $colores[$pedido['estado']] ?>"><?= ucfirst($pedido['estado']) ?></span></p>
-                                        </div>
-                                    </div>
-
-                                    <h6>Items</h6>
-                                    <div class="table-responsive mb-3">
-                                        <table class="table table-sm">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>Producto</th>
-                                                    <th>Medidas</th>
-                                                    <th>Precio Unit.</th>
-                                                    <th>Cantidad</th>
-                                                    <th>Subtotal</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php
-                                                $stmt = $pdo->prepare("
-                                                    SELECT pi.*, p.nombre as producto_nombre 
-                                                    FROM ecommerce_pedido_items pi
-                                                    JOIN ecommerce_productos p ON pi.producto_id = p.id
-                                                    WHERE pi.pedido_id = ?
-                                                ");
-                                                $stmt->execute([$pedido['id']]);
-                                                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                                                foreach ($items as $item):
-                                                    $medidas = !empty($item['medidas']) ? json_decode($item['medidas'], true) : null;
-                                                ?>
-                                                    <tr>
-                                                        <td><?= htmlspecialchars($item['producto_nombre']) ?></td>
-                                                        <td>
-                                                            <?php if ($medidas): ?>
-                                                                <?= $medidas['alto'] ?? '' ?> × <?= $medidas['ancho'] ?? '' ?> cm
-                                                            <?php else: ?>
-                                                                -
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>$<?= number_format($item['precio_unitario'], 2) ?></td>
-                                                        <td><?= $item['cantidad'] ?></td>
-                                                        <td>$<?= number_format($item['precio_unitario'] * $item['cantidad'], 2) ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    <div class="text-end">
-                                        <h6>Subtotal: $<?= number_format($pedido['subtotal'], 2) ?></h6>
-                                        <h6>Envío: $<?= number_format($pedido['costo_envio'], 2) ?></h6>
-                                        <h5>Total: <strong>$<?= number_format($pedido['total'], 2) ?></strong></h5>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 <?php endforeach; ?>
             </tbody>
         </table>
