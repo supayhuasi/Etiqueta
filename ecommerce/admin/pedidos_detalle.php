@@ -87,6 +87,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
+        } elseif ($accion === 'cancelar_pedido') {
+            if ($pedido['estado'] === 'cancelado') {
+                throw new Exception('El pedido ya está cancelado');
+            }
+            $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'cancelado' WHERE id = ?");
+            $stmt->execute([$pedido_id]);
+            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            exit;
         }
     } catch (Exception $e) {
         $error = "Error al procesar la acción: " . $e->getMessage();
@@ -134,8 +142,16 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Datos del pedido -->
     <div class="col-md-6 mb-4">
         <div class="card">
-            <div class="card-header bg-secondary text-white">
-                <h5>📋 Datos del Pedido</h5>
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">📋 Datos del Pedido</h5>
+                <?php if ($pedido['estado'] !== 'cancelado'): ?>
+                    <form method="POST" style="display: inline;" onsubmit="return confirm('¿Cancelar este pedido?')">
+                        <input type="hidden" name="accion" value="cancelar_pedido">
+                        <button type="submit" class="btn btn-sm btn-danger">Cancelar Pedido</button>
+                    </form>
+                <?php else: ?>
+                    <span class="badge bg-danger">Cancelado</span>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <p><strong>Número:</strong> <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
