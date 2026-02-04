@@ -2,39 +2,6 @@
 require 'includes/header.php';
 require '../includes/funciones_recetas.php';
 
-$estado_filter = $_GET['estado'] ?? '';
-$fecha_desde = $_GET['fecha_desde'] ?? '';
-$fecha_hasta = $_GET['fecha_hasta'] ?? '';
-
-$query = "
-    SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email 
-    FROM ecommerce_pedidos p
-    JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    WHERE 1=1
-";
-$params = [];
-
-if (!empty($estado_filter)) {
-    $query .= " AND p.estado = ?";
-    $params[] = $estado_filter;
-}
-
-if (!empty($fecha_desde)) {
-    $query .= " AND DATE(p.fecha_pedido) >= ?";
-    $params[] = $fecha_desde;
-}
-
-if (!empty($fecha_hasta)) {
-    $query .= " AND DATE(p.fecha_pedido) <= ?";
-    $params[] = $fecha_hasta;
-}
-
-$query .= " ORDER BY p.fecha_pedido DESC";
-
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 $estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado'];
 $colores = [
     'pendiente' => 'warning',
@@ -45,8 +12,8 @@ $colores = [
     'cancelado' => 'danger'
 ];
 
-// Procesar cambio de estado
-if ($_POST['accion'] === 'cambiar_estado') {
+// Procesar cambio de estado ANTES de consultar pedidos
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'cambiar_estado') {
     try {
         $pedido_id = intval($_POST['pedido_id']);
         $nuevo_estado = $_POST['nuevo_estado'];
@@ -205,6 +172,40 @@ if ($_POST['accion'] === 'cambiar_estado') {
         exit;
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
+
+    // Consultar pedidos DESPUÉS de procesar POST
+    $estado_filter = $_GET['estado'] ?? '';
+    $fecha_desde = $_GET['fecha_desde'] ?? '';
+    $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+
+    $query = "
+        SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email 
+        FROM ecommerce_pedidos p
+        JOIN ecommerce_clientes c ON p.cliente_id = c.id
+        WHERE 1=1
+    ";
+    $params = [];
+
+    if (!empty($estado_filter)) {
+        $query .= " AND p.estado = ?";
+        $params[] = $estado_filter;
+    }
+
+    if (!empty($fecha_desde)) {
+        $query .= " AND DATE(p.fecha_pedido) >= ?";
+        $params[] = $fecha_desde;
+    }
+
+    if (!empty($fecha_hasta)) {
+        $query .= " AND DATE(p.fecha_pedido) <= ?";
+        $params[] = $fecha_hasta;
+    }
+
+    $query .= " ORDER BY p.fecha_pedido DESC";
+
+    $stmt = $pdo->prepare($query);
+    $stmt->execute($params);
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 ?>
