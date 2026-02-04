@@ -156,7 +156,99 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <div class="row mt-4">
     <div class="col-md-12">
-        <h3 class="mb-3">📱 Gestión de Contenido</h3>
+        <h3 class="mb-3">� Recursos Humanos</h3>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>💰 Sueldos</h5>
+                <p class="text-muted">Gestión de nómina</p>
+                <a href="sueldos/sueldos.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>📋 Plantillas</h5>
+                <p class="text-muted">Plantillas de sueldo</p>
+                <a href="sueldos/plantillas.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>📌 Asistencias</h5>
+                <p class="text-muted">Registro de asistencias</p>
+                <a href="asistencias/asistencias.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>⏰ Horarios</h5>
+                <p class="text-muted">Gestionar horarios</p>
+                <a href="asistencias/asistencias_horarios.php" class="btn btn-primary btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h3 class="mb-3">💳 Finanzas</h3>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>🏦 Cheques</h5>
+                <p class="text-muted">Gestión de cheques</p>
+                <a href="cheques/cheques.php" class="btn btn-success btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>💸 Gastos</h5>
+                <p class="text-muted">Registro de gastos</p>
+                <a href="gastos/gastos.php" class="btn btn-success btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>📊 Tipos Gastos</h5>
+                <p class="text-muted">Categorías de gastos</p>
+                <a href="gastos/tipos_gastos.php" class="btn btn-success btn-sm w-100">Administrar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5>📜 Documentación</h5>
+                <p class="text-muted">Guías y referencias</p>
+                <a href="MODULOS_MIGRATOS.md" class="btn btn-info btn-sm w-100" target="_blank">Ver</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h3 class="mb-3">�📱 Gestión de Contenido</h3>
     </div>
     
     <div class="col-md-3">

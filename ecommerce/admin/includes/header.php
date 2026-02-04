@@ -105,18 +105,23 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <a href="compras.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['compras.php', 'compras_crear.php', 'compras_detalle.php']) ? 'active' : '' ?>">🧾 Compras</a>
             <a href="inventario_ajustes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'inventario_ajustes.php' ? 'active' : '' ?>">⚙️ Ajustes de Inventario</a>
             <hr class="bg-white">
-            <p class="text-white-50 small mb-3">ADMINISTRACIÓN</p>
+            <p class="text-white-50 small mb-3">RECURSOS HUMANOS</p>
+            <a href="sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php', 'sueldo_editar.php', 'sueldo_conceptos.php', 'sueldo_recibo.php']) ? 'active' : '' ?>">💰 Sueldos</a>
+            <a href="sueldos/plantillas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['plantillas.php', 'plantillas_crear.php', 'plantillas_editar.php', 'plantillas_items.php']) ? 'active' : '' ?>">📋 Plantillas</a>
+            <a href="asistencias/asistencias.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['asistencias.php', 'asistencias_crear.php', 'asistencias_editar.php', 'asistencias_reporte.php', 'asistencias_horarios.php']) ? 'active' : '' ?>">📌 Asistencias</a>
+            <hr class="bg-white">
+            <p class="text-white-50 small mb-3">FINANZAS</p>
+            <a href="cheques/cheques.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cheques.php', 'cheques_crear.php', 'cheques_editar.php', 'cheques_pagar.php']) ? 'active' : '' ?>">🏦 Cheques</a>
+            <a href="gastos/gastos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['gastos.php', 'gastos_crear.php', 'gastos_editar.php', 'tipos_gastos.php']) ? 'active' : '' ?>">💸 Gastos</a>
+            <hr class="bg-white">
+            <p class="text-white-50 small mb-3">SISTEMA</p>
             <div class="ms-2">
-                <a href="../../index.php">🏠 Inicio</a>
+                <a href="../../index.php">🏠 Inicio Principal</a>
                 <a href="../../scan.php">🔍 Escaneo</a>
                 <a href="../../dashboard.php">📊 Dashboard</a>
                 <a href="../../usuarios_lista.php">👥 Usuarios - Listar</a>
                 <a href="../../usuarios_crear.php">➕ Usuarios - Crear</a>
                 <a href="../../roles_usuarios.php">🛡️ Usuarios - Roles</a>
-                <a href="../../sueldos.php">💰 Sueldos</a>
-                <a href="../../cheques.php">🏦 Cheques</a>
-                <a href="../../gastos.php">💸 Gastos</a>
-                <a href="../../asistencias.php">📋 Asistencias</a>
             </div>
             <hr class="bg-white">
             <a href="../index.php" class="mt-3">🔗 Ir a Tienda</a>

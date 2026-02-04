@@ -43,19 +43,19 @@ if (!isset($_SESSION)) {
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="sueldos.php">💰 Sueldos</a>
+          <a class="nav-link" href="ecommerce/admin/sueldos/sueldos.php">💰 Sueldos</a>
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="cheques.php">🏦 Cheques</a>
+          <a class="nav-link" href="ecommerce/admin/cheques/cheques.php">🏦 Cheques</a>
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="gastos.php">💸 Gastos</a>
+          <a class="nav-link" href="ecommerce/admin/gastos/gastos.php">💸 Gastos</a>
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="asistencias.php">📋 Asistencias</a>
+          <a class="nav-link" href="ecommerce/admin/asistencias/asistencias.php">📋 Asistencias</a>
         </li>
         <?php endif; ?>
 
