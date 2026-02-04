@@ -172,42 +172,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
         exit;
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
-
-    // Consultar pedidos DESPUÉS de procesar POST
-    $estado_filter = $_GET['estado'] ?? '';
-    $fecha_desde = $_GET['fecha_desde'] ?? '';
-    $fecha_hasta = $_GET['fecha_hasta'] ?? '';
-
-    $query = "
-        SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email 
-        FROM ecommerce_pedidos p
-        JOIN ecommerce_clientes c ON p.cliente_id = c.id
-        WHERE 1=1
-    ";
-    $params = [];
-
-    if (!empty($estado_filter)) {
-        $query .= " AND p.estado = ?";
-        $params[] = $estado_filter;
-    }
-
-    if (!empty($fecha_desde)) {
-        $query .= " AND DATE(p.fecha_pedido) >= ?";
-        $params[] = $fecha_desde;
-    }
-
-    if (!empty($fecha_hasta)) {
-        $query .= " AND DATE(p.fecha_pedido) <= ?";
-        $params[] = $fecha_hasta;
-    }
-
-    $query .= " ORDER BY p.fecha_pedido DESC";
-
-    $stmt = $pdo->prepare($query);
-    $stmt->execute($params);
-    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
+
+// Consultar pedidos DESPUÉS de procesar POST
+$estado_filter = $_GET['estado'] ?? '';
+$fecha_desde = $_GET['fecha_desde'] ?? '';
+$fecha_hasta = $_GET['fecha_hasta'] ?? '';
+
+$query = "
+    SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email 
+    FROM ecommerce_pedidos p
+    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    WHERE 1=1
+";
+$params = [];
+
+if (!empty($estado_filter)) {
+    $query .= " AND p.estado = ?";
+    $params[] = $estado_filter;
+}
+
+if (!empty($fecha_desde)) {
+    $query .= " AND DATE(p.fecha_pedido) >= ?";
+    $params[] = $fecha_desde;
+}
+
+if (!empty($fecha_hasta)) {
+    $query .= " AND DATE(p.fecha_pedido) <= ?";
+    $params[] = $fecha_hasta;
+}
+
+$query .= " ORDER BY p.fecha_pedido DESC";
+
+$stmt = $pdo->prepare($query);
+$stmt->execute($params);
+$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
