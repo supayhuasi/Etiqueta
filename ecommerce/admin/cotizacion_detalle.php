@@ -102,14 +102,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         SET nombre = ?, email = ?
                         WHERE id = ?
                     ");
-                    $stmt->execute([$nombre ?: $telefono, $email ?: null, $cliente_id]);
+                    $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $cliente_id]);
                 } else {
                     // Cliente no existe, crear uno nuevo
                     $stmt = $pdo->prepare("
                         INSERT INTO ecommerce_clientes (telefono, nombre, email)
                         VALUES (?, ?, ?)
                     ");
-                    $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: null]);
+                    $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local')]);
                     $cliente_id = (int)$pdo->lastInsertId();
                 }
 
