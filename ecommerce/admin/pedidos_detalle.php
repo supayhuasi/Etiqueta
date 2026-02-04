@@ -1,5 +1,5 @@
 <?php
-require 'includes/header.php';
+require 'config.php';
 
 $pedido_id = $_GET['id'] ?? 0;
 
@@ -32,7 +32,7 @@ $stmt->execute([$pedido_id]);
 $total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
 $saldo = (float)$pedido['total'] - $total_pagado;
 
-// Procesar acciones de producción y pagos
+// Procesar acciones de producción y pagos ANTES de incluir header.php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     try {
@@ -90,6 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = $e->getMessage();
     }
 }
+
+// Incluir header DESPUÉS de procesar POST
+require 'includes/header.php';
 
 // Obtener items del pedido
 $stmt = $pdo->prepare("
