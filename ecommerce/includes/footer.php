@@ -30,6 +30,18 @@
   </div>
 </footer>
 
+<?php
+$wa_num_clean = preg_replace('/\D+/', '', $whatsapp_num ?? '');
+$wa_msg_final = trim($whatsapp_msg ?? '') !== '' ? $whatsapp_msg : 'Hola, quiero hacer una consulta';
+$wa_url = $wa_num_clean ? 'https://wa.me/' . $wa_num_clean . '?text=' . urlencode($wa_msg_final) : '';
+?>
+
+<?php if (!empty($wa_url)): ?>
+  <a href="<?= htmlspecialchars($wa_url) ?>" class="whatsapp-float" target="_blank" rel="noopener" aria-label="WhatsApp">
+    💬 WhatsApp
+  </a>
+<?php endif; ?>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@ if (!isset($pdo)) {
 
 $empresa_menu = null;
 try {
-  $stmt = $pdo->query("SELECT nombre, logo FROM ecommerce_empresa LIMIT 1");
+  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales FROM ecommerce_empresa LIMIT 1");
   $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
   $empresa_menu = null;
@@ -22,6 +22,10 @@ if (!empty($empresa_menu['logo'])) {
     $logo_menu_src = 'uploads/' . $empresa_menu['logo'];
   }
 }
+
+$redes_menu = json_decode($empresa_menu['redes_sociales'] ?? '{}', true) ?? [];
+$whatsapp_num = $redes_menu['whatsapp'] ?? '';
+$whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -31,6 +35,28 @@ if (!empty($empresa_menu['logo'])) {
     <title>Tucu Roller - Tienda Online</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
+    <style>
+      .whatsapp-float {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        background: #25D366;
+        color: #fff;
+        padding: 12px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        z-index: 9999;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .whatsapp-float:hover {
+        background: #1ebe5d;
+        color: #fff;
+      }
+    </style>
 </head>
 <body>
 

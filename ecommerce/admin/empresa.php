@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $facebook = $_POST['facebook'] ?? '';
     $instagram = $_POST['instagram'] ?? '';
     $whatsapp = $_POST['whatsapp'] ?? '';
+    $whatsapp_mensaje = $_POST['whatsapp_mensaje'] ?? '';
     $cuit = $_POST['cuit'] ?? '';
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $iibb = $_POST['iibb'] ?? '';
@@ -59,7 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $redes_sociales = json_encode([
                     'facebook' => $facebook,
                     'instagram' => $instagram,
-                    'whatsapp' => $whatsapp
+                    'whatsapp' => $whatsapp,
+                    'whatsapp_mensaje' => $whatsapp_mensaje
                 ]);
                 
                 $stmt = $pdo->prepare("
@@ -228,6 +230,11 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     <div class="mb-3">
                         <label for="whatsapp" class="form-label">WhatsApp</label>
                         <input type="tel" class="form-control" id="whatsapp" name="whatsapp" placeholder="Ej: +54 9 3624 123456" value="<?= htmlspecialchars($redes['whatsapp'] ?? '') ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="whatsapp_mensaje" class="form-label">Mensaje inicial WhatsApp</label>
+                        <input type="text" class="form-control" id="whatsapp_mensaje" name="whatsapp_mensaje" placeholder="Ej: Hola, quiero consultar por..." value="<?= htmlspecialchars($redes['whatsapp_mensaje'] ?? '') ?>">
+                        <small class="text-muted">Se usa como mensaje pre-cargado al abrir WhatsApp.</small>
                     </div>
                 </div>
             </div>
