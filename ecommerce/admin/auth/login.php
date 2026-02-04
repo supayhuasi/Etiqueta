@@ -21,7 +21,7 @@ $logo_src = null;
 if (!empty($empresa['logo'])) {
   $logo_path = $base_path . '/ecommerce/uploads/' . $empresa['logo'];
   if (file_exists($logo_path)) {
-    $logo_src = '../../ecommerce/uploads/' . $empresa['logo'];
+    $logo_src = '../../uploads/' . $empresa['logo'];
   }
 }
 ?>
@@ -30,7 +30,7 @@ if (!empty($empresa['logo'])) {
 <head>
 <meta charset="UTF-8">
 <title>Login - Admin</title>
-<link href="../../assets/bootstrap.min.css" rel="stylesheet">
+<link href="/assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light d-flex align-items-center vh-100">
 
