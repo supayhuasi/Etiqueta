@@ -233,7 +233,8 @@ $filter_url = !empty($filter_params) ? '&' . http_build_query($filter_params) : 
                             <a href="productos_imagenes.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-secondary" title="Galería">🖼️</a>
                             <a href="productos_eliminar.php?id=<?= $prod['id'] ?>" class="btn btn-sm btn-danger">Eliminar</a>
                             <?php if ($prod['tipo_precio'] === 'variable'): ?>
-                                <a href="matriz_precios.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-info">Matriz</a>
+                                <a href="matriz_precios.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-info" title="Ver/editar matriz">Matriz</a>
+                                <a href="copiar_matriz.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-success" title="Copiar matriz de otro producto">Copiar</a>
                                 <a href="receta_producto.php?producto_id=<?= $prod['id'] ?>" class="btn btn-sm btn-secondary">Receta</a>
                             <?php endif; ?>
                         </td>

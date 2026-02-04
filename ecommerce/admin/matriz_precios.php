@@ -336,6 +336,18 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
             </div>
         </div>
 
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Copiar desde Otro Producto</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Copia la matriz de precios de otro producto y aplica un ajuste porcentual opcional.</p>
+                <a href="copiar_matriz.php?producto_id=<?= $producto_id ?>" class="btn btn-info w-100">
+                    <i class="bi bi-files"></i> Copiar Matriz
+                </a>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h5>Agregar/Editar Entrada</h5>
