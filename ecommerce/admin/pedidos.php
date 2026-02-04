@@ -191,7 +191,7 @@ $query = "
         FROM ecommerce_pedido_pagos
         GROUP BY pedido_id
     ) pp ON pp.pedido_id = p.id
-    WHERE 1=1
+    WHERE p.estado != 'cancelado'
 ";
 $params = [];
 

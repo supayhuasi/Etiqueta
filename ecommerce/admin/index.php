@@ -31,6 +31,7 @@ $stmt = $pdo->query("
     SELECT p.numero_pedido, c.nombre, p.total, p.estado, p.fecha_pedido 
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    WHERE p.estado != 'cancelado'
     ORDER BY p.fecha_pedido DESC
     LIMIT 5
 ");

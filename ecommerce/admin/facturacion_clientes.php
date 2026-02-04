@@ -10,12 +10,14 @@ $sql = "
     LEFT JOIN (
         SELECT cliente_id, SUM(total) AS total_pedidos
         FROM ecommerce_pedidos
+        WHERE estado != 'cancelado'
         GROUP BY cliente_id
     ) ped ON ped.cliente_id = c.id
     LEFT JOIN (
         SELECT p.cliente_id, SUM(pp.monto) AS total_pagado
         FROM ecommerce_pedido_pagos pp
         JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
+        WHERE p.estado != 'cancelado'
         GROUP BY p.cliente_id
     ) pag ON pag.cliente_id = c.id
     ORDER BY c.nombre
