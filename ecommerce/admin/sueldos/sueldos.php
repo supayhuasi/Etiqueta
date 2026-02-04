@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 require '../includes/header.php';
 
 // Verificar si existe sesión

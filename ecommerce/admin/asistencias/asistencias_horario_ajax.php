@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 header('Content-Type: application/json');
 
 $empleado_id = intval($_GET['empleado_id'] ?? 0);

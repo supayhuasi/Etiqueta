@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 require '../includes/header.php';
 
 $empleado_id = intval($_GET['empleado_id'] ?? 0);

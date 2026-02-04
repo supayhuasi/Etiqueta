@@ -4,11 +4,21 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require '../../config.php';
+// Resolver rutas correctamente desde cualquier ubicación
+// __FILE__ = /path/to/ecommerce/admin/includes/header.php
+// Necesitamos llegar a /path/to/config.php (4 niveles arriba)
+$base_path = dirname(dirname(dirname(dirname(__FILE__))));
+require $base_path . '/config.php';
+
+// Crear una variable global para las rutas relativas en HTML
+// Determina si estamos en un subdirectorio o no
+$current_dir = substr(str_replace(realpath($_SERVER['DOCUMENT_ROOT']), '', realpath(dirname($_SERVER['PHP_SELF']))), 1);
+$depth = substr_count($current_dir, '/');
+$relative_root = str_repeat('../', $depth);
 
 // Verificar que esté logueado
 if (!isset($_SESSION['user'])) {
-    header("Location: ../../auth/login.php");
+    header("Location: " . $relative_root . "auth/login.php");
     exit;
 }
 
@@ -68,9 +78,9 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             👤 <?= htmlspecialchars($_SESSION['user']['usuario']) ?>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item" href="../../cambiar_clave.php">🔑 Cambiar Contraseña</a></li>
+            <li><a class="dropdown-item" href="<?= $relative_root ?>cambiar_clave.php">🔑 Cambiar Contraseña</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="../../auth/logout.php">🚪 Salir</a></li>
+            <li><a class="dropdown-item" href="<?= $relative_root ?>auth/logout.php">🚪 Salir</a></li>
         </ul>
     </div>
 </div>
@@ -116,15 +126,15 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">SISTEMA</p>
             <div class="ms-2">
-                <a href="../../index.php">🏠 Inicio Principal</a>
-                <a href="../../scan.php">🔍 Escaneo</a>
-                <a href="../../dashboard.php">📊 Dashboard</a>
-                <a href="../../usuarios_lista.php">👥 Usuarios - Listar</a>
-                <a href="../../usuarios_crear.php">➕ Usuarios - Crear</a>
-                <a href="../../roles_usuarios.php">🛡️ Usuarios - Roles</a>
+                <a href="<?= $relative_root ?>index.php">🏠 Inicio Principal</a>
+                <a href="<?= $relative_root ?>scan.php">🔍 Escaneo</a>
+                <a href="<?= $relative_root ?>dashboard.php">📊 Dashboard</a>
+                <a href="<?= $relative_root ?>usuarios_lista.php">👥 Usuarios - Listar</a>
+                <a href="<?= $relative_root ?>usuarios_crear.php">➕ Usuarios - Crear</a>
+                <a href="<?= $relative_root ?>roles_usuarios.php">🛡️ Usuarios - Roles</a>
             </div>
             <hr class="bg-white">
-            <a href="../index.php" class="mt-3">🔗 Ir a Tienda</a>
+            <a href="<?= $relative_root ?>ecommerce/index.php" class="mt-3">🔗 Ir a Tienda</a>
         </div>
 
         <!-- Main Content -->

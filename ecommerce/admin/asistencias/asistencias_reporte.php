@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $empleado_filtro = $_GET['empleado_id'] ?? '';

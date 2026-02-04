@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 require '../includes/header.php';
 
 // Obtener empleados activos

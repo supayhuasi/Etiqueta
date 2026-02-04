@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 
 // Tabla para registrar pagos de sueldos
 $pdo->exec("

@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 
 // Crear tablas si no existen
 

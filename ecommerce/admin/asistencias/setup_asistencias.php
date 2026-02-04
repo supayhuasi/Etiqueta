@@ -4,7 +4,6 @@
  * Crea las tablas necesarias para el control de asistencias de empleados
  */
 
-require '../../config.php';
 
 try {
     // 1. Tabla de Horarios de Empleados (mantener para compatibilidad)

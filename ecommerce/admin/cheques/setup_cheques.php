@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 
 // Tabla para gestionar cheques emitidos
 $pdo->exec("

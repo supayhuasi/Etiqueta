@@ -1,5 +1,4 @@
 <?php
-require '../../config.php';
 
 // Agregar campo de estado a la tabla cheques
 try {

@@ -1,6 +1,5 @@
 <?php
 session_start();
-require '../../config.php';
 require '../includes/header.php';
 
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
