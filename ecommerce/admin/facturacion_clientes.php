@@ -20,6 +20,7 @@ $sql = "
         WHERE p.estado != 'cancelado'
         GROUP BY p.cliente_id
     ) pag ON pag.cliente_id = c.id
+    WHERE COALESCE(ped.total_pedidos, 0) > 0
     ORDER BY c.nombre
 ";
 
