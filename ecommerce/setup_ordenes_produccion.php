@@ -28,6 +28,14 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN materiales_descontados TINYINT DEFAULT 0 AFTER fecha_entrega");
         echo "<br>✓ Columna materiales_descontados agregada";
     }
+
+    // Verificar si el ENUM de estado incluye 'cancelado'
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_ordenes_produccion LIKE 'estado'");
+    $column = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($column && strpos($column['Type'], 'cancelado') === false) {
+        $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion MODIFY COLUMN estado ENUM('pendiente','en_produccion','terminado','entregado','cancelado') DEFAULT 'pendiente'");
+        echo "<br>✓ Estado 'cancelado' agregado al ENUM";
+    }
     echo "✓ Tabla ecommerce_ordenes_produccion creada/actualizada";
 } catch (Exception $e) {
     echo "Error: " . $e->getMessage();
