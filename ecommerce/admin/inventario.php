@@ -9,6 +9,9 @@ function get_columns($pdo, $tabla) {
 $cols_materiales = get_columns($pdo, 'ecommerce_materiales');
 $cols_productos = get_columns($pdo, 'ecommerce_productos');
 
+$tiene_opciones = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+$cols_opciones = $tiene_opciones ? get_columns($pdo, 'ecommerce_atributo_opciones') : [];
+
 $faltantes = [];
 foreach (['stock','stock_minimo','tipo_origen','proveedor_habitual_id','unidad_medida'] as $col) {
     if (!in_array($col, $cols_materiales, true)) {
@@ -129,6 +132,39 @@ $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo =
 $proveedores_map = [];
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $prov) {
     $proveedores_map[$prov['id']] = $prov['nombre'];
+}
+
+// Stock por color (opciones de atributos)
+$opciones_color = [];
+if ($tiene_opciones && in_array('stock', $cols_opciones, true)) {
+    $where_colores = ["a.tipo = 'select'", "LOWER(a.nombre) LIKE '%color%'"];
+    $params_colores = [];
+    if ($buscar) {
+        $where_colores[] = "(p.nombre LIKE ? OR o.nombre LIKE ?)";
+        $params_colores[] = "%$buscar%";
+        $params_colores[] = "%$buscar%";
+    }
+
+    $sql_colores = "
+        SELECT
+            p.id AS material_id,
+            p.nombre AS material_nombre,
+            a.id AS atributo_id,
+            a.nombre AS atributo_nombre,
+            o.id AS opcion_id,
+            o.nombre AS opcion_nombre,
+            o.color,
+            o.stock
+        FROM ecommerce_atributo_opciones o
+        JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+        JOIN ecommerce_productos p ON p.id = a.producto_id
+        WHERE " . implode(" AND ", $where_colores) . "
+        ORDER BY p.nombre, o.nombre
+    ";
+
+    $stmt = $pdo->prepare($sql_colores);
+    $stmt->execute($params_colores);
+    $opciones_color = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Estadísticas
@@ -316,5 +352,53 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Stock por color -->
+<?php if ($tiene_opciones && in_array('stock', $cols_opciones, true)): ?>
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">🎨 Stock por Color (Materiales)</h5>
+            <small class="text-muted">Opciones del atributo Color configuradas en los materiales</small>
+        </div>
+        <div class="card-body">
+            <?php if (empty($opciones_color)): ?>
+                <div class="alert alert-info">No hay opciones de color con stock configurado.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Material</th>
+                                <th>Color</th>
+                                <th>Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($opciones_color as $opc): ?>
+                                <tr>
+                                    <td><strong><?= htmlspecialchars($opc['material_nombre']) ?></strong></td>
+                                    <td>
+                                        <?php if (!empty($opc['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opc['color'])): ?>
+                                            <span class="badge" style="background-color: <?= htmlspecialchars($opc['color']) ?>; color: #fff;">
+                                                <?= htmlspecialchars($opc['opcion_nombre']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($opc['opcion_nombre']) ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <strong class="<?= (float)$opc['stock'] <= 0 ? 'text-danger' : 'text-secondary' ?>">
+                                            <?= number_format((float)$opc['stock'], 2, ',', '.') ?>
+                                        </strong>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php require 'includes/footer.php'; ?>
