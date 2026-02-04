@@ -50,6 +50,8 @@ $stmt->execute([$pedido_id]);
 $total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
 $saldo = (float)$pedido['total'] - $total_pagado;
 
+$error = '';
+
 // Procesar acciones de producción y pagos ANTES de incluir header.php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
@@ -105,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
     } catch (Exception $e) {
-        $error = $e->getMessage();
+        $error = "Error al procesar la acción: " . $e->getMessage();
     }
 }
 
@@ -166,7 +168,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<?php if (isset($error)): ?>
+<?php if (!empty($error)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
