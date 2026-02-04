@@ -67,7 +67,7 @@ try {
                 c.email,
                 COUNT(p.id) as total_pedidos,
                 SUM(p.total) as monto_total,
-                MAX(p.fecha_creacion) as ultima_compra
+                MAX(p.fecha_pedido) as ultima_compra
             FROM ecommerce_pedidos p
             JOIN ecommerce_clientes c ON p.cliente_id = c.id
             WHERE p.estado NOT IN ('cancelado')
@@ -103,8 +103,8 @@ try {
                 COUNT(*) as pedidos_mes,
                 SUM(total) as monto_mes
             FROM ecommerce_pedidos
-            WHERE MONTH(fecha_creacion) = MONTH(CURRENT_DATE())
-            AND YEAR(fecha_creacion) = YEAR(CURRENT_DATE())
+            WHERE MONTH(fecha_pedido) = MONTH(CURRENT_DATE())
+            AND YEAR(fecha_pedido) = YEAR(CURRENT_DATE())
             AND estado NOT IN ('cancelado')
         ");
         $stats_mes = $stmt->fetch(PDO::FETCH_ASSOC) ?: $stats_mes;
