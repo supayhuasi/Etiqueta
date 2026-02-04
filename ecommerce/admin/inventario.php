@@ -29,6 +29,7 @@ $tipo_filtro = $_GET['tipo'] ?? 'todos'; // todos, materiales, productos
 $alerta_filtro = $_GET['alerta'] ?? 'todos'; // todos, bajo_minimo, negativo, sin_alerta
 $origen_filtro = $_GET['origen'] ?? 'todos'; // todos, fabricacion_propia, compra
 $buscar = $_GET['buscar'] ?? '';
+$ver_colores = !empty($_GET['ver_colores']);
 
 // Obtener materiales
 $where_materiales = ["1=1"];
@@ -136,7 +137,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $prov) {
 
 // Stock por color (opciones de atributos)
 $opciones_color = [];
-if ($tiene_opciones && in_array('stock', $cols_opciones, true)) {
+if ($ver_colores && $tiene_opciones && in_array('stock', $cols_opciones, true)) {
     $where_colores = ["a.tipo = 'select'", "LOWER(a.nombre) LIKE '%color%'"];
     $params_colores = [];
     if ($buscar) {
@@ -266,6 +267,13 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                     <option value="compra" <?= $origen_filtro === 'compra' ? 'selected' : '' ?>>Compra</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label class="form-label">Stock por color</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="ver_colores" name="ver_colores" value="1" <?= $ver_colores ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="ver_colores">Mostrar</label>
+                </div>
+            </div>
             <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary me-2">🔍 Filtrar</button>
                 <a href="inventario.php" class="btn btn-secondary">🔄 Limpiar</a>
@@ -354,7 +362,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
 </div>
 
 <!-- Stock por color -->
-<?php if ($tiene_opciones && in_array('stock', $cols_opciones, true)): ?>
+<?php if ($ver_colores && $tiene_opciones && in_array('stock', $cols_opciones, true)): ?>
     <div class="card mt-4">
         <div class="card-header">
             <h5 class="mb-0">🎨 Stock por Color (Materiales)</h5>

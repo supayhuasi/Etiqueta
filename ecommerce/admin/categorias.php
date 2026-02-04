@@ -1,6 +1,15 @@
 <?php
 require 'includes/header.php';
 
+// Asegurar columnas para manual de categoría
+$cols_cat = $pdo->query("SHOW COLUMNS FROM ecommerce_categorias")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('manual_archivo', $cols_cat, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_categorias ADD COLUMN manual_archivo VARCHAR(255) NULL AFTER icono");
+}
+if (!in_array('manual_titulo', $cols_cat, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_categorias ADD COLUMN manual_titulo VARCHAR(255) NULL AFTER manual_archivo");
+}
+
 $stmt = $pdo->query("SELECT * FROM ecommerce_categorias ORDER BY orden, nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -22,6 +31,7 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <th>Nombre</th>
                             <th>Descripción</th>
                             <th>Icono</th>
+                            <th>Manual</th>
                             <th>Orden</th>
                             <th>Estado</th>
                             <th>Acciones</th>
@@ -33,6 +43,13 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= htmlspecialchars($cat['nombre']) ?></td>
                                 <td><?= htmlspecialchars(substr($cat['descripcion'] ?? '', 0, 50)) ?></td>
                                 <td><?= $cat['icono'] ?? '📦' ?></td>
+                                <td>
+                                    <?php if (!empty($cat['manual_archivo'] ?? null)): ?>
+                                        <a href="/uploads/manuales/<?= htmlspecialchars($cat['manual_archivo']) ?>" target="_blank">Ver</a>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= $cat['orden'] ?></td>
                                 <td>
                                     <span class="badge <?= $cat['activo'] ? 'bg-success' : 'bg-danger' ?>">

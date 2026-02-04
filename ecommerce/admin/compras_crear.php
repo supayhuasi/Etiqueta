@@ -16,6 +16,23 @@ foreach ($productos as $p) {
     $productosById[$p['id']] = $p;
 }
 
+// Opciones de color por producto
+$colorOptionsByProduct = [];
+$tiene_opciones = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+if ($tiene_opciones) {
+    $stmt = $pdo->query("
+        SELECT p.id AS producto_id, o.id AS opcion_id, o.nombre AS opcion_nombre, o.color
+        FROM ecommerce_atributo_opciones o
+        JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+        JOIN ecommerce_productos p ON p.id = a.producto_id
+        WHERE a.tipo = 'select' AND LOWER(a.nombre) LIKE '%color%'
+        ORDER BY p.nombre, o.nombre
+    ");
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $colorOptionsByProduct[(int)$row['producto_id']][] = $row;
+    }
+}
+
 // Categorías activas
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -47,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $costo = floatval($item['costo']);
                 $alto = !empty($item['alto']) ? intval($item['alto']) : null;
                 $ancho = !empty($item['ancho']) ? intval($item['ancho']) : null;
+                $color_opcion_id = intval($item['color_opcion_id'] ?? 0);
                 $categoria_id_nuevo = intval($item['categoria_id'] ?? 0);
                 $tipo_precio_nuevo = $item['tipo_precio_nuevo'] ?? 'fijo';
                 $precio_base_nuevo = floatval($item['precio_base_nuevo'] ?? 0);
@@ -101,7 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'costo_unitario' => $costo,
                     'alto_cm' => $alto,
                     'ancho_cm' => $ancho,
-                    'subtotal' => $subtotal_item
+                    'subtotal' => $subtotal_item,
+                    'color_opcion_id' => $color_opcion_id
                 ];
 
                 $subtotal += $subtotal_item;
@@ -171,8 +190,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmtIns->execute([$item['producto_id'], $item['alto_cm'], $item['ancho_cm'], $item['cantidad']]);
                 }
             } else {
-                $stmtUpd = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock + ? WHERE id = ?");
-                $stmtUpd->execute([$item['cantidad'], $item['producto_id']]);
+                if (!empty($item['color_opcion_id'])) {
+                    $stmtUpd = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock + ? WHERE id = ?");
+                    $stmtUpd->execute([$item['cantidad'], $item['color_opcion_id']]);
+                } else {
+                    $stmtUpd = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock + ? WHERE id = ?");
+                    $stmtUpd->execute([$item['cantidad'], $item['producto_id']]);
+                }
             }
 
             $stmtMov->execute([
@@ -282,6 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 let itemIndex = 0;
 const productos = <?= json_encode($productos) ?>;
 const categorias = <?= json_encode($categorias) ?>;
+const colorOptionsByProduct = <?= json_encode($colorOptionsByProduct) ?>;
 
 function agregarItem() {
     itemIndex++;
@@ -325,6 +350,15 @@ function agregarItem() {
                     <div class="col-md-2">
                         <label class="form-label">Ancho (cm)</label>
                         <input type="number" class="form-control item-ancho" name="items[${itemIndex}][ancho]" step="1" min="0" disabled onchange="calcularTotales()">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-4">
+                        <label class="form-label">Color (opcional)</label>
+                        <select class="form-select item-color" name="items[${itemIndex}][color_opcion_id]" disabled>
+                            <option value="">-- Sin color --</option>
+                        </select>
+                        <small class="text-muted">Solo para materiales con stock por color</small>
                     </div>
                 </div>
                 <div class="row mt-3 nuevo-producto-fields" id="nuevo_fields_${itemIndex}" style="display:none;">
@@ -389,6 +423,8 @@ function toggleMedidas(index) {
         alto.disabled = true;
         ancho.disabled = true;
     }
+
+    actualizarColores(index);
 }
 
 function toggleMedidasNuevo(index) {
@@ -418,11 +454,40 @@ function toggleNuevoProducto(index) {
         select.disabled = true;
         fields.style.display = 'flex';
         toggleMedidasNuevo(index);
+        actualizarColores(index, true);
     } else {
         select.disabled = false;
         fields.style.display = 'none';
         toggleMedidas(index);
     }
+}
+
+function actualizarColores(index, forzarVacio = false) {
+    const selectProducto = document.querySelector(`#item_${index} .item-producto`);
+    const selectColor = document.querySelector(`#item_${index} .item-color`);
+    if (!selectColor) return;
+
+    if (forzarVacio || !selectProducto || !selectProducto.value) {
+        selectColor.innerHTML = '<option value="">-- Sin color --</option>';
+        selectColor.disabled = true;
+        return;
+    }
+
+    const productoId = parseInt(selectProducto.value, 10);
+    const opciones = colorOptionsByProduct?.[productoId] || [];
+    if (opciones.length === 0) {
+        selectColor.innerHTML = '<option value="">-- Sin color --</option>';
+        selectColor.disabled = true;
+        return;
+    }
+
+    let optionsHtml = '<option value="">-- Sin color --</option>';
+    opciones.forEach(op => {
+        const label = op.opcion_nombre || 'Color';
+        optionsHtml += `<option value="${op.opcion_id}">${label}</option>`;
+    });
+    selectColor.innerHTML = optionsHtml;
+    selectColor.disabled = false;
 }
 
 function eliminarItem(index) {

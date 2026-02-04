@@ -1,6 +1,15 @@
 <?php
 require 'includes/header.php';
 
+// Asegurar columnas para manual de categoría
+$cols_cat = $pdo->query("SHOW COLUMNS FROM ecommerce_categorias")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('manual_archivo', $cols_cat, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_categorias ADD COLUMN manual_archivo VARCHAR(255) NULL AFTER icono");
+}
+if (!in_array('manual_titulo', $cols_cat, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_categorias ADD COLUMN manual_titulo VARCHAR(255) NULL AFTER manual_archivo");
+}
+
 $id = $_GET['id'] ?? 0;
 $categoria = null;
 $titulo = 'Nueva Categoría';
@@ -17,9 +26,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nombre'] ?? '';
     $descripcion = $_POST['descripcion'] ?? '';
     $icono = $_POST['icono'] ?? '';
+    $manual_titulo = trim($_POST['manual_titulo'] ?? '');
     $parent_id = !empty($_POST['parent_id']) ? intval($_POST['parent_id']) : null;
     $orden = intval($_POST['orden'] ?? 0);
     $activo = isset($_POST['activo']) ? 1 : 0;
+
+    $manual_archivo = $categoria['manual_archivo'] ?? null;
+    $eliminar_manual = !empty($_POST['eliminar_manual']);
+
+    if ($eliminar_manual) {
+        $manual_archivo = null;
+    }
+
+    if (isset($_FILES['manual_archivo']) && $_FILES['manual_archivo']['size'] > 0) {
+        $file = $_FILES['manual_archivo'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $allowed = ['pdf'];
+
+        if (!in_array($ext, $allowed, true)) {
+            $error = "El manual debe ser un archivo PDF";
+        } else {
+            $dir = '../../uploads/manuales/';
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $filename = 'manual_categoria_' . ($id > 0 ? $id : 'new') . '_' . time() . '.' . $ext;
+            if (move_uploaded_file($file['tmp_name'], $dir . $filename)) {
+                $manual_archivo = $filename;
+            } else {
+                $error = "Error al subir el manual";
+            }
+        }
+    }
     
     if (empty($nombre)) {
         $error = "El nombre es obligatorio";
@@ -32,18 +70,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $stmt = $pdo->prepare("
                         UPDATE ecommerce_categorias 
-                        SET nombre = ?, descripcion = ?, icono = ?, parent_id = ?, orden = ?, activo = ?
+                        SET nombre = ?, descripcion = ?, icono = ?, manual_archivo = ?, manual_titulo = ?, parent_id = ?, orden = ?, activo = ?
                         WHERE id = ?
                     ");
-                    $stmt->execute([$nombre, $descripcion, $icono, $parent_id, $orden, $activo, $id]);
+                    $stmt->execute([$nombre, $descripcion, $icono, $manual_archivo, $manual_titulo, $parent_id, $orden, $activo, $id]);
                     $mensaje = "Categoría actualizada";
                 }
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_categorias (nombre, descripcion, icono, parent_id, orden, activo)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_categorias (nombre, descripcion, icono, manual_archivo, manual_titulo, parent_id, orden, activo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$nombre, $descripcion, $icono, $parent_id, $orden, $activo]);
+                $stmt->execute([$nombre, $descripcion, $icono, $manual_archivo, $manual_titulo, $parent_id, $orden, $activo]);
                 $mensaje = "Categoría creada";
             }
             
@@ -66,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="card">
     <div class="card-body">
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <div class="mb-3">
                 <label for="nombre" class="form-label">Nombre *</label>
                 <input type="text" class="form-control" id="nombre" name="nombre" value="<?= htmlspecialchars($categoria['nombre'] ?? '') ?>" required>
@@ -105,6 +143,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="col-md-6 mb-3">
                     <label for="orden" class="form-label">Orden</label>
                     <input type="number" class="form-control" id="orden" name="orden" value="<?= $categoria['orden'] ?? 0 ?>">
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Manual de medición (PDF)</h6>
+                </div>
+                <div class="card-body">
+                    <?php if (!empty($categoria['manual_archivo'])): ?>
+                        <div class="mb-2">
+                            <a href="/uploads/manuales/<?= htmlspecialchars($categoria['manual_archivo']) ?>" target="_blank">
+                                Ver manual actual
+                            </a>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="eliminar_manual" name="eliminar_manual" value="1">
+                            <label class="form-check-label" for="eliminar_manual">Eliminar manual actual</label>
+                        </div>
+                    <?php endif; ?>
+                    <div class="mb-3">
+                        <label for="manual_titulo" class="form-label">Título del manual</label>
+                        <input type="text" class="form-control" id="manual_titulo" name="manual_titulo" value="<?= htmlspecialchars($categoria['manual_titulo'] ?? '') ?>" placeholder="Ej: Manual de medición">
+                    </div>
+                    <div class="mb-3">
+                        <label for="manual_archivo" class="form-label">Archivo PDF</label>
+                        <input type="file" class="form-control" id="manual_archivo" name="manual_archivo" accept="application/pdf">
+                        <small class="text-muted">Subí un PDF con instrucciones de medición para esta categoría.</small>
+                    </div>
                 </div>
             </div>
 

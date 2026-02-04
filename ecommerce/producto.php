@@ -14,7 +14,7 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
 // Obtener producto
 $stmt = $pdo->prepare("
-    SELECT p.*, c.nombre as categoria_nombre 
+    SELECT p.*, c.nombre as categoria_nombre, c.manual_archivo, c.manual_titulo 
     FROM ecommerce_productos p
     LEFT JOIN ecommerce_categorias c ON p.categoria_id = c.id
         WHERE p.id = ? AND p.activo = 1 AND p.mostrar_ecommerce = 1
@@ -276,6 +276,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </nav>
 
             <h1><?= htmlspecialchars($producto['nombre']) ?></h1>
+
+            <?php if (!empty($producto['manual_archivo'])): ?>
+                <div class="alert alert-info d-flex align-items-center gap-2">
+                    <span>📄</span>
+                    <div>
+                        <strong><?= htmlspecialchars($producto['manual_titulo'] ?? 'Manual de medición') ?></strong><br>
+                        <a href="/uploads/manuales/<?= htmlspecialchars($producto['manual_archivo']) ?>" target="_blank">
+                            Ver manual
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
             
             <p class="text-muted" style="font-size: 0.95rem;">
                 <?= nl2br(htmlspecialchars($producto['descripcion'])) ?>

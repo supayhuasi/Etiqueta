@@ -1,6 +1,8 @@
 <?php
 require 'includes/header.php';
 
+$ver_colores = !empty($_GET['ver_colores']);
+
 // Obtener items que necesitan reposición
 $items_reponer = [];
 
@@ -68,6 +70,32 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $items_reponer = array_merge($materiales, $productos);
 
+// Stock por color (opciones de atributos)
+$opciones_color_reponer = [];
+$tiene_opciones = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+if ($ver_colores && $tiene_opciones) {
+    $cols_opciones = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (in_array('stock', $cols_opciones, true)) {
+        $stmt = $pdo->query("
+            SELECT
+                p.id AS material_id,
+                p.nombre AS material_nombre,
+                o.id AS opcion_id,
+                o.nombre AS opcion_nombre,
+                o.color,
+                o.stock
+            FROM ecommerce_atributo_opciones o
+            JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+            JOIN ecommerce_productos p ON p.id = a.producto_id
+            WHERE a.tipo = 'select'
+              AND LOWER(a.nombre) LIKE '%color%'
+              AND o.stock <= 0
+            ORDER BY p.nombre, o.nombre
+        ");
+        $opciones_color_reponer = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
 // Obtener historial de compras para referencia
 $stmt = $pdo->query("
     SELECT 
@@ -109,6 +137,13 @@ $items_solo_compra = count(array_filter($items_reponer, fn($i) => $i['tipo_orige
             <div>
                 <a href="inventario.php" class="btn btn-secondary">← Volver a Inventario</a>
                 <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir</button>
+                <?php if ($tiene_opciones): ?>
+                    <?php if ($ver_colores): ?>
+                        <a href="inventario_reporte_reponer.php" class="btn btn-outline-secondary">Ocultar colores</a>
+                    <?php else: ?>
+                        <a href="inventario_reporte_reponer.php?ver_colores=1" class="btn btn-outline-secondary">Ver colores</a>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -149,6 +184,51 @@ $items_solo_compra = count(array_filter($items_reponer, fn($i) => $i['tipo_orige
         </div>
     </div>
 </div>
+
+<?php if ($ver_colores && $tiene_opciones): ?>
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">🎨 Colores sin stock</h5>
+            <small class="text-muted">Opciones de color con stock 0 o negativo</small>
+        </div>
+        <div class="card-body">
+            <?php if (empty($opciones_color_reponer)): ?>
+                <div class="alert alert-success">✅ No hay colores sin stock.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Material</th>
+                                <th>Color</th>
+                                <th>Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($opciones_color_reponer as $opc): ?>
+                                <tr class="table-warning">
+                                    <td><strong><?= htmlspecialchars($opc['material_nombre']) ?></strong></td>
+                                    <td>
+                                        <?php if (!empty($opc['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opc['color'])): ?>
+                                            <span class="badge" style="background-color: <?= htmlspecialchars($opc['color']) ?>; color: #fff;">
+                                                <?= htmlspecialchars($opc['opcion_nombre']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($opc['opcion_nombre']) ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <strong class="text-danger"><?= number_format((float)$opc['stock'], 2, ',', '.') ?></strong>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <!-- Tabla de items a reponer -->
 <div class="card">
