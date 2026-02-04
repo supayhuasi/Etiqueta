@@ -191,6 +191,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                 <p class="text-muted">Gestión de stock de materiales y productos</p>
             </div>
             <div>
+                <a href="inventario_reporte_productos.php" class="btn btn-info">📋 Reporte de Productos</a>
                 <a href="inventario_reporte_reponer.php" class="btn btn-warning">⚠️ Productos a Reponer</a>
                 <a href="inventario_ajustes.php" class="btn btn-primary">⚙️ Ajustes de Inventario</a>
             </div>

@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Resolver cliente
                 $cliente_id = (int)($cotizacion['cliente_id'] ?? 0);
                 if ($cliente_id <= 0) {
+                    // Si no hay cliente_id en cotizacion, buscar por email en ecommerce_clientes (no cotizacion_clientes)
                     $email = trim((string)($cotizacion['email'] ?? ''));
                     $nombre = trim((string)($cotizacion['nombre_cliente'] ?? ''));
                     $telefono = trim((string)($cotizacion['telefono'] ?? ''));
@@ -67,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception('Email requerido para crear cliente del pedido');
                     }
 
+                    // Buscar cliente en ecommerce_clientes (la tabla correcta para pedidos)
                     $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ? LIMIT 1");
                     $stmt->execute([$email]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -74,11 +76,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($row) {
                         $cliente_id = (int)$row['id'];
                     } else {
+                        // Crear nuevo cliente con todos los datos
                         $stmt = $pdo->prepare("
                             INSERT INTO ecommerce_clientes (email, nombre, telefono)
                             VALUES (?, ?, ?)
                         ");
                         $stmt->execute([$email, $nombre ?: $email, $telefono ?: null]);
+                        $cliente_id = (int)$pdo->lastInsertId();
+                    }
+                } else {
+                    // Verificar que el cliente_id existe en ecommerce_clientes
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE id = ? LIMIT 1");
+                    $stmt->execute([$cliente_id]);
+                    if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+                        // Si no existe, crear uno desde los datos de cotizacion
+                        $email = trim((string)($cotizacion['email'] ?? ''));
+                        $nombre = trim((string)($cotizacion['nombre_cliente'] ?? ''));
+                        $telefono = trim((string)($cotizacion['telefono'] ?? ''));
+                        
+                        $stmt = $pdo->prepare("
+                            INSERT INTO ecommerce_clientes (email, nombre, telefono)
+                            VALUES (?, ?, ?)
+                        ");
+                        $stmt->execute([$email, $nombre, $telefono ?: null]);
                         $cliente_id = (int)$pdo->lastInsertId();
                     }
                 }

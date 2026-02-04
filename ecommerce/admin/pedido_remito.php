@@ -145,11 +145,14 @@ foreach ($items as $item) {
             $atributos_str = '  Atributos: ';
             foreach ($atributos as $attr) {
                 $atributos_str .= ($attr['nombre'] ?? 'Attr') . ': ' . ($attr['valor'] ?? '');
+                if (isset($attr['costo_adicional']) && $attr['costo_adicional'] > 0) {
+                    $atributos_str .= ' (+$' . number_format($attr['costo_adicional'], 2) . ')';
+                }
                 $atributos_str .= ' | ';
             }
             $atributos_str = rtrim($atributos_str, ' | ');
-            $pdf->Cell(90, 5, utf8_decode(substr($atributos_str, 0, 60)), 1);
-            $pdf->Cell(70, 5, '', 1, 1);
+            // Usar MultiCell para permitir múltiples líneas
+            $pdf->MultiCell(160, 5, utf8_decode($atributos_str), 1);
             $pdf->SetFont('Arial', '', 9);
         }
     }

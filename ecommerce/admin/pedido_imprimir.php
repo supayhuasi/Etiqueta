@@ -157,8 +157,8 @@ foreach ($items as $item) {
                 $atributos_str .= ' | ';
             }
             $atributos_str = rtrim($atributos_str, ' | ');
-            $pdf->Cell(70, 5, utf8_decode(substr($atributos_str, 0, 50)), 1);
-            $pdf->Cell(120, 5, '', 1, 1);
+            // Usar MultiCell para permitir múltiples líneas si el texto es muy largo
+            $pdf->MultiCell(190, 5, utf8_decode($atributos_str), 1);
             $pdf->SetFont('Arial', '', 9);
         }
     }
