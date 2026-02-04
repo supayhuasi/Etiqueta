@@ -10,11 +10,23 @@ if (session_status() === PHP_SESSION_NONE) {
 $base_path = dirname(dirname(dirname(dirname(__FILE__))));
 require $base_path . '/config.php';
 
-// Crear una variable global para las rutas relativas en HTML
-// Determina si estamos en un subdirectorio o no
+// Crear variables para las rutas relativas en HTML
+// $relative_root: cantidad de ../ para llegar a la raíz del proyecto
+// $relative_to_admin: cantidad de ../ para llegar a ecommerce/admin/
+
 $current_dir = substr(str_replace(realpath($_SERVER['DOCUMENT_ROOT']), '', realpath(dirname($_SERVER['PHP_SELF']))), 1);
 $depth = substr_count($current_dir, '/');
 $relative_root = str_repeat('../', $depth);
+
+// Calcular cuántos ../ necesitamos para volver a ecommerce/admin/
+// Si estamos en /ecommerce/admin/ -> 0 ../
+// Si estamos en /ecommerce/admin/sueldos/ -> 1 ../
+// Si estamos en /ecommerce/admin/sueldos/subdir/ -> 2 ../
+$php_self = $_SERVER['PHP_SELF'];
+$admin_path = '/ecommerce/admin/';
+$admin_depth = substr_count($admin_path, '/');
+$current_depth = substr_count(dirname($php_self), '/');
+$relative_to_admin = str_repeat('../', max(0, $current_depth - $admin_depth));
 
 // Verificar que esté logueado
 if (!isset($_SESSION['user'])) {
@@ -90,39 +102,39 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
         <!-- Sidebar -->
         <div class="col-md-2 sidebar">
             <h5 class="text-white mb-4">📊 Menú</h5>
-            <a href="index.php" class="<?= basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : '' ?>">📈 Inicio</a>
-            <a href="dashboard.php" class="<?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">📊 Tablero de Control</a>
+            <a href="<?= $relative_to_admin ?>index.php" class="<?= basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : '' ?>">📈 Inicio</a>
+            <a href="<?= $relative_to_admin ?>dashboard.php" class="<?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">📊 Tablero de Control</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">CATÁLOGO</p>
-            <a href="categorias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'categorias.php' ? 'active' : '' ?>">📁 Categorías</a>
-            <a href="productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'productos.php' ? 'active' : '' ?>">📦 Productos</a>
-            <a href="matriz_precios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'matriz_precios.php' ? 'active' : '' ?>">📏 Matriz de Precios</a>
-            <a href="listas_precios.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['listas_precios.php', 'listas_precios_crear.php', 'listas_precios_editar.php', 'listas_precios_items.php', 'listas_precios_items_agregar.php', 'listas_precios_categorias.php']) ? 'active' : '' ?>">💰 Listas de Precios</a>
-            <a href="precios_ecommerce.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_ecommerce.php' ? 'active' : '' ?>">🛍️ Precios Ecommerce</a>
+            <a href="<?= $relative_to_admin ?>categorias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'categorias.php' ? 'active' : '' ?>">📁 Categorías</a>
+            <a href="<?= $relative_to_admin ?>productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'productos.php' ? 'active' : '' ?>">📦 Productos</a>
+            <a href="<?= $relative_to_admin ?>matriz_precios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'matriz_precios.php' ? 'active' : '' ?>">📏 Matriz de Precios</a>
+            <a href="<?= $relative_to_admin ?>listas_precios.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['listas_precios.php', 'listas_precios_crear.php', 'listas_precios_editar.php', 'listas_precios_items.php', 'listas_precios_items_agregar.php', 'listas_precios_categorias.php']) ? 'active' : '' ?>">💰 Listas de Precios</a>
+            <a href="<?= $relative_to_admin ?>precios_ecommerce.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_ecommerce.php' ? 'active' : '' ?>">🛍️ Precios Ecommerce</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">EMPRESA</p>
-            <a href="empresa.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empresa.php' ? 'active' : '' ?>">🏪 Información</a>
-            <a href="mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>">💳 Mercado Pago</a>
-            <a href="inventario.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['inventario.php', 'inventario_reporte_reponer.php', 'inventario_movimientos.php']) ? 'active' : '' ?>">📦 Inventario</a>
-            <a href="pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>">📋 Pedidos</a>
-            <a href="ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>">🏭 Órdenes de Producción</a>
-            <a href="facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>">💳 Facturación</a>
-            <a href="cotizaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizaciones.php', 'cotizacion_crear.php', 'cotizacion_detalle.php', 'cotizacion_editar.php']) ? 'active' : '' ?>">💼 Cotizaciones</a>
-            <a href="cotizacion_clientes.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizacion_clientes.php', 'cotizacion_clientes_crear.php']) ? 'active' : '' ?>">👥 Clientes Cotización</a>
+            <a href="<?= $relative_to_admin ?>empresa.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empresa.php' ? 'active' : '' ?>">🏪 Información</a>
+            <a href="<?= $relative_to_admin ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>">💳 Mercado Pago</a>
+            <a href="<?= $relative_to_admin ?>inventario.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['inventario.php', 'inventario_reporte_reponer.php', 'inventario_movimientos.php']) ? 'active' : '' ?>">📦 Inventario</a>
+            <a href="<?= $relative_to_admin ?>pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>">📋 Pedidos</a>
+            <a href="<?= $relative_to_admin ?>ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>">🏭 Órdenes de Producción</a>
+            <a href="<?= $relative_to_admin ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>">💳 Facturación</a>
+            <a href="<?= $relative_to_admin ?>cotizaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizaciones.php', 'cotizacion_crear.php', 'cotizacion_detalle.php', 'cotizacion_editar.php']) ? 'active' : '' ?>">💼 Cotizaciones</a>
+            <a href="<?= $relative_to_admin ?>cotizacion_clientes.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizacion_clientes.php', 'cotizacion_clientes_crear.php']) ? 'active' : '' ?>">👥 Clientes Cotización</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">COMPRAS</p>
-            <a href="proveedores.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['proveedores.php', 'proveedores_crear.php']) ? 'active' : '' ?>">🏭 Proveedores</a>
-            <a href="compras.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['compras.php', 'compras_crear.php', 'compras_detalle.php']) ? 'active' : '' ?>">🧾 Compras</a>
-            <a href="inventario_ajustes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'inventario_ajustes.php' ? 'active' : '' ?>">⚙️ Ajustes de Inventario</a>
+            <a href="<?= $relative_to_admin ?>proveedores.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['proveedores.php', 'proveedores_crear.php']) ? 'active' : '' ?>">🏭 Proveedores</a>
+            <a href="<?= $relative_to_admin ?>compras.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['compras.php', 'compras_crear.php', 'compras_detalle.php']) ? 'active' : '' ?>">🧾 Compras</a>
+            <a href="<?= $relative_to_admin ?>inventario_ajustes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'inventario_ajustes.php' ? 'active' : '' ?>">⚙️ Ajustes de Inventario</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">RECURSOS HUMANOS</p>
-            <a href="sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php', 'sueldo_editar.php', 'sueldo_conceptos.php', 'sueldo_recibo.php']) ? 'active' : '' ?>">💰 Sueldos</a>
-            <a href="sueldos/plantillas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['plantillas.php', 'plantillas_crear.php', 'plantillas_editar.php', 'plantillas_items.php']) ? 'active' : '' ?>">📋 Plantillas</a>
-            <a href="asistencias/asistencias.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['asistencias.php', 'asistencias_crear.php', 'asistencias_editar.php', 'asistencias_reporte.php', 'asistencias_horarios.php']) ? 'active' : '' ?>">📌 Asistencias</a>
+            <a href="<?= $relative_to_admin ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php', 'sueldo_editar.php', 'sueldo_conceptos.php', 'sueldo_recibo.php']) ? 'active' : '' ?>">💰 Sueldos</a>
+            <a href="<?= $relative_to_admin ?>sueldos/plantillas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['plantillas.php', 'plantillas_crear.php', 'plantillas_editar.php', 'plantillas_items.php']) ? 'active' : '' ?>">📋 Plantillas</a>
+            <a href="<?= $relative_to_admin ?>asistencias/asistencias.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['asistencias.php', 'asistencias_crear.php', 'asistencias_editar.php', 'asistencias_reporte.php', 'asistencias_horarios.php']) ? 'active' : '' ?>">📌 Asistencias</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">FINANZAS</p>
-            <a href="cheques/cheques.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cheques.php', 'cheques_crear.php', 'cheques_editar.php', 'cheques_pagar.php']) ? 'active' : '' ?>">🏦 Cheques</a>
-            <a href="gastos/gastos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['gastos.php', 'gastos_crear.php', 'gastos_editar.php', 'tipos_gastos.php']) ? 'active' : '' ?>">💸 Gastos</a>
+            <a href="<?= $relative_to_admin ?>cheques/cheques.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cheques.php', 'cheques_crear.php', 'cheques_editar.php', 'cheques_pagar.php']) ? 'active' : '' ?>">🏦 Cheques</a>
+            <a href="<?= $relative_to_admin ?>gastos/gastos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['gastos.php', 'gastos_crear.php', 'gastos_editar.php', 'tipos_gastos.php']) ? 'active' : '' ?>">💸 Gastos</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">SISTEMA</p>
             <div class="ms-2">
