@@ -1,6 +1,21 @@
 <?php
 require '../includes/header.php';
 
+// Asegurar columnas de empleados (migración ligera)
+$col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'documento'");
+if ($col->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN documento VARCHAR(20) AFTER email");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN tipo_documento ENUM('DNI', 'CUIT', 'Pasaporte') DEFAULT 'DNI' AFTER documento");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN telefono VARCHAR(20) AFTER tipo_documento");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN direccion VARCHAR(255) AFTER telefono");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN ciudad VARCHAR(100) AFTER direccion");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN provincia VARCHAR(100) AFTER ciudad");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN codigo_postal VARCHAR(10) AFTER provincia");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN puesto VARCHAR(100) AFTER codigo_postal");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN departamento VARCHAR(100) AFTER puesto");
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN fecha_ingreso DATE AFTER departamento");
+}
+
 $empleado_id = $_GET['id'] ?? 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
