@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
-        $empresa = $_POST['empresa'] ?? '';
+        $direccion = $_POST['direccion'] ?? '';
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
@@ -48,14 +48,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($cliente_id <= 0) {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
+                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
                     VALUES (?, ?, ?, ?, 1)
                 ");
                 $stmt->execute([
                     $nombre_cliente,
                     $email ? $email : null,
                     $telefono ? $telefono : null,
-                    $empresa ? $empresa : null
+                    $direccion ? $direccion : null
                 ]);
                 $cliente_id = (int)$pdo->lastInsertId();
             }
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Guardar cotización
         $stmt = $pdo->prepare("
             INSERT INTO ecommerce_cotizaciones 
-            (numero_cotizacion, nombre_cliente, email, telefono, empresa, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
+            (numero_cotizacion, nombre_cliente, email, telefono, direccion, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nombre_cliente,
             $email,
             $telefono,
-            $empresa,
+            $direccion,
             $cliente_id ?: null,
             $lista_precio_id,
             json_encode($items),
@@ -174,7 +174,7 @@ $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activ
 $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Clientes para cotizaciones
-$stmt = $pdo->query("SELECT id, nombre, email, telefono, empresa FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
+$stmt = $pdo->query("SELECT id, nombre, email, telefono, direccion FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
 $clientes_cot = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
@@ -244,8 +244,8 @@ foreach ($lista_cat_rows as $row) {
                         <input type="text" class="form-control" id="telefono" name="telefono">
                     </div>
                     <div class="mb-3">
-                        <label for="empresa" class="form-label">Empresa</label>
-                        <input type="text" class="form-control" id="empresa" name="empresa">
+                        <label for="direccion" class="form-label">Dirección</label>
+                        <input type="text" class="form-control" id="direccion" name="direccion">
                     </div>
                 </div>
             </div>

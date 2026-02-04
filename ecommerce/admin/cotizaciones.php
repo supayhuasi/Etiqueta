@@ -32,7 +32,7 @@ if ($buscar) {
 }
 
 $sql = "
-    SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono,
+    SELECT c.*, cc.nombre AS cliente_nombre, cc.direccion AS cliente_direccion, cc.email AS cliente_email, cc.telefono AS cliente_telefono,
            u.nombre AS vendedor_nombre
     FROM ecommerce_cotizaciones c
     LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id
@@ -189,8 +189,8 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                 </td>
                                 <td>
                                     <strong><?= htmlspecialchars($cot['cliente_nombre'] ?? $cot['nombre_cliente']) ?></strong>
-                                    <?php if (!empty($cot['cliente_empresa']) || $cot['empresa']): ?>
-                                        <br><small class="text-muted"><?= htmlspecialchars($cot['cliente_empresa'] ?? $cot['empresa']) ?></small>
+                                    <?php if (!empty($cot['cliente_direccion']) || $cot['direccion']): ?>
+                                        <br><small class="text-muted"><?= htmlspecialchars($cot['cliente_direccion'] ?? $cot['direccion']) ?></small>
                                     <?php endif; ?>
                                 </td>
                                 <td>

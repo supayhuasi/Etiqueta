@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $telefono = trim($_POST['telefono'] ?? '');
-    $empresa = trim($_POST['empresa'] ?? '');
+    $direccion = trim($_POST['direccion'] ?? '');
     $activo = isset($_POST['activo']) ? 1 : 0;
 
     if (empty($nombre)) {
@@ -29,17 +29,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($editar) {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_cotizacion_clientes
-                    SET nombre = ?, email = ?, telefono = ?, empresa = ?, activo = ?
+                    SET nombre = ?, email = ?, telefono = ?, direccion = ?, activo = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nombre, $email ?: null, $telefono ?: null, $empresa ?: null, $activo, $_GET['id']]);
+                $stmt->execute([$nombre, $email ?: null, $telefono ?: null, $direccion ?: null, $activo, $_GET['id']]);
                 $mensaje = "✓ Cliente actualizado correctamente";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
+                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
                     VALUES (?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$nombre, $email ?: null, $telefono ?: null, $empresa ?: null, $activo]);
+                $stmt->execute([$nombre, $email ?: null, $telefono ?: null, $direccion ?: null, $activo]);
                 $mensaje = "✓ Cliente creado correctamente";
             }
             echo "<div class='alert alert-success'>$mensaje</div>";
@@ -65,8 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" name="nombre" class="form-control" value="<?= htmlspecialchars($cliente['nombre'] ?? '') ?>" required>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Empresa</label>
-                    <input type="text" name="empresa" class="form-control" value="<?= htmlspecialchars($cliente['empresa'] ?? '') ?>">
+                    <label class="form-label">Dirección</label>
+                    <input type="text" name="direccion" class="form-control" value="<?= htmlspecialchars($cliente['direccion'] ?? '') ?>">
                 </div>
             </div>
 

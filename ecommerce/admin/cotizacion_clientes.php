@@ -23,7 +23,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <thead class="table-light">
                         <tr>
                             <th>Nombre</th>
-                            <th>Empresa</th>
+                            <th>Dirección</th>
                             <th>Email</th>
                             <th>Teléfono</th>
                             <th>Estado</th>
@@ -34,7 +34,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php foreach ($clientes as $cli): ?>
                             <tr>
                                 <td><strong><?= htmlspecialchars($cli['nombre']) ?></strong></td>
-                                <td><?= htmlspecialchars($cli['empresa'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($cli['direccion'] ?? '-') ?></td>
                                 <td><?= htmlspecialchars($cli['email'] ?? '-') ?></td>
                                 <td><?= htmlspecialchars($cli['telefono'] ?? '-') ?></td>
                                 <td>

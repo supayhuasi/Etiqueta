@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email = trim((string)($cotizacion['cliente_email'] ?? $cotizacion['email'] ?? ''));
                 $nombre = trim((string)($cotizacion['cliente_nombre'] ?? $cotizacion['nombre_cliente'] ?? ''));
                 $telefono = trim((string)($cotizacion['cliente_telefono'] ?? $cotizacion['telefono'] ?? ''));
-                $empresa = trim((string)($cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
+                $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? ''));
 
                 if ($email === '') {
                     throw new Exception('Email requerido para crear cliente del pedido');

@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
-        $empresa = $_POST['empresa'] ?? '';
+        $direccion = $_POST['direccion'] ?? '';
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Actualizar cotización
         $stmt = $pdo->prepare("
             UPDATE ecommerce_cotizaciones 
-            SET nombre_cliente = ?, email = ?, telefono = ?, empresa = ?, lista_precio_id = ?, items = ?, 
+            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?, 
                 subtotal = ?, descuento = ?, total = ?, observaciones = ?, validez_dias = ?
             WHERE id = ?
         ");
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nombre_cliente,
             $email,
             $telefono,
-            $empresa,
+            $direccion,
             $lista_precio_id,
             json_encode($items_nuevos),
             $subtotal,
@@ -205,8 +205,8 @@ foreach ($lista_cat_rows as $row) {
                         <input type="text" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars($cotizacion['telefono']) ?>">
                     </div>
                     <div class="mb-3">
-                        <label for="empresa" class="form-label">Empresa</label>
-                        <input type="text" class="form-control" id="empresa" name="empresa" value="<?= htmlspecialchars($cotizacion['empresa']) ?>">
+                        <label for="direccion" class="form-label">Dirección</label>
+                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cotizacion['direccion']) ?>">
                     </div>
                 </div>
             </div>
