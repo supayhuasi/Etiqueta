@@ -14,11 +14,6 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Verificar que sea admin
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado. Solo administradores pueden acceder.");
-}
-
 $pedido_id = $_GET['id'] ?? 0;
 
 // Obtener pedido
