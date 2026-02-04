@@ -47,16 +47,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($cliente_id <= 0) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
-                    VALUES (?, ?, ?, ?, 1)
-                ");
-                $stmt->execute([
-                    $nombre_cliente,
-                    $email ? $email : null,
-                    $telefono ? $telefono : null,
-                    $direccion ? $direccion : null
-                ]);
+                // Intentar insertar con direccion, si falla usar empresa
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
+                        VALUES (?, ?, ?, ?, 1)
+                    ");
+                    $stmt->execute([
+                        $nombre_cliente,
+                        $email ? $email : null,
+                        $telefono ? $telefono : null,
+                        $direccion ? $direccion : null
+                    ]);
+                } catch (Exception $e) {
+                    // Fallback a empresa si direccion no existe
+                    $stmt = $pdo->prepare("
+                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
+                        VALUES (?, ?, ?, ?, 1)
+                    ");
+                    $stmt->execute([
+                        $nombre_cliente,
+                        $email ? $email : null,
+                        $telefono ? $telefono : null,
+                        $direccion ? $direccion : null
+                    ]);
+                }
                 $cliente_id = (int)$pdo->lastInsertId();
             }
         }
@@ -126,12 +141,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $max_id = $stmt->fetch()['max_id'] ?? 0;
         $numero_cotizacion = 'COT-' . $año . '-' . str_pad($max_id + 1, 5, '0', STR_PAD_LEFT);
         
-        // Guardar cotización
-        $stmt = $pdo->prepare("
-            INSERT INTO ecommerce_cotizaciones 
-            (numero_cotizacion, nombre_cliente, email, telefono, direccion, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+        // Guardar cotización (compatible con empresa/direccion)
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO ecommerce_cotizaciones 
+                (numero_cotizacion, nombre_cliente, email, telefono, direccion, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+        } catch (Exception $e) {
+            $stmt = $pdo->prepare("
+                INSERT INTO ecommerce_cotizaciones 
+                (numero_cotizacion, nombre_cliente, email, telefono, empresa, cliente_id, lista_precio_id, items, subtotal, descuento, total, observaciones, validez_dias, creado_por)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+        }
         
         $stmt->execute([
             $numero_cotizacion,

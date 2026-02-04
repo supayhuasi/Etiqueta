@@ -3,10 +3,30 @@ require 'includes/header.php';
 
 $id = intval($_GET['id'] ?? 0);
 
-// Obtener cotización
-$stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
+// Obtener cotización (compatible con empresa o direccion)
+$stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
 $stmt->execute([$id]);
 $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Agregar campo empresa/direccion según qué columna exista
+if ($cotizacion && !empty($cotizacion['cliente_id'])) {
+    $stmt_empresa = $pdo->prepare("SELECT empresa FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
+    try {
+        $stmt_empresa->execute([$cotizacion['cliente_id']]);
+        $emp_data = $stmt_empresa->fetch(PDO::FETCH_ASSOC);
+        if ($emp_data) {
+            $cotizacion['cliente_empresa'] = $emp_data['empresa'] ?? null;
+        }
+    } catch (Exception $e) {
+        // Si falla, intentar con direccion
+        $stmt_dir = $pdo->prepare("SELECT direccion FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
+        $stmt_dir->execute([$cotizacion['cliente_id']]);
+        $dir_data = $stmt_dir->fetch(PDO::FETCH_ASSOC);
+        if ($dir_data) {
+            $cotizacion['cliente_direccion'] = $dir_data['direccion'] ?? null;
+        }
+    }
+}
 // Agregar validaciones y conversión a pedido
 
 if (!$cotizacion) {
@@ -61,7 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email = trim((string)($cotizacion['cliente_email'] ?? $cotizacion['email'] ?? ''));
                 $nombre = trim((string)($cotizacion['cliente_nombre'] ?? $cotizacion['nombre_cliente'] ?? ''));
                 $telefono = trim((string)($cotizacion['cliente_telefono'] ?? $cotizacion['telefono'] ?? ''));
-                $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? ''));
+                // Compatibilidad con empresa/direccion
+                $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
 
                 if ($email === '') {
                     throw new Exception('Email requerido para crear cliente del pedido');
