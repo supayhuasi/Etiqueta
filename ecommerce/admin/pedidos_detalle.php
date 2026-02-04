@@ -1,18 +1,5 @@
 <?php
-// Inicialización sin salida para permitir redirects
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Resolver ruta a config.php desde este archivo
-$base_path = dirname(dirname(dirname(dirname(__FILE__))));
-require $base_path . '/config.php';
-
-// Verificar que esté logueado
-if (!isset($_SESSION['user'])) {
-    header("Location: /ecommerce/admin/auth/login.php");
-    exit;
-}
+require 'includes/header.php';
 
 $pedido_id = $_GET['id'] ?? 0;
 
@@ -105,9 +92,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Error al procesar la acción: " . $e->getMessage();
     }
 }
-
-// Incluir header DESPUÉS de procesar POST
-require 'includes/header.php';
 
 // Obtener items del pedido
 $stmt = $pdo->prepare("
