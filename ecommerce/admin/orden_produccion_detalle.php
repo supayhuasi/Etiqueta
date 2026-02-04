@@ -4,6 +4,17 @@ require '../includes/funciones_recetas.php';
 
 $pedido_id = $_GET['pedido_id'] ?? 0;
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cancelar') {
+    try {
+        $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = 'cancelado' WHERE pedido_id = ?");
+        $stmt->execute([$pedido_id]);
+        header("Location: ordenes_produccion.php?mensaje=cancelada");
+        exit;
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
+
 $stmt = $pdo->prepare("
     SELECT p.*, c.nombre, c.telefono, c.direccion, c.ciudad, c.provincia, c.codigo_postal
     FROM ecommerce_pedidos p
@@ -64,6 +75,12 @@ if (!empty($items)) {
     <div class="col-md-12">
         <a href="ordenes_produccion.php" class="btn btn-outline-secondary">← Volver a Órdenes</a>
         <a href="orden_produccion_imprimir.php?pedido_id=<?= $pedido_id ?>" class="btn btn-outline-primary" target="_blank">🖨️ Imprimir</a>
+        <?php if ($orden && $orden['estado'] !== 'cancelado' && $orden['estado'] !== 'entregado'): ?>
+            <form method="POST" style="display:inline;" onsubmit="return confirm('¿Cancelar esta orden de producción?');">
+                <input type="hidden" name="accion" value="cancelar">
+                <button type="submit" class="btn btn-danger">❌ Cancelar Orden</button>
+            </form>
+        <?php endif; ?>
         <h1 class="mt-3">🏭 Orden de Producción</h1>
         <p class="text-muted mb-0">Pedido: <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
     </div>

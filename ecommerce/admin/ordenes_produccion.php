@@ -3,6 +3,22 @@ require 'includes/header.php';
 
 $estado = $_GET['estado'] ?? '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cancelar') {
+    try {
+        $pedido_id = (int)($_POST['pedido_id'] ?? 0);
+        if ($pedido_id <= 0) {
+            throw new Exception('ID de pedido inválido');
+        }
+
+        $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = 'cancelado' WHERE pedido_id = ?");
+        $stmt->execute([$pedido_id]);
+
+        $mensaje = 'Orden de producción cancelada';
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'scan_estado') {
     try {
         $codigo = trim($_POST['codigo'] ?? '');
@@ -53,6 +69,9 @@ $params = [];
 if ($estado) {
     $sql .= " AND op.estado = ?";
     $params[] = $estado;
+} else {
+    // Por defecto, excluir canceladas
+    $sql .= " AND op.estado != 'cancelado'";
 }
 
 $sql .= " ORDER BY op.fecha_creacion DESC";
@@ -96,11 +115,12 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="col-md-4">
                 <label class="form-label">Estado</label>
                 <select name="estado" class="form-select">
-                    <option value="">Todos</option>
+                    <option value="">Todos (sin canceladas)</option>
                     <option value="pendiente" <?= $estado === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
                     <option value="en_produccion" <?= $estado === 'en_produccion' ? 'selected' : '' ?>>En producción</option>
                     <option value="terminado" <?= $estado === 'terminado' ? 'selected' : '' ?>>Terminado</option>
                     <option value="entregado" <?= $estado === 'entregado' ? 'selected' : '' ?>>Entregado</option>
+                    <option value="cancelado" <?= $estado === 'cancelado' ? 'selected' : '' ?>>Cancelado</option>
                 </select>
             </div>
             <div class="col-md-4">
@@ -136,7 +156,16 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= htmlspecialchars(str_replace('_',' ', $op['estado'])) ?></td>
                                 <td><?= !empty($op['fecha_entrega']) ? date('d/m/Y', strtotime($op['fecha_entrega'])) : '-' ?></td>
                                 <td><?= date('d/m/Y H:i', strtotime($op['fecha_creacion'])) ?></td>
-                                <td><a href="orden_produccion_detalle.php?pedido_id=<?= $op['pedido_id'] ?>" class="btn btn-sm btn-primary">Ver orden</a></td>
+                                <td>
+                                    <a href="orden_produccion_detalle.php?pedido_id=<?= $op['pedido_id'] ?>" class="btn btn-sm btn-primary">Ver orden</a>
+                                    <?php if ($op['estado'] !== 'cancelado' && $op['estado'] !== 'entregado'): ?>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('¿Cancelar esta orden de producción?');">
+                                            <input type="hidden" name="accion" value="cancelar">
+                                            <input type="hidden" name="pedido_id" value="<?= $op['pedido_id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-danger">Cancelar</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
