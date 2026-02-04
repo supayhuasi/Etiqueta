@@ -1,0 +1,43 @@
+<?php
+// Test desde diferentes ubicaciones para verificar $admin_url
+
+echo "TEST DE ADMIN_URL\n";
+echo "================\n\n";
+
+// Simular que estamos en sueldos/sueldos.php
+echo "1. Si el archivo está en: /ecommerce/admin/sueldos/sueldos.php\n";
+echo "   __FILE__ sería: /path/to/ecommerce/admin/sueldos/sueldos.php\n";
+echo "   dirname(__FILE__) = /path/to/ecommerce/admin/sueldos\n";
+echo "   dirname(dirname(...)) = /path/to/ecommerce/admin\n";
+echo "   dirname(dirname(dirname(...))) = /path/to/ecommerce\n";
+echo "   dirname(dirname(dirname(dirname(...)))) = /path/to\n\n";
+
+// Simular que estamos en asistencias/asistencias_crear.php
+echo "2. Si el archivo está en: /ecommerce/admin/asistencias/asistencias_crear.php\n";
+echo "   El require '../includes/header.php' carga:\n";
+echo "   /ecommerce/admin/includes/header.php\n";
+echo "   Dentro de header.php:\n";
+echo "   dirname(__FILE__) = /path/to/ecommerce/admin/includes\n";
+echo "   dirname(dirname(...)) = /path/to/ecommerce/admin\n";
+echo "   dirname(dirname(dirname(...))) = /path/to/ecommerce\n";
+echo "   dirname(dirname(dirname(dirname(...)))) = /path/to\n";
+echo "   $base_path = /path/to\n";
+echo "   Carga: /path/to/config.php ✓\n\n";
+
+echo "3. La variable \$admin_url = '/ecommerce/admin/'\n";
+echo "   Esto es una URL absoluta desde la raíz del servidor\n";
+echo "   Por lo tanto, cualquier enlace <a href=\"<?= \$admin_url ?>sueldos/sueldos.php\"> será:\n";
+echo "   <a href=\"/ecommerce/admin/sueldos/sueldos.php\">\n";
+echo "   Y el navegador siempre lo interpretará como una ruta absoluta\n";
+echo "   INDEPENDIENTEMENTE de dónde se encuentre la página actual\n\n";
+
+echo "4. Esto soluciona el problema anterior donde:\n";
+echo "   - En /ecommerce/admin/sueldos/sueldos.php\n";
+echo "   - Un enlace relativo 'asistencias/asistencias.php' se resolvería como\n";
+echo "   - /ecommerce/admin/sueldos/asistencias/asistencias.php (INCORRECTO)\n";
+echo "   - Pero '/ecommerce/admin/asistencias/asistencias.php' es correcto (URL absoluta)\n";
+
+echo "\nPara verificar: abre Developer Tools (F12) en el navegador\n";
+echo "Ve a la pestaña Network y haz clic en un enlace\n";
+echo "Verifica que la URL sea /ecommerce/admin/[modulo]/[archivo].php\n";
+?>

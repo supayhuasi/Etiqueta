@@ -1,6 +1,9 @@
 <?php
-session_start();
-require_once '../config.php';
+// REDIRECT PARA COMPATIBILIDAD - El auth se movió a /ecommerce/admin/auth/
+// Redirigir al nuevo check
+header("Location: ../ecommerce/admin/auth/check.php");
+exit;
+
 
 $user = $_POST['usuario'] ?? '';
 $pass = $_POST['password'] ?? '';

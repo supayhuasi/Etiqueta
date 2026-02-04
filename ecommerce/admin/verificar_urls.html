@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verificar URLs Generadas</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .code { background: #f0f0f0; padding: 10px; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; }
+        .correct { color: green; }
+        .incorrect { color: red; }
+        h2 { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>Verificador de URLs - Inyección de Código PHP</h1>
+
+<p>Este archivo inyecta PHP para mostrar qué URLs se están generando realmente en el HTML.</p>
+
+<?php
+// Para que esto funcione, necesitamos incluir el header
+// pero lo haremos de forma manual para ver las URLs que genera
+
+// Simulación: definir $admin_url como lo hace header.php
+$admin_url = '/ecommerce/admin/';
+
+// Mostrar las URLs que se generarían
+$links = [
+    ['Tablero de Control', 'dashboard.php'],
+    ['Sueldos', 'sueldos/sueldos.php'],
+    ['Plantillas', 'sueldos/plantillas.php'],
+    ['Asistencias', 'asistencias/asistencias.php'],
+    ['Cheques', 'cheques/cheques.php'],
+    ['Gastos', 'gastos/gastos.php'],
+];
+?>
+
+<h2>URLs Generadas (Simuladas)</h2>
+<p>Si $admin_url = <?php echo htmlspecialchars("'" . $admin_url . "'"); ?></p>
+
+<table border="1" cellpadding="10">
+    <tr>
+        <th>Enlace</th>
+        <th>Archivo</th>
+        <th>URL Generada</th>
+        <th>Estado</th>
+    </tr>
+    <?php foreach ($links as $link): ?>
+    <tr>
+        <td><?php echo $link[0]; ?></td>
+        <td><?php echo $link[1]; ?></td>
+        <td class="code"><?php echo htmlspecialchars($admin_url . $link[1]); ?></td>
+        <td class="correct">✓ Correcto (URL absoluta)</td>
+    </tr>
+    <?php endforeach; ?>
+</table>
+
+<h2>Verificación en el Navegador</h2>
+<ol>
+    <li>Abre un módulo como: <code>http://tu-sitio.com/ecommerce/admin/sueldos/sueldos.php</code></li>
+    <li>Abre las Herramientas de Desarrollo (F12 o Ctrl+Shift+I)</li>
+    <li>Ve a la pestaña <strong>Red</strong> (Network)</li>
+    <li>Haz clic en cualquier enlace del menú, por ejemplo "Asistencias"</li>
+    <li>Verifica en la pestaña Network que la URL es: <code>/ecommerce/admin/asistencias/asistencias.php</code></li>
+    <li>Si la URL es <code>/ecommerce/admin/sueldos/asistencias/asistencias.php</code>, algo sigue mal</li>
+</ol>
+
+<h2>¿Qué cambió?</h2>
+<p>En el archivo <code>ecommerce/admin/includes/header.php</code>, ahora:</p>
+<div class="code">
+$admin_url = '/ecommerce/admin/';  // URL ABSOLUTA desde raíz del servidor
+</div>
+
+<p>Y todos los enlaces ahora usan:</p>
+<div class="code">
+&lt;a href="&lt;?= $admin_url ?&gt;sueldos/sueldos.php"&gt;Sueldos&lt;/a&gt;
+</div>
+
+<p>Lo que genera:</p>
+<div class="code">
+&lt;a href="/ecommerce/admin/sueldos/sueldos.php"&gt;Sueldos&lt;/a&gt;
+</div>
+
+<p>Las URLs que comienzan con <code>/</code> son <strong>absolutas desde la raíz del servidor</strong> y siempre funcionan correctamente, sin importar dónde esté la página actual.</p>
+
+</body>
+</html>

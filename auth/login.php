@@ -1,11 +1,9 @@
 <?php
-session_start();
-if (isset($_SESSION['user'])) {
-  header("Location: ../index.php");
-  exit;
-}
+// REDIRECT PARA COMPATIBILIDAD - El auth se movió a /ecommerce/admin/auth/
+// Redirigir al nuevo login
+header("Location: ../ecommerce/admin/auth/login.php");
+exit;
 
-require '../config.php';
 
 $empresa = null;
 try {
