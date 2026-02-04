@@ -2,14 +2,15 @@
 require 'includes/header.php';
 require '../includes/funciones_recetas.php';
 
-$estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado'];
+$estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'pagado'];
 $colores = [
     'pendiente' => 'warning',
     'confirmado' => 'info',
     'preparando' => 'primary',
     'enviado' => 'secondary',
     'entregado' => 'success',
-    'cancelado' => 'danger'
+    'cancelado' => 'danger',
+    'pagado' => 'success'
 ];
 
 // Procesar cambio de estado ANTES de consultar pedidos
@@ -181,9 +182,15 @@ $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 
 $query = "
-    SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email 
+    SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
+           COALESCE(pp.total_pagado, 0) AS total_pagado
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    LEFT JOIN (
+        SELECT pedido_id, SUM(monto) AS total_pagado
+        FROM ecommerce_pedido_pagos
+        GROUP BY pedido_id
+    ) pp ON pp.pedido_id = p.id
     WHERE 1=1
 ";
 $params = [];
@@ -208,6 +215,18 @@ $query .= " ORDER BY p.fecha_pedido DESC";
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Marcar pedidos como pagados si corresponde
+foreach ($pedidos as &$pedido) {
+    $total_pagado = (float)($pedido['total_pagado'] ?? 0);
+    $total_pedido = (float)($pedido['total'] ?? 0);
+    if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
+        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?");
+        $stmt->execute([$pedido['id']]);
+        $pedido['estado'] = 'pagado';
+    }
+}
+unset($pedido);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -256,14 +275,13 @@ $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <?php else: ?>
     <div class="table-responsive">
         <table class="table table-hover">
-            <thead class="table-light">
+            <table class="table table-hover align-middle">
                 <tr>
                     <th>Número</th>
                     <th>Cliente</th>
                     <th>Fecha</th>
-                    <th>Items</th>
-                    <th>Total</th>
-                    <th>Estado</th>
+                        <th>Fecha</th>
+                        <th>Importe</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -273,29 +291,22 @@ $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <td><strong><?= htmlspecialchars($pedido['numero_pedido']) ?></strong></td>
                         <td>
                             <div><?= htmlspecialchars($pedido['cliente_nombre']) ?></div>
-                            <small class="text-muted"><?= htmlspecialchars($pedido['cliente_email']) ?></small>
-                        </td>
+                                <div><?= htmlspecialchars($pedido['cliente_nombre'] ?? 'Sin cliente') ?></div>
+                                <?php if (!empty($pedido['cliente_email'])): ?>
+                                    <small class="text-muted"><?= htmlspecialchars($pedido['cliente_email']) ?></small>
+                                <?php endif; ?>
                         <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?></td>
                         <td>
-                            <?php
-                            $stmt = $pdo->prepare("SELECT COUNT(*) as cantidad FROM ecommerce_pedido_items WHERE pedido_id = ?");
-                            $stmt->execute([$pedido['id']]);
-                            $items = $stmt->fetch(PDO::FETCH_ASSOC);
-                            echo $items['cantidad'];
-                            ?>
-                        </td>
-                        <td>$<?= number_format($pedido['total'], 2) ?></td>
-                        <td>
+                            <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                             <span class="badge bg-<?= $colores[$pedido['estado']] ?>">
                                 <?= ucfirst($pedido['estado']) ?>
                             </span>
                         </td>
                         <td>
                             <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detalle<?= $pedido['id'] ?>">Ver Detalle</button>
-                            <a class="btn btn-sm btn-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
-                            <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
-                            <a class="btn btn-sm btn-outline-primary" href="pedido_remito.php?id=<?= $pedido['id'] ?>" target="_blank">Remito</a>
-                            <div class="dropdown d-inline-block">
+                                <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>">Ver detalle</a>
+                                <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
+                                <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
                                 <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                     Cambiar Estado
                                 </button>
