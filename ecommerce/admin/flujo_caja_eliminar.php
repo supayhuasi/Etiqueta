@@ -1,6 +1,5 @@
 <?php
 require '../../config.php';
-require '../../auth/check.php';
 
 $id = intval($_GET['id'] ?? 0);
 

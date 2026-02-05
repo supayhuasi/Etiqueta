@@ -1,6 +1,5 @@
 <?php
 require '../../config.php';
-require '../../auth/check.php';
 
 // Obtener filtros
 $mes = $_GET['mes'] ?? date('Y-m');

@@ -5,7 +5,6 @@
  */
 
 require '../../config.php';
-require '../../auth/check.php';
 
 $error = '';
 $exito = '';

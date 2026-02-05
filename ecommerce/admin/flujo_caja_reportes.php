@@ -1,6 +1,5 @@
 <?php
 require '../../config.php';
-require '../../auth/check.php';
 
 // Obtener parámetros
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01', strtotime('first day of previous month'));
