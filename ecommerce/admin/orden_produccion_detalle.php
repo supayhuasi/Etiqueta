@@ -152,8 +152,20 @@ if (!empty($items)) {
                         <td>
                             <?php if (is_array($atributos) && count($atributos) > 0): ?>
                                 <small>
-                                    <?php foreach ($atributos as $attr): ?>
-                                        <div><?= htmlspecialchars($attr['nombre'] ?? 'Attr') ?>: <?= htmlspecialchars($attr['valor'] ?? '') ?></div>
+                                    <?php foreach ($atributos as $attr): 
+                                        $nombre = strtolower($attr['nombre'] ?? 'attr');
+                                        $valor = $attr['valor'] ?? '';
+                                        // Destacar el color de forma especial
+                                        if (strpos($nombre, 'color') !== false): ?>
+                                            <div>
+                                                <strong><?= htmlspecialchars($attr['nombre']) ?>:</strong> 
+                                                <span class="badge" style="background-color: <?= htmlspecialchars($valor) ?>; color: #fff; padding: 5px 10px;">
+                                                    <?= htmlspecialchars($valor) ?>
+                                                </span>
+                                            </div>
+                                        <?php else: ?>
+                                            <div><?= htmlspecialchars($attr['nombre']) ?>: <?= htmlspecialchars($valor) ?></div>
+                                        <?php endif; ?>
                                     <?php endforeach; ?>
                                 </small>
                             <?php else: ?>
