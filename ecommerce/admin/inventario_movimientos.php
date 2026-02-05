@@ -43,8 +43,6 @@ if ($item_id <= 0) {
 // Inicializar variables
 $movimientos = [];
 $columnas_tabla = [];
-$total_movimientos = 0;
-$total_para_este_item = 0;
 
 // Si el item existe, obtener movimientos
 if (empty($error_item) && !empty($item)) {
@@ -58,28 +56,6 @@ if (empty($error_item) && !empty($item)) {
     ");
     $stmt->execute([$item_id]);
     $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// DEBUG: Verificar estructura de la tabla
-$debug_mode = true;
-if ($debug_mode) {
-    try {
-        $stmt_debug = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos");
-        $columnas_tabla = $stmt_debug->fetchAll(PDO::FETCH_COLUMN);
-        
-        // Verificar si hay movimientos sin filtro
-        $stmt_total = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos");
-        $total_movimientos = $stmt_total->fetch()['total'];
-        
-        // Verificar movimientos para este producto específico
-        if ($item_id > 0) {
-            $stmt_debug_item = $pdo->prepare("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos WHERE producto_id = ?");
-            $stmt_debug_item->execute([$item_id]);
-            $total_para_este_item = $stmt_debug_item->fetch()['total'];
-        }
-    } catch (Exception $e) {
-        // Si hay error en debug, continuar de todas formas
-    }
 }
 ?>
 
@@ -100,27 +76,7 @@ if ($debug_mode) {
             </p>
         <?php endif; ?>
         
-        <?php if ($debug_mode): ?>
-            <div class="alert alert-warning">
-                <strong>🔍 DEBUG:</strong><br>
-                - Buscando: producto_id=<?= $item_id ?><br>
-                - Movimientos encontrados para este item: <?= $total_para_este_item ?><br>
-                - Total movimientos en tabla: <?= $total_movimientos ?><br>
-                - Columnas de la tabla: <?= implode(', ', $columnas_tabla) ?><br>
-                - Últimas filas de la tabla (límite 3): <br>
-                <?php
-                $stmt_sample = $pdo->query("SELECT * FROM ecommerce_inventario_movimientos ORDER BY id DESC LIMIT 3");
-                $samples = $stmt_sample->fetchAll(PDO::FETCH_ASSOC);
-                if (!empty($samples)) {
-                    foreach ($samples as $sample) {
-                        echo "ID: {$sample['id']}, producto_id: {$sample['producto_id']}, tipo: {$sample['tipo']}, ref: {$sample['referencia']}<br>";
-                    }
-                } else {
-                    echo "No hay registros en la tabla<br>";
-                }
-                ?>
-            </div>
-        <?php endif; ?>
+
     </div>
 </div>
 
@@ -176,8 +132,12 @@ if ($debug_mode) {
                                     </span>
                                 </td>
                                 <td>
-                                    <strong class="<?= in_array($tipo_mov, ['entrada', 'ajuste']) && ($mov['cantidad'] ?? 0) > 0 ? 'text-success' : 'text-danger' ?>">
-                                        <?= in_array($tipo_mov, ['entrada']) ? '+' : '-' ?><?= number_format(abs($mov['cantidad'] ?? 0), 2) ?>
+                                    <?php
+                                    $cantidad = $mov['cantidad'] ?? 0;
+                                    $es_positivo = $cantidad >= 0;
+                                    ?>
+                                    <strong class="<?= $es_positivo ? 'text-success' : 'text-danger' ?>">
+                                        <?= number_format($cantidad, 2) ?>
                                     </strong>
                                 </td>
                                 <td><?= number_format($mov['stock_anterior'] ?? 0, 2) ?></td>
