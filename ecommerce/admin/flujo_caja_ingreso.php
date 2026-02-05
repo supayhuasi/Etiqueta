@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $monto,
             $referencia,
             $id_referencia > 0 ? $id_referencia : null,
-            $_SESSION['user_id'] ?? null,
+            $_SESSION['user']['id'] ?? null,
             $observaciones
         ]);
 

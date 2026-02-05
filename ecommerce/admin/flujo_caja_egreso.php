@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha = $_POST['fecha'] ?? date('Y-m-d');
         $monto = floatval($_POST['monto'] ?? 0);
         $observaciones = $_POST['observaciones'] ?? '';
-        $usuario_id = $_SESSION['user_id'] ?? null;
+        $usuario_id = $_SESSION['user']['id'] ?? null;
 
         if ($monto <= 0) {
             throw new Exception('El monto debe ser mayor a 0');

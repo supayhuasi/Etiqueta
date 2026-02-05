@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                     $gasto['monto'],
                     'Gasto ' . $gasto['numero_gasto'],
                     $gasto['id'],
-                    $_SESSION['user_id']
+                    $_SESSION['user']['id']
                 ]);
             }
 
@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                         $compra['total'],
                         'Compra ' . $compra['numero_compra'],
                         $compra['id'],
-                        $_SESSION['user_id']
+                        $_SESSION['user']['id']
                     ]);
                 }
 
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                     $pedido['monto_pagado'],
                     'Pedido ' . $pedido['numero_pedido'],
                     $pedido['id'],
-                    $_SESSION['user_id']
+                    $_SESSION['user']['id']
                 ]);
             }
 
@@ -146,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                         $sueldo['monto_pagado'],
                         'Sueldo ' . $sueldo['mes_pago'],
                         $sueldo['empleado_id'],
-                        $_SESSION['user_id']
+                        $_SESSION['user']['id']
                     ]);
                 }
 
