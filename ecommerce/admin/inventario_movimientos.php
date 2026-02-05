@@ -168,10 +168,11 @@ if ($debug_mode) {
                                         'produccion' => 'bg-primary',
                                         'venta' => 'bg-info'
                                     ];
-                                    $badge_class = $badges[$mov['tipo_movimiento']] ?? 'bg-secondary';
+                                    $tipo_mov = $mov['tipo'] ?? 'desconocido';
+                                    $badge_class = $badges[$tipo_mov] ?? 'bg-secondary';
                                     ?>
                                     <span class="badge <?= $badge_class ?>">
-                                        <?= ucfirst(str_replace('_', ' ', $mov['tipo_movimiento'])) ?>
+                                        <?= ucfirst(str_replace('_', ' ', $tipo_mov)) ?>
                                     </span>
                                 </td>
                                 <td>
