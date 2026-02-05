@@ -41,6 +41,12 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <h1>Dashboard</h1>
 <p class="text-muted">Bienvenido al panel de administración</p>
 
+<div class="mb-3">
+    <a href="../index.php" target="_blank" class="btn btn-success">
+        🏪 Ir a la Tienda
+    </a>
+</div>
+
 <div class="row mt-4">
     <div class="col-md-3">
         <div class="card bg-primary text-white">

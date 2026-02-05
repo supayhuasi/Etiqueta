@@ -334,6 +334,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <small class="text-muted" id="medidas_info" style="display: none;"></small>
                     </div>
 
+                    <!-- Manual/PDF de la categoría -->
+                    <?php if (!empty($producto['manual_archivo'])): ?>
+                        <div class="alert alert-success mb-4">
+                            <h6 class="mb-2">📄 <?= htmlspecialchars($producto['manual_titulo'] ?? 'Manual de la categoría') ?></h6>
+                            <a href="../uploads/categorias/<?= htmlspecialchars($producto['manual_archivo']) ?>" target="_blank" class="btn btn-sm btn-success">
+                                <i class="bi bi-file-pdf"></i> Ver PDF
+                            </a>
+                        </div>
+                    <?php endif; ?>
+
                     <!-- Medidas si es variable -->
                     <?php if ($tipo_precio === 'variable'): ?>
                         <div class="alert alert-info mb-4">
