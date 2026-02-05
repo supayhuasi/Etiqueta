@@ -1,5 +1,4 @@
 <?php
-session_start();
 require '../../config.php';
 
 $empleado_id = intval($_GET['empleado_id'] ?? 0);

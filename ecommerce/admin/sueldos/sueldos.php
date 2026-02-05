@@ -25,7 +25,13 @@ $stmt = $pdo->prepare("
     SELECT e.id, e.nombre, e.email, e.sueldo_base, e.activo, ep.plantilla_id, pc.nombre as plantilla_nombre,
            COALESCE(ps.monto_pagado, 0) as monto_pagado,
            COALESCE(ps.sueldo_total, 0) as sueldo_total,
-           COALESCE(ps.id, 0) as pago_id
+           COALESCE(ps.id, 0) as pago_id,
+           COALESCE(
+               (SELECT SUM(monto_pagado) 
+                FROM pagos_sueldos_parciales 
+                WHERE empleado_id = e.id AND mes_pago = ?), 
+               0
+           ) as pagos_parciales
     FROM empleados e
     LEFT JOIN empleado_plantilla ep ON e.id = ep.empleado_id
     LEFT JOIN plantillas_conceptos pc ON ep.plantilla_id = pc.id
@@ -33,7 +39,7 @@ $stmt = $pdo->prepare("
     WHERE e.activo = 1
     ORDER BY e.nombre ASC
 ");
-$stmt->execute([$mes_filtro]);
+$stmt->execute([$mes_filtro, $mes_filtro]);
 $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Calcular totales del mes
@@ -61,9 +67,12 @@ foreach ($empleados as $emp) {
         $sueldo_total_emp = $emp['sueldo_total'];
     }
     
+    // Sumar pagos completos + pagos parciales
+    $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
+    
     $total_sueldo += $sueldo_total_emp;
-    $total_pagado += $emp['monto_pagado'];
-    $total_pendiente += ($sueldo_total_emp - $emp['monto_pagado']);
+    $total_pagado += $monto_total_pagado;
+    $total_pendiente += ($sueldo_total_emp - $monto_total_pagado);
 }
 ?>
 
@@ -181,10 +190,12 @@ foreach ($empleados as $emp) {
                                     $sueldo_total_emp = $emp['sueldo_total'];
                                 }
                                 
-                                $saldo_pendiente = $sueldo_total_emp - $emp['monto_pagado'];
+                                // Sumar pagos completos + pagos parciales
+                                $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
+                                $saldo_pendiente = $sueldo_total_emp - $monto_total_pagado;
                                 $porcentaje_pagado = 0;
                                 if ($sueldo_total_emp > 0) {
-                                    $porcentaje_pagado = round(($emp['monto_pagado'] / $sueldo_total_emp) * 100, 0);
+                                    $porcentaje_pagado = round(($monto_total_pagado / $sueldo_total_emp) * 100, 0);
                                 }
                             ?>
                         <tr>
@@ -202,15 +213,18 @@ foreach ($empleados as $emp) {
                             </td>
                             <td><strong>$<?= number_format($sueldo_total_emp, 2, ',', '.') ?></strong></td>
                             <td>
-                                <?php if ($emp['pago_id'] > 0): ?>
+                                <?php if ($emp['pago_id'] > 0 || $emp['pagos_parciales'] > 0): ?>
                                     <div style="width: 180px;">
-                                        <?php if ($porcentaje_pagado == 100): ?>
+                                        <?php if ($porcentaje_pagado >= 100): ?>
                                             <span class="badge bg-success">✓ Pagado 100%</span>
                                         <?php else: ?>
                                             <div class="progress" style="height: 20px;">
                                                 <div class="progress-bar" role="progressbar" style="width: <?= $porcentaje_pagado ?>%;" aria-valuenow="<?= $porcentaje_pagado ?>" aria-valuemin="0" aria-valuemax="100"><?= $porcentaje_pagado ?>%</div>
                                             </div>
-                                            <small>$<?= number_format($emp['monto_pagado'], 2, ',', '.') ?> de $<?= number_format($sueldo_total_emp, 2, ',', '.') ?></small>
+                                            <small>$<?= number_format($monto_total_pagado, 2, ',', '.') ?> de $<?= number_format($sueldo_total_emp, 2, ',', '.') ?></small>
+                                            <?php if ($emp['pagos_parciales'] > 0): ?>
+                                                <br><small class="text-info">↳ Incluye $<?= number_format($emp['pagos_parciales'], 2, ',', '.') ?> en pagos parciales</small>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
                                 <?php else: ?>

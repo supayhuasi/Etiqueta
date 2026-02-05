@@ -1,8 +1,7 @@
 <?php
-session_start();
 require '../../config.php';
 
-$error = '';
+$error = '';;
 $exito = '';
 $tipo_egreso = $_GET['tipo'] ?? 'gasto';
 
