@@ -96,30 +96,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $cantidad_total = $cantidad_total * (int)$it['cantidad'];
                     $mat_id = (int)$r['material_producto_id'];
                     
+                    // Determinar si es material o producto
+                    $stmt_tipo = $pdo->prepare("SELECT id FROM ecommerce_materiales WHERE id = ?");
+                    $stmt_tipo->execute([$mat_id]);
+                    $es_material = $stmt_tipo->fetch() ? true : false;
+                    
                     // Obtener stock actual
-                    $stmt_stock = $pdo->prepare("SELECT stock FROM ecommerce_productos WHERE id = ?");
+                    $tabla = $es_material ? 'ecommerce_materiales' : 'ecommerce_productos';
+                    $stmt_stock = $pdo->prepare("SELECT stock FROM $tabla WHERE id = ?");
                     $stmt_stock->execute([$mat_id]);
                     $stock_anterior = (float)($stmt_stock->fetchColumn() ?: 0);
                     $stock_nuevo = $stock_anterior - $cantidad_total;
                     
                     // Descontar stock
-                    $stmt_update = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
+                    $stmt_update = $pdo->prepare("UPDATE $tabla SET stock = stock - ? WHERE id = ?");
                     $stmt_update->execute([$cantidad_total, $mat_id]);
                     
                     // Registrar movimiento
+                    $tipo_item = $es_material ? 'material' : 'producto';
                     $stmt_mov = $pdo->prepare("
                         INSERT INTO ecommerce_inventario_movimientos 
-                        (tipo_item, item_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia, pedido_id, orden_produccion_id, usuario_id)
-                        VALUES ('producto', ?, 'salida', ?, ?, ?, ?, ?, ?, ?)
+                        (tipo_item, item_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia, observaciones, usuario_id)
+                        VALUES (?, ?, 'produccion', ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt_mov->execute([
+                        $tipo_item,
                         $mat_id,
                         $cantidad_total,
                         $stock_anterior,
                         $stock_nuevo,
-                        'Orden de producción #' . $orden_id,
-                        $pedido_id,
-                        $orden_id,
+                        'Orden-' . $orden_id,
+                        'Pedido #' . $pedido['numero_pedido'] . ' - Producto: ' . $it['producto_id'],
                         $_SESSION['user']['id'] ?? null
                     ]);
                 }
@@ -367,6 +374,87 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <button type="submit" class="btn btn-primary">Actualizar Orden</button>
                 </div>
             </form>
+            
+            <!-- Información de descuento de materiales -->
+            <?php if ($orden_produccion['materiales_descontados'] ?? 0): ?>
+                <?php
+                // Obtener movimientos de inventario relacionados con esta orden
+                $stmt_mov = $pdo->prepare("
+                    SELECT m.*, 
+                           CASE 
+                               WHEN m.tipo_item = 'material' THEN mat.nombre
+                               WHEN m.tipo_item = 'producto' THEN prod.nombre
+                           END as item_nombre
+                    FROM ecommerce_inventario_movimientos m
+                    LEFT JOIN ecommerce_materiales mat ON m.tipo_item = 'material' AND m.item_id = mat.id
+                    LEFT JOIN ecommerce_productos prod ON m.tipo_item = 'producto' AND m.item_id = prod.id
+                    WHERE m.referencia LIKE ?
+                    ORDER BY m.fecha_movimiento DESC
+                ");
+                $stmt_mov->execute(['%Orden-' . $orden_produccion['id'] . '%']);
+                $movimientos = $stmt_mov->fetchAll(PDO::FETCH_ASSOC);
+                ?>
+                
+                <hr class="my-3">
+                
+                <div class="alert alert-success">
+                    <strong>✓ Materiales descontados del inventario</strong>
+                    <br>
+                    <small>Los materiales necesarios fueron descontados automáticamente al crear la orden de producción.</small>
+                </div>
+                
+                <?php if (!empty($movimientos)): ?>
+                    <h6 class="mt-3">Movimientos de Inventario:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Material/Producto</th>
+                                    <th>Tipo</th>
+                                    <th>Cantidad</th>
+                                    <th>Stock Anterior</th>
+                                    <th>Stock Nuevo</th>
+                                    <th>Fecha</th>
+                                    <th>Ver Historial</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($movimientos as $mov): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($mov['item_nombre'] ?? 'Desconocido') ?></td>
+                                        <td>
+                                            <span class="badge bg-<?= $mov['tipo_item'] === 'material' ? 'info' : 'success' ?>">
+                                                <?= ucfirst($mov['tipo_item']) ?>
+                                            </span>
+                                        </td>
+                                        <td class="text-danger"><strong>-<?= number_format($mov['cantidad'], 2) ?></strong></td>
+                                        <td><?= number_format($mov['stock_anterior'], 2) ?></td>
+                                        <td class="<?= $mov['stock_nuevo'] < 0 ? 'text-danger' : '' ?>">
+                                            <?= number_format($mov['stock_nuevo'], 2) ?>
+                                            <?= $mov['stock_nuevo'] < 0 ? ' ⚠️' : '' ?>
+                                        </td>
+                                        <td><small><?= date('d/m/Y H:i', strtotime($mov['fecha_movimiento'])) ?></small></td>
+                                        <td>
+                                            <a href="inventario_movimientos.php?tipo=<?= $mov['tipo_item'] ?>&id=<?= $mov['item_id'] ?>" 
+                                               class="btn btn-sm btn-outline-primary" 
+                                               target="_blank">
+                                                📊 Ver
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            <?php else: ?>
+                <hr class="my-3">
+                <div class="alert alert-warning">
+                    <strong>⚠️ Los materiales aún no han sido descontados</strong>
+                    <br>
+                    <small>Los materiales se descuentan automáticamente al crear la orden de producción.</small>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
