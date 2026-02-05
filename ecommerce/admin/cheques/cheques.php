@@ -138,6 +138,28 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Resumen de Selección -->
+    <div class="card mb-4" id="resumen-seleccion" style="display: none;">
+        <div class="card-header bg-info text-white">
+            <h5>Cheques Seleccionados</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h6>Cantidad Seleccionada</h6>
+                    <h3 class="text-info" id="cantidad-seleccionada">0</h3>
+                </div>
+                <div class="col-md-4">
+                    <h6>Monto Total Seleccionado</h6>
+                    <h3 class="text-success" id="monto-seleccionado">$0,00</h3>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-warning w-100" onclick="limpiarSeleccion()">Limpiar Selección</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabla de cheques -->
     <div class="card">
         <div class="card-header">
@@ -148,9 +170,12 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                 <p class="text-muted text-center">No hay cheques registrados para este período</p>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover">
+                    <table class="table table-striped table-hover" id="tabla-cheques">
                         <thead>
                             <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="seleccionar-todos" title="Seleccionar todos">
+                                </th>
                                 <th>N° Cheque</th>
                                 <th>Beneficiario</th>
                                 <th>Banco</th>
@@ -163,6 +188,11 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                         <tbody>
                             <?php foreach ($cheques as $cheque): ?>
                             <tr>
+                                <td style="text-align: center;">
+                                    <input type="checkbox" class="checkbox-cheque" value="<?= $cheque['id'] ?>" 
+                                           data-monto="<?= $cheque['monto'] ?>" 
+                                           onchange="actualizarSeleccion()">
+                                </td>
                                 <td><strong><?= htmlspecialchars($cheque['numero_cheque']) ?></strong></td>
                                 <td><?= htmlspecialchars($cheque['beneficiario']) ?></td>
                                 <td>
@@ -204,5 +234,51 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
         </div>
     </div>
 </div>
+
+<script>
+// Actualizar selección de checkboxes
+function actualizarSeleccion() {
+    const checkboxes = document.querySelectorAll('.checkbox-cheque:checked');
+    const resumenDiv = document.getElementById('resumen-seleccion');
+    
+    let cantidad = 0;
+    let monto_total = 0;
+    
+    checkboxes.forEach(checkbox => {
+        cantidad++;
+        monto_total += parseFloat(checkbox.getAttribute('data-monto')) || 0;
+    });
+    
+    if (cantidad > 0) {
+        document.getElementById('cantidad-seleccionada').textContent = cantidad;
+        document.getElementById('monto-seleccionado').textContent = '$' + monto_total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        resumenDiv.style.display = 'block';
+    } else {
+        resumenDiv.style.display = 'none';
+    }
+    
+    // Actualizar estado del checkbox "Seleccionar Todos"
+    const totalCheckboxes = document.querySelectorAll('.checkbox-cheque').length;
+    document.getElementById('seleccionar-todos').checked = cantidad === totalCheckboxes && totalCheckboxes > 0;
+}
+
+// Seleccionar o deseleccionar todos los checkboxes
+document.getElementById('seleccionar-todos').addEventListener('change', function() {
+    const checkboxes = document.querySelectorAll('.checkbox-cheque');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = this.checked;
+    });
+    actualizarSeleccion();
+});
+
+// Limpiar selección
+function limpiarSeleccion() {
+    document.querySelectorAll('.checkbox-cheque').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('seleccionar-todos').checked = false;
+    actualizarSeleccion();
+}
+</script>
 
 <?php require '../includes/footer.php'; ?>
