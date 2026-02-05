@@ -351,7 +351,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                     <?php else: ?>
                                         <a href="productos_crear.php?id=<?= $item['id'] ?>" class="btn btn-sm btn-outline-primary">✏️ Editar</a>
                                     <?php endif; ?>
-                                    <a href="inventario_movimientos.php?tipo=<?= $item['tipo_item'] ?>&id=<?= $item['id'] ?>" class="btn btn-sm btn-outline-secondary">📊 Historial</a>
+                                    <a href="inventario_movimientos.php?tipo=producto&id=<?= $item['id'] ?>" class="btn btn-sm btn-outline-secondary">📊 Historial</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

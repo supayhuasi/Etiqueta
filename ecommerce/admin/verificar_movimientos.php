@@ -121,7 +121,7 @@ try {
         
         $stmt = $pdo->prepare("
             SELECT * FROM ecommerce_inventario_movimientos 
-            WHERE tipo_item = 'producto' AND item_id = ?
+            WHERE producto_id = ?
             LIMIT 5
         ");
         $stmt->execute([$test_item['id']]);
