@@ -12,6 +12,9 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
 $empleado_id = intval($_GET['empleado_id'] ?? 0);
 $mes = $_GET['mes'] ?? date('Y-m');
 

@@ -12,7 +12,10 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
-$error = '';;;
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
+$error = '';
 $exito = '';
 $tipo_egreso = $_GET['tipo'] ?? 'gasto';
 
@@ -199,16 +202,7 @@ $titulo = match($tipo_egreso) {
 };
 
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $titulo ?></title>
-    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-<?php require 'includes/header.php'; ?>
+
 
 <div class="container my-4">
     <div class="row mb-4">
@@ -392,5 +386,3 @@ document.addEventListener('DOMContentLoaded', actualizarSueldo);
 </script>
 
 <?php require 'includes/footer.php'; ?>
-</body>
-</html>

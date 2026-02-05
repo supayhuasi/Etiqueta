@@ -12,6 +12,9 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
 $error = '';
 $exito = '';
 
@@ -78,16 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Nuevo Ingreso</title>
-    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-<?php require 'includes/header.php'; ?>
 
 <div class="container my-4">
     <div class="row mb-4">
@@ -190,5 +183,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <?php require 'includes/footer.php'; ?>
-</body>
-</html>

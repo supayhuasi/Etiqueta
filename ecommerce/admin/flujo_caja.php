@@ -12,6 +12,9 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
 // Obtener filtros
 $mes = $_GET['mes'] ?? date('Y-m');
 $tipo_filtro = $_GET['tipo'] ?? 'todos';
@@ -266,5 +269,3 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <?php require 'includes/footer.php'; ?>
-</body>
-</html>

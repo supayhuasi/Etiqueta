@@ -17,7 +17,10 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
-$error = '';;
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
+$error = '';;;
 $exito = '';
 $resumen = [];
 

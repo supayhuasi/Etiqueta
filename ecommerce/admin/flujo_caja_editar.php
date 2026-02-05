@@ -12,6 +12,9 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
 $id = intval($_GET['id'] ?? 0);
 $error = '';
 $exito = '';
@@ -76,16 +79,6 @@ $tipo_badge = $transaccion['tipo'] === 'ingreso' ? 'success' : 'danger';
 $tipo_texto = ucfirst($transaccion['tipo']);
 
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Editar Transacción</title>
-    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-<?php require 'includes/header.php'; ?>
 
 <div class="container my-4">
     <div class="row mb-4">
@@ -173,5 +166,3 @@ $tipo_texto = ucfirst($transaccion['tipo']);
 </div>
 
 <?php require 'includes/footer.php'; ?>
-</body>
-</html>

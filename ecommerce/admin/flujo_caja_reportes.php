@@ -12,6 +12,9 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     exit;
 }
 
+// Incluir header AQUÍ, antes de enviar HTML
+require 'includes/header.php';
+
 // Obtener parámetros
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01', strtotime('first day of previous month'));
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t', strtotime('last day of previous month'));
