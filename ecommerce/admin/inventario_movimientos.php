@@ -176,14 +176,14 @@ if ($debug_mode) {
                                     </span>
                                 </td>
                                 <td>
-                                    <strong class="<?= in_array($mov['tipo_movimiento'], ['entrada', 'ajuste']) && $mov['cantidad'] > 0 ? 'text-success' : 'text-danger' ?>">
-                                        <?= in_array($mov['tipo_movimiento'], ['entrada']) ? '+' : '-' ?><?= number_format(abs($mov['cantidad']), 2) ?>
+                                    <strong class="<?= in_array($tipo_mov, ['entrada', 'ajuste']) && ($mov['cantidad'] ?? 0) > 0 ? 'text-success' : 'text-danger' ?>">
+                                        <?= in_array($tipo_mov, ['entrada']) ? '+' : '-' ?><?= number_format(abs($mov['cantidad'] ?? 0), 2) ?>
                                     </strong>
                                 </td>
-                                <td><?= number_format($mov['stock_anterior'], 2) ?></td>
+                                <td><?= number_format($mov['stock_anterior'] ?? 0, 2) ?></td>
                                 <td>
-                                    <strong class="<?= $mov['stock_nuevo'] < 0 ? 'text-danger' : '' ?>">
-                                        <?= number_format($mov['stock_nuevo'], 2) ?>
+                                    <strong class="<?= ($mov['stock_nuevo'] ?? 0) < 0 ? 'text-danger' : '' ?>">
+                                        <?= number_format($mov['stock_nuevo'] ?? 0, 2) ?>
                                     </strong>
                                 </td>
                                 <td>
