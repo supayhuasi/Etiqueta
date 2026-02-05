@@ -37,7 +37,7 @@ try {
         
         // Mostrar últimos 5 movimientos
         if ($total > 0) {
-            $stmt = $pdo->query("SELECT * FROM ecommerce_inventario_movimientos ORDER BY fecha_movimiento DESC LIMIT 5");
+            $stmt = $pdo->query("SELECT * FROM ecommerce_inventario_movimientos ORDER BY fecha_creacion DESC LIMIT 5");
             $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             echo "<h4>Últimos 5 movimientos:</h4>";
@@ -52,7 +52,7 @@ try {
                 echo "<td>" . $mov['tipo_movimiento'] . "</td>";
                 echo "<td>" . number_format($mov['cantidad'], 2) . "</td>";
                 echo "<td>" . htmlspecialchars($mov['referencia'] ?? '-') . "</td>";
-                echo "<td>" . $mov['fecha_movimiento'] . "</td>";
+                echo "<td>" . $mov['fecha_creacion'] . "</td>";
                 echo "</tr>";
             }
             echo "</tbody></table>";

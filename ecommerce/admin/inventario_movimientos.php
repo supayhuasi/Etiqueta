@@ -23,7 +23,7 @@ $stmt = $pdo->prepare("
     FROM ecommerce_inventario_movimientos m
     LEFT JOIN usuarios u ON m.usuario_id = u.id
     WHERE m.tipo_item = ? AND m.item_id = ?
-    ORDER BY m.fecha_movimiento DESC
+    ORDER BY m.fecha_creacion DESC
     LIMIT 100
 ");
 $stmt->execute([$tipo_item, $item_id]);
@@ -66,7 +66,7 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php foreach ($movimientos as $mov): ?>
                             <tr>
                                 <td>
-                                    <?= date('d/m/Y H:i', strtotime($mov['fecha_movimiento'])) ?>
+                                    <?= date('d/m/Y H:i', strtotime($mov['fecha_creacion'])) ?>
                                 </td>
                                 <td>
                                     <?php 

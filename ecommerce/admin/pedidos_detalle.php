@@ -389,7 +389,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     LEFT JOIN ecommerce_materiales mat ON m.tipo_item = 'material' AND m.item_id = mat.id
                     LEFT JOIN ecommerce_productos prod ON m.tipo_item = 'producto' AND m.item_id = prod.id
                     WHERE m.referencia LIKE ?
-                    ORDER BY m.fecha_movimiento DESC
+                    ORDER BY m.fecha_creacion DESC
                 ");
                 $stmt_mov->execute(['%Orden-' . $orden_produccion['id'] . '%']);
                 $movimientos = $stmt_mov->fetchAll(PDO::FETCH_ASSOC);
@@ -433,7 +433,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <?= number_format($mov['stock_nuevo'], 2) ?>
                                             <?= $mov['stock_nuevo'] < 0 ? ' ⚠️' : '' ?>
                                         </td>
-                                        <td><small><?= date('d/m/Y H:i', strtotime($mov['fecha_movimiento'])) ?></small></td>
+                                        <td><small><?= date('d/m/Y H:i', strtotime($mov['fecha_creacion'])) ?></small></td>
                                         <td>
                                             <a href="inventario_movimientos.php?tipo=<?= $mov['tipo_item'] ?>&id=<?= $mov['item_id'] ?>" 
                                                class="btn btn-sm btn-outline-primary" 

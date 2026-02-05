@@ -71,12 +71,31 @@ try {
             referencia VARCHAR(100) NULL COMMENT 'ID de pedido, orden de producción, etc',
             observaciones TEXT NULL,
             usuario_id INT NULL,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_movimiento DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_tipo_item (tipo_item, item_id),
-            INDEX idx_fecha (fecha_movimiento)
+            INDEX idx_fecha (fecha_creacion)
         )
     ");
     echo "✓ Tabla ecommerce_inventario_movimientos creada<br>";
+    
+    // Agregar columnas faltantes si la tabla ya existe (migración)
+    $columnas_existentes = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos")->fetchAll(PDO::FETCH_COLUMN);
+    
+    if (!in_array('fecha_creacion', $columnas_existentes)) {
+        $pdo->exec("ALTER TABLE ecommerce_inventario_movimientos ADD COLUMN fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP");
+        echo "✓ Columna fecha_creacion agregada<br>";
+    }
+    
+    if (!in_array('fecha_movimiento', $columnas_existentes)) {
+        $pdo->exec("ALTER TABLE ecommerce_inventario_movimientos ADD COLUMN fecha_movimiento DATETIME DEFAULT CURRENT_TIMESTAMP");
+        echo "✓ Columna fecha_movimiento agregada<br>";
+    }
+    
+    if (!in_array('observaciones', $columnas_existentes)) {
+        $pdo->exec("ALTER TABLE ecommerce_inventario_movimientos ADD COLUMN observaciones TEXT NULL");
+        echo "✓ Columna observaciones agregada<br>";
+    }
 
     echo "<br>✅ Setup de inventario avanzado completado exitosamente";
     
