@@ -129,6 +129,7 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <a href="<?= $admin_url ?>asistencias/asistencias.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['asistencias.php', 'asistencias_crear.php', 'asistencias_editar.php', 'asistencias_reporte.php', 'asistencias_horarios.php']) ? 'active' : '' ?>">📌 Asistencias</a>
             <hr class="bg-white">
             <p class="text-white-50 small mb-3">FINANZAS</p>
+            <a href="<?= $admin_url ?>flujo_caja.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['flujo_caja.php', 'flujo_caja_ingreso.php', 'flujo_caja_egreso.php', 'flujo_caja_editar.php', 'flujo_caja_eliminar.php', 'flujo_caja_reportes.php', 'flujo_caja_importar.php', 'pagos_sueldos_parciales.php']) ? 'active' : '' ?>">💰 Flujo de Caja</a>
             <a href="<?= $admin_url ?>cheques/cheques.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cheques.php', 'cheques_crear.php', 'cheques_editar.php', 'cheques_pagar.php']) ? 'active' : '' ?>">🏦 Cheques</a>
             <a href="<?= $admin_url ?>gastos/gastos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['gastos.php', 'gastos_crear.php', 'gastos_editar.php', 'tipos_gastos.php']) ? 'active' : '' ?>">💸 Gastos</a>
             <hr class="bg-white">
