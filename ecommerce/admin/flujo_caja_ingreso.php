@@ -19,22 +19,28 @@ $error = '';
 $exito = '';
 
 // Obtener pedidos pagados para autocompletar
-$stmt = $pdo->prepare("
-    SELECT DISTINCT 
-        ep.id,
-        ep.numero_pedido,
-        ep.cliente_id,
-        ec.nombre as cliente_nombre,
-        ep.total,
-        ep.monto_pagado
-    FROM ecommerce_pedidos ep
-    LEFT JOIN ecommerce_clientes ec ON ep.cliente_id = ec.id
-    WHERE ep.monto_pagado > 0
-    ORDER BY ep.id DESC
-    LIMIT 20
-");
-$stmt->execute();
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$pedidos = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT 
+            ep.id,
+            ep.numero_pedido,
+            ep.cliente_id,
+            ec.nombre as cliente_nombre,
+            ep.total,
+            ep.monto_pagado
+        FROM ecommerce_pedidos ep
+        LEFT JOIN ecommerce_clientes ec ON ep.cliente_id = ec.id
+        WHERE ep.monto_pagado > 0
+        ORDER BY ep.id DESC
+        LIMIT 20
+    ");
+    $stmt->execute();
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // Si la tabla de pedidos no existe, continuar sin ella
+    $pedidos = [];
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {

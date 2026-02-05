@@ -69,7 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="../../assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-<?php require 'includes/header.php'; ?>
 
 <div class="container my-4">
     <div class="card card-danger">

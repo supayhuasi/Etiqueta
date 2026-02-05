@@ -81,7 +81,6 @@ foreach ($pagos as $pago) {
     <link href="../../assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-<?php require 'includes/header.php'; ?>
 
 <div class="container-fluid my-4">
     <div class="row mb-4">

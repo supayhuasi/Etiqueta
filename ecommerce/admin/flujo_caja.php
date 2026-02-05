@@ -94,7 +94,6 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
     </style>
 </head>
 <body>
-<?php require 'includes/header.php'; ?>
 
 <div class="container-fluid my-4">
     <div class="row mb-4">
