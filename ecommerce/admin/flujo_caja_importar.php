@@ -6,7 +6,18 @@
 
 require '../../config.php';
 
-$error = '';
+// Iniciar sesión si no está iniciada
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verificar autenticación
+if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
+$error = '';;
 $exito = '';
 $resumen = [];
 

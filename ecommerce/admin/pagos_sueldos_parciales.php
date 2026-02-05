@@ -1,6 +1,17 @@
 <?php
 require '../../config.php';
 
+// Iniciar sesión si no está iniciada
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verificar autenticación
+if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 $empleado_id = intval($_GET['empleado_id'] ?? 0);
 $mes = $_GET['mes'] ?? date('Y-m');
 

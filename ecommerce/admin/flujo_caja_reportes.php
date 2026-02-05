@@ -1,6 +1,17 @@
 <?php
 require '../../config.php';
 
+// Iniciar sesión si no está iniciada
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verificar autenticación
+if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 // Obtener parámetros
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01', strtotime('first day of previous month'));
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t', strtotime('last day of previous month'));

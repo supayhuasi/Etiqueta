@@ -1,6 +1,17 @@
 <?php
 require '../../config.php';
 
+// Iniciar sesión si no está iniciada
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verificar autenticación
+if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+
 // Obtener filtros
 $mes = $_GET['mes'] ?? date('Y-m');
 $tipo_filtro = $_GET['tipo'] ?? 'todos';
