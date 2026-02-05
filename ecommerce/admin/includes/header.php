@@ -152,11 +152,11 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
                 <?php
                 // Obtener logo de la empresa
                 try {
-                    $stmt_logo = $pdo->query("SELECT logo FROM empresa WHERE id = 1");
-                    $empresa = $stmt_logo->fetch(PDO::FETCH_ASSOC);
-                    if (!empty($empresa['logo'])):
+                    $stmt_logo = $pdo->query("SELECT logo FROM ecommerce_empresa WHERE id = 1");
+                    $empresa_logo = $stmt_logo->fetch(PDO::FETCH_ASSOC);
+                    if (!empty($empresa_logo['logo'])):
                 ?>
-                    <img src="/ecommerce/uploads/<?= htmlspecialchars($empresa['logo']) ?>" alt="Logo" class="img-fluid">
+                    <img src="/ecommerce/uploads/<?= htmlspecialchars($empresa_logo['logo']) ?>" alt="Logo" class="img-fluid">
                 <?php 
                     else:
                 ?>
