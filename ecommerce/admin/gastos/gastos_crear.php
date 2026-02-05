@@ -83,27 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->execute([$gasto_id, $estado_gasto_id, $_SESSION['user']['id'], 'Gasto creado']);
             
-            // Registrar automáticamente en flujo de caja como egreso
-            try {
-                $stmt_fc = $pdo->prepare("
-                    INSERT INTO flujo_caja 
-                    (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                    VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?)
-                ");
-                $stmt_fc->execute([
-                    $fecha,
-                    $descripcion,
-                    $monto,
-                    $numero_gasto,
-                    $gasto_id,
-                    $_SESSION['user']['id'],
-                    $observaciones
-                ]);
-            } catch (Exception $e) {
-                // Si falla el flujo de caja, no afecta el gasto
-                // (el gasto ya fue creado exitosamente)
-            }
-            
             $mensaje = "Gasto creado correctamente";
         } catch (Exception $e) {
             $error = "Error al guardar: " . $e->getMessage();

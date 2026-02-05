@@ -54,6 +54,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->execute([$id, $estado_anterior_id, $estado_nuevo_id, $_SESSION['user']['id'], $observaciones]);
             
+            // Si el nuevo estado es "Pagado", registrar en flujo de caja
+            $stmt_estado = $pdo->prepare("SELECT nombre FROM estados_gastos WHERE id = ?");
+            $stmt_estado->execute([$estado_nuevo_id]);
+            $estado_info = $stmt_estado->fetch(PDO::FETCH_ASSOC);
+            
+            if (!empty($estado_info) && $estado_info['nombre'] === 'Pagado') {
+                try {
+                    // Verificar si ya existe en flujo_caja
+                    $stmt_fc_check = $pdo->prepare("
+                        SELECT id FROM flujo_caja 
+                        WHERE id_referencia = ? AND categoria = 'Gasto'
+                        LIMIT 1
+                    ");
+                    $stmt_fc_check->execute([$id]);
+                    $fc_existe = $stmt_fc_check->fetch(PDO::FETCH_ASSOC);
+                    
+                    if (!$fc_existe) {
+                        // Solo crear si no existe
+                        $stmt_fc = $pdo->prepare("
+                            INSERT INTO flujo_caja 
+                            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
+                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?)
+                        ");
+                        $stmt_fc->execute([
+                            $gasto['fecha'],
+                            $gasto['descripcion'],
+                            $gasto['monto'],
+                            $gasto['numero_gasto'],
+                            $id,
+                            $_SESSION['user']['id'],
+                            $observaciones ?: 'Registrado desde cambio de estado a Pagado'
+                        ]);
+                    }
+                } catch (Exception $e) {
+                    // Si falla el flujo de caja, no afecta el cambio de estado
+                }
+            }
+            
             $mensaje = "Estado actualizado correctamente";
             
             // Recargar datos
