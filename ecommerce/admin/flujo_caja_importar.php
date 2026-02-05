@@ -1,4 +1,5 @@
 <?php
+session_start();
 /**
  * Script para importar transacciones existentes a flujo de caja
  * Sincroniza datos de otros módulos automáticamente

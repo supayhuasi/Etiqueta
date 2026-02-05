@@ -1,4 +1,5 @@
 <?php
+session_start();
 require '../../config.php';
 
 $error = '';
@@ -49,18 +50,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $monto = floatval($_POST['monto'] ?? 0);
         $observaciones = $_POST['observaciones'] ?? '';
         $usuario_id = $_SESSION['user']['id'] ?? null;
-
-        // DEBUG TEMPORAL
-        if ($usuario_id === null) {
-            echo "<pre>ERROR: usuario_id es NULL\n";
-            echo "SESSION: ";
-            print_r($_SESSION);
-            echo "\nuser existe? " . (isset($_SESSION['user']) ? 'SI' : 'NO');
-            echo "\nuser[id] existe? " . (isset($_SESSION['user']['id']) ? 'SI' : 'NO');
-            echo "\nValor: " . var_export($_SESSION['user']['id'] ?? 'NADA', true);
-            echo "</pre>";
-            die();
-        }
 
         if ($monto <= 0) {
             throw new Exception('El monto debe ser mayor a 0');
