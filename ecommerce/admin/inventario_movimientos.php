@@ -38,6 +38,11 @@ if ($debug_mode) {
     // Verificar si hay movimientos sin filtro
     $stmt_total = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos");
     $total_movimientos = $stmt_total->fetch()['total'];
+    
+    // Verificar movimientos para este producto específico
+    $stmt_debug_item = $pdo->prepare("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos WHERE producto_id = ?");
+    $stmt_debug_item->execute([$item_id]);
+    $total_para_este_item = $stmt_debug_item->fetch()['total'];
 }
 ?>
 
@@ -55,9 +60,21 @@ if ($debug_mode) {
             <div class="alert alert-warning">
                 <strong>🔍 DEBUG:</strong><br>
                 - Buscando: producto_id=<?= $item_id ?><br>
-                - Movimientos encontrados: <?= count($movimientos) ?><br>
+                - Movimientos encontrados para este item: <?= $total_para_este_item ?><br>
                 - Total movimientos en tabla: <?= $total_movimientos ?><br>
-                - Columnas de la tabla: <?= implode(', ', $columnas_tabla) ?>
+                - Columnas de la tabla: <?= implode(', ', $columnas_tabla) ?><br>
+                - Últimas filas de la tabla (límite 3): <br>
+                <?php
+                $stmt_sample = $pdo->query("SELECT * FROM ecommerce_inventario_movimientos ORDER BY id DESC LIMIT 3");
+                $samples = $stmt_sample->fetchAll(PDO::FETCH_ASSOC);
+                if (!empty($samples)) {
+                    foreach ($samples as $sample) {
+                        echo "ID: {$sample['id']}, producto_id: {$sample['producto_id']}, tipo: {$sample['tipo']}, ref: {$sample['referencia']}<br>";
+                    }
+                } else {
+                    echo "No hay registros en la tabla<br>";
+                }
+                ?>
             </div>
         <?php endif; ?>
     </div>

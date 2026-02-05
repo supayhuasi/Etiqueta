@@ -93,7 +93,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <td><strong><?= htmlspecialchars($item['producto_nombre'] ?? 'Producto eliminado') ?></strong></td>
                         <td>
                             <?php if ($item['alto_cm'] && $item['ancho_cm']): ?>
-                                <?= $item['alto_cm'] ?>cm × <?= $item['ancho_cm'] ?>cm
+                                <?= $item['ancho_cm'] ?>cm × <?= $item['alto_cm'] ?>cm
                             <?php else: ?>
                                 -
                             <?php endif; ?>

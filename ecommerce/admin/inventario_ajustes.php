@@ -164,7 +164,7 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <td><?= htmlspecialchars($mov['producto_nombre'] ?? 'Producto eliminado') ?></td>
                             <td>
                                 <?php if ($mov['alto_cm'] && $mov['ancho_cm']): ?>
-                                    <?= $mov['alto_cm'] ?>cm × <?= $mov['ancho_cm'] ?>cm
+                                    <?= $mov['ancho_cm'] ?>cm × <?= $mov['alto_cm'] ?>cm
                                 <?php else: ?>
                                     -
                                 <?php endif; ?>

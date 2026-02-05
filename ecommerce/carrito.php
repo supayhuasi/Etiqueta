@@ -99,7 +99,7 @@ $total = $subtotal + $envio;
                                                         <strong><?= htmlspecialchars($item['nombre']) ?></strong>
                                                     </a>
                                                     <?php if ($item['alto'] > 0 && $item['ancho'] > 0): ?>
-                                                        <br><small class="text-muted"><?= $item['alto'] ?>cm x <?= $item['ancho'] ?>cm</small>
+                                                        <br><small class="text-muted"><?= $item['ancho'] ?>cm × <?= $item['alto'] ?>cm</small>
                                                     <?php endif; ?>
                                                     <?php if (isset($item['atributos']) && is_array($item['atributos']) && count($item['atributos']) > 0): ?>
                                                         <br><small class="text-muted">

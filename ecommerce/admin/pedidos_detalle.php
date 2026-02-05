@@ -5,7 +5,7 @@ $pedido_id = $_GET['id'] ?? 0;
 
 // Obtener pedido
 $stmt = $pdo->prepare("
-    SELECT p.*, c.nombre, c.email, c.telefono, c.direccion, c.ciudad, c.provincia, c.codigo_postal
+    SELECT p.*, c.nombre, c.email, c.telefono, c.direccion as dir_cliente, c.ciudad, c.provincia, c.codigo_postal
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
     WHERE p.id = ?
@@ -15,6 +15,11 @@ $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$pedido) {
     die("Pedido no encontrado");
+}
+
+// Si no hay dirección del cliente, usar la del pedido
+if (empty($pedido['dir_cliente'])) {
+    $pedido['dir_cliente'] = $pedido['direccion'] ?? 'N/A';
 }
 
 // Orden de producción
@@ -39,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     try {
         if ($accion === 'crear_orden' && !$orden_produccion) {
+            $pdo->beginTransaction();
+            
             $fecha_entrega = !empty($_POST['fecha_entrega']) ? $_POST['fecha_entrega'] : null;
             
             // Crear orden de producción
@@ -127,6 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
             $stmt->execute([$orden_id]);
             
+            $pdo->commit();
+            
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
         } elseif ($accion === 'actualizar_orden' && $orden_produccion) {
@@ -182,6 +191,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
     } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         $error = "Error al procesar la acción: " . $e->getMessage();
     }
 }
@@ -216,7 +228,7 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Nombre:</strong> <?= htmlspecialchars($pedido['nombre']) ?></p>
                 <p><strong>Email:</strong> <?= htmlspecialchars($pedido['email']) ?></p>
                 <p><strong>Teléfono:</strong> <?= htmlspecialchars($pedido['telefono'] ?? 'N/A') ?></p>
-                <p><strong>Dirección:</strong> <?= htmlspecialchars($pedido['direccion'] ?? 'N/A') ?></p>
+                <p><strong>Dirección:</strong> <?= htmlspecialchars($pedido['dir_cliente'] ?? 'N/A') ?></p>
                 <p><strong>Ciudad:</strong> <?= htmlspecialchars($pedido['ciudad'] ?? 'N/A') ?></p>
                 <p><strong>Provincia:</strong> <?= htmlspecialchars($pedido['provincia'] ?? 'N/A') ?></p>
                 <p><strong>Código Postal:</strong> <?= htmlspecialchars($pedido['codigo_postal'] ?? 'N/A') ?></p>
