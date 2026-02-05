@@ -96,37 +96,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $cantidad_total = $cantidad_total * (int)$it['cantidad'];
                     $mat_id = (int)$r['material_producto_id'];
                     
-                    // Determinar si es material o producto
-                    $stmt_tipo = $pdo->prepare("SELECT id FROM ecommerce_materiales WHERE id = ?");
-                    $stmt_tipo->execute([$mat_id]);
-                    $es_material = $stmt_tipo->fetch() ? true : false;
-                    
-                    // Obtener stock actual
-                    $tabla = $es_material ? 'ecommerce_materiales' : 'ecommerce_productos';
-                    $stmt_stock = $pdo->prepare("SELECT stock FROM $tabla WHERE id = ?");
+                    // Obtener stock actual del producto
+                    $stmt_stock = $pdo->prepare("SELECT stock FROM ecommerce_productos WHERE id = ?");
                     $stmt_stock->execute([$mat_id]);
                     $stock_anterior = (float)($stmt_stock->fetchColumn() ?: 0);
                     $stock_nuevo = $stock_anterior - $cantidad_total;
                     
                     // Descontar stock
-                    $stmt_update = $pdo->prepare("UPDATE $tabla SET stock = stock - ? WHERE id = ?");
+                    $stmt_update = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
                     $stmt_update->execute([$cantidad_total, $mat_id]);
                     
-                    // Registrar movimiento
-                    $tipo_item = $es_material ? 'material' : 'producto';
+                    // Registrar movimiento (usando producto_id según schema actual)
                     $stmt_mov = $pdo->prepare("
                         INSERT INTO ecommerce_inventario_movimientos 
-                        (tipo_item, item_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia, observaciones, usuario_id)
-                        VALUES (?, ?, 'produccion', ?, ?, ?, ?, ?, ?)
+                        (producto_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia, usuario_id)
+                        VALUES (?, 'produccion', ?, ?, ?, ?, ?)
                     ");
                     $stmt_mov->execute([
-                        $tipo_item,
                         $mat_id,
                         $cantidad_total,
                         $stock_anterior,
                         $stock_nuevo,
                         'Orden-' . $orden_id,
-                        'Pedido #' . $pedido['numero_pedido'] . ' - Producto: ' . $it['producto_id'],
                         $_SESSION['user']['id'] ?? null
                     ]);
                 }
@@ -380,14 +371,9 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php
                 // Obtener movimientos de inventario relacionados con esta orden
                 $stmt_mov = $pdo->prepare("
-                    SELECT m.*, 
-                           CASE 
-                               WHEN m.tipo_item = 'material' THEN mat.nombre
-                               WHEN m.tipo_item = 'producto' THEN prod.nombre
-                           END as item_nombre
+                    SELECT m.*, p.nombre as item_nombre
                     FROM ecommerce_inventario_movimientos m
-                    LEFT JOIN ecommerce_materiales mat ON m.tipo_item = 'material' AND m.item_id = mat.id
-                    LEFT JOIN ecommerce_productos prod ON m.tipo_item = 'producto' AND m.item_id = prod.id
+                    LEFT JOIN ecommerce_productos p ON m.producto_id = p.id
                     WHERE m.referencia LIKE ?
                     ORDER BY m.fecha_creacion DESC
                 ");
@@ -423,19 +409,17 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <tr>
                                         <td><?= htmlspecialchars($mov['item_nombre'] ?? 'Desconocido') ?></td>
                                         <td>
-                                            <span class="badge bg-<?= $mov['tipo_item'] === 'material' ? 'info' : 'success' ?>">
-                                                <?= ucfirst($mov['tipo_item']) ?>
-                                            </span>
+                                            <span class="badge bg-success">Producto</span>
                                         </td>
                                         <td class="text-danger"><strong>-<?= number_format($mov['cantidad'], 2) ?></strong></td>
-                                        <td><?= number_format($mov['stock_anterior'], 2) ?></td>
-                                        <td class="<?= $mov['stock_nuevo'] < 0 ? 'text-danger' : '' ?>">
-                                            <?= number_format($mov['stock_nuevo'], 2) ?>
-                                            <?= $mov['stock_nuevo'] < 0 ? ' ⚠️' : '' ?>
+                                        <td><?= number_format($mov['stock_anterior'] ?? 0, 2) ?></td>
+                                        <td class="<?= ($mov['stock_nuevo'] ?? 0) < 0 ? 'text-danger' : '' ?>">
+                                            <?= number_format($mov['stock_nuevo'] ?? 0, 2) ?>
+                                            <?= ($mov['stock_nuevo'] ?? 0) < 0 ? ' ⚠️' : '' ?>
                                         </td>
                                         <td><small><?= date('d/m/Y H:i', strtotime($mov['fecha_creacion'])) ?></small></td>
                                         <td>
-                                            <a href="inventario_movimientos.php?tipo=<?= $mov['tipo_item'] ?>&id=<?= $mov['item_id'] ?>" 
+                                            <a href="inventario_movimientos.php?tipo=producto&id=<?= $mov['producto_id'] ?>" 
                                                class="btn btn-sm btn-outline-primary" 
                                                target="_blank">
                                                 📊 Ver

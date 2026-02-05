@@ -17,16 +17,16 @@ if (!$item) {
     die("Item no encontrado");
 }
 
-// Obtener movimientos
+// Obtener movimientos - usando producto_id (schema actual)
 $stmt = $pdo->prepare("
     SELECT m.*, u.nombre as usuario_nombre
     FROM ecommerce_inventario_movimientos m
     LEFT JOIN usuarios u ON m.usuario_id = u.id
-    WHERE m.tipo_item = ? AND m.item_id = ?
+    WHERE m.producto_id = ?
     ORDER BY m.fecha_creacion DESC
     LIMIT 100
 ");
-$stmt->execute([$tipo_item, $item_id]);
+$stmt->execute([$item_id]);
 $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // DEBUG: Verificar estructura de la tabla
@@ -54,7 +54,7 @@ if ($debug_mode) {
         <?php if ($debug_mode): ?>
             <div class="alert alert-warning">
                 <strong>🔍 DEBUG:</strong><br>
-                - Buscando: tipo_item='<?= $tipo_item ?>', item_id=<?= $item_id ?><br>
+                - Buscando: producto_id=<?= $item_id ?><br>
                 - Movimientos encontrados: <?= count($movimientos) ?><br>
                 - Total movimientos en tabla: <?= $total_movimientos ?><br>
                 - Columnas de la tabla: <?= implode(', ', $columnas_tabla) ?>

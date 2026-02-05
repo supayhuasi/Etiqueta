@@ -223,7 +223,7 @@ if (!empty($items)) {
                                                         <?= $merma > 0 ? ' + ' . $merma . '%' : '' ?>
                                                         <?php if ($orden['materiales_descontados'] ?? 0): ?>
                                                             <br>
-                                                            <a href="inventario_movimientos.php?tipo=<?= $r['tipo_item'] ?? 'producto' ?>&id=<?= $r['material_producto_id'] ?>" 
+                                                            <a href="inventario_movimientos.php?tipo=producto&id=<?= $r['material_producto_id'] ?>" 
                                                                class="btn btn-xs btn-outline-info btn-sm mt-1" 
                                                                target="_blank">
                                                                 📊 Ver movimientos
