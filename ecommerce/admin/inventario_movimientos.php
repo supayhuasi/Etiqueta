@@ -50,9 +50,8 @@ $total_para_este_item = 0;
 if (empty($error_item) && !empty($item)) {
     // Obtener movimientos - usando producto_id (schema actual)
     $stmt = $pdo->prepare("
-        SELECT m.*, u.nombre as usuario_nombre
+        SELECT m.*
         FROM ecommerce_inventario_movimientos m
-        LEFT JOIN usuarios u ON m.usuario_id = u.id
         WHERE m.producto_id = ?
         ORDER BY m.fecha_creacion DESC
         LIMIT 100
@@ -194,7 +193,7 @@ if ($debug_mode) {
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <small class="text-muted"><?= htmlspecialchars($mov['usuario_nombre'] ?? 'Sistema') ?></small>
+                                    <small class="text-muted">-</small>
                                 </td>
                                 <td>
                                     <?php if ($mov['observaciones']): ?>
