@@ -1,5 +1,21 @@
 <?php
-require 'includes/header.php';
+// Asegurar que se muestra cualquier error
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+try {
+    require 'includes/header.php';
+} catch (Exception $e) {
+    // Si header.php falla, mostrar error y continuar
+    echo "<!DOCTYPE html>";
+    echo "<html><body>";
+    echo "<div style='padding: 20px; background: #fee; color: #c00; border: 1px solid #c00;'>";
+    echo "<strong>Error en header.php:</strong> " . htmlspecialchars($e->getMessage());
+    echo "</div>";
+    
+    // Cargar config manualmente
+    require '../config.php';
+}
 
 $tipo_item = $_GET['tipo'] ?? 'material'; // material o producto
 $item_id = intval($_GET['id'] ?? 0);
@@ -197,4 +213,13 @@ if ($debug_mode) {
 </div>
 <?php endif; ?>
 
-<?php require 'includes/footer.php'; ?>
+<?php 
+try {
+    require 'includes/footer.php';
+} catch (Exception $e) {
+    // Si footer.php falla, cerrar HTML
+    if (!defined('FOOTER_LOADED')) {
+        echo "</body></html>";
+    }
+}
+?>
