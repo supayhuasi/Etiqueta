@@ -3,6 +3,8 @@ require 'includes/header.php';
 require '../includes/funciones_recetas.php';
 
 $pedido_id = $_GET['pedido_id'] ?? 0;
+$mensaje = '';
+$error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cancelar') {
     try {
@@ -11,6 +13,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cance
         header("Location: ordenes_produccion.php?mensaje=cancelada");
         exit;
     } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
+
+// Descontar materiales manualmente
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'descontar_materiales') {
+    try {
+        $pdo->beginTransaction();
+        
+        // Obtener orden
+        $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+        $stmt->execute([$pedido_id]);
+        $orden_actual = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$orden_actual) {
+            throw new Exception('Orden de producción no encontrada');
+        }
+        
+        if ($orden_actual['materiales_descontados']) {
+            throw new Exception('Los materiales ya fueron descontados');
+        }
+        
+        // Obtener items del pedido
+        $stmt_items = $pdo->prepare("
+            SELECT pi.*, p.usa_receta
+            FROM ecommerce_pedido_items pi
+            JOIN ecommerce_productos p ON pi.producto_id = p.id
+            WHERE pi.pedido_id = ?
+        ");
+        $stmt_items->execute([$pedido_id]);
+        $items = $stmt_items->fetchAll(PDO::FETCH_ASSOC);
+        
+        $materiales_descontados = 0;
+        
+        foreach ($items as $it) {
+            if (empty($it['usa_receta'])) continue;
+            
+            $atributos_seleccionados = [];
+            if (!empty($it['atributos'])) {
+                $atributos_seleccionados = json_decode($it['atributos'], true) ?: [];
+            }
+            
+            $producto_id = (int)$it['producto_id'];
+            $ancho_cm = floatval($it['ancho_cm'] ?? 0);
+            $alto_cm = floatval($it['alto_cm'] ?? 0);
+            
+            $recetas = obtener_receta_con_condiciones($pdo, $producto_id, $ancho_cm, $alto_cm, $atributos_seleccionados);
+            if (empty($recetas)) continue;
+            
+            $alto_m = $alto_cm / 100;
+            $ancho_m = $ancho_cm / 100;
+            $area_m2 = $alto_m * $ancho_m;
+            
+            foreach ($recetas as $r) {
+                $factor = (float)$r['factor'];
+                $merma = (float)$r['merma_pct'];
+                $cantidad_base = 0;
+                
+                if ($r['tipo_calculo'] === 'fijo') {
+                    $cantidad_base = $factor;
+                } elseif ($r['tipo_calculo'] === 'por_area') {
+                    $cantidad_base = $area_m2 * $factor;
+                } elseif ($r['tipo_calculo'] === 'por_ancho') {
+                    $cantidad_base = $ancho_m * $factor;
+                } elseif ($r['tipo_calculo'] === 'por_alto') {
+                    $cantidad_base = $alto_m * $factor;
+                }
+                
+                $cantidad_total = $cantidad_base * (1 + ($merma / 100));
+                $cantidad_total = $cantidad_total * (int)$it['cantidad'];
+                $mat_id = (int)$r['material_producto_id'];
+                
+                // Obtener stock actual del producto
+                $stmt_stock = $pdo->prepare("SELECT stock FROM ecommerce_productos WHERE id = ?");
+                $stmt_stock->execute([$mat_id]);
+                $stock_anterior = (float)($stmt_stock->fetchColumn() ?: 0);
+                $stock_nuevo = $stock_anterior - $cantidad_total;
+                
+                // Descontar stock
+                $stmt_update = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
+                $stmt_update->execute([$cantidad_total, $mat_id]);
+                
+                // Registrar movimiento (usando producto_id según schema actual)
+                $stmt_mov = $pdo->prepare("
+                    INSERT INTO ecommerce_inventario_movimientos 
+                    (producto_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia, usuario_id)
+                    VALUES (?, 'produccion', ?, ?, ?, ?, ?)
+                ");
+                $stmt_mov->execute([
+                    $mat_id,
+                    $cantidad_total,
+                    $stock_anterior,
+                    $stock_nuevo,
+                    'Orden-' . $orden_actual['id'],
+                    $_SESSION['user']['id'] ?? null
+                ]);
+                
+                $materiales_descontados++;
+            }
+        }
+        
+        // Marcar materiales como descontados
+        $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE pedido_id = ?");
+        $stmt->execute([$pedido_id]);
+        
+        $pdo->commit();
+        $mensaje = "✓ Materiales descontados correctamente ($materiales_descontados items actualizados)";
+        
+        // Recargar la orden actualizada
+        $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+        $stmt->execute([$pedido_id]);
+        $orden = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         $error = $e->getMessage();
     }
 }
@@ -86,6 +205,20 @@ if (!empty($items)) {
     </div>
 </div>
 
+<?php if (!empty($mensaje)): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <?= htmlspecialchars($mensaje) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($error)): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        <?= htmlspecialchars($error) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
 <div class="row">
     <div class="col-md-6 mb-4">
         <div class="card">
@@ -102,6 +235,13 @@ if (!empty($items)) {
                             <span class="badge bg-success">✓ Descontados del inventario</span>
                         <?php else: ?>
                             <span class="badge bg-danger">⚠ Pendientes de descuento</span>
+                            <br>
+                            <form method="POST" class="mt-2" onsubmit="return confirm('¿Descontar los materiales del inventario ahora?');">
+                                <input type="hidden" name="accion" value="descontar_materiales">
+                                <button type="submit" class="btn btn-sm btn-warning">
+                                    🔽 Descontar Materiales Ahora
+                                </button>
+                            </form>
                         <?php endif; ?>
                     </p>
                 <?php endif; ?>
