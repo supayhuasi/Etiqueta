@@ -156,7 +156,7 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
                     $empresa = $stmt_logo->fetch(PDO::FETCH_ASSOC);
                     if (!empty($empresa['logo'])):
                 ?>
-                    <img src="/ecommerce/uploads/empresa/<?= htmlspecialchars($empresa['logo']) ?>" alt="Logo" class="img-fluid">
+                    <img src="/ecommerce/uploads/<?= htmlspecialchars($empresa['logo']) ?>" alt="Logo" class="img-fluid">
                 <?php 
                     else:
                 ?>
