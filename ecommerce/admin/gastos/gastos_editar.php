@@ -87,6 +87,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
                            $observaciones, $archivo, $id]);
             
+            // Actualizar también en flujo de caja si existe
+            try {
+                // Primero buscar si ya existe un registro en flujo_caja para este gasto
+                $stmt_fc_check = $pdo->prepare("
+                    SELECT id, monto FROM flujo_caja 
+                    WHERE id_referencia = ? AND categoria = 'Gasto'
+                    LIMIT 1
+                ");
+                $stmt_fc_check->execute([$id]);
+                $fc_existe = $stmt_fc_check->fetch(PDO::FETCH_ASSOC);
+                
+                if ($fc_existe) {
+                    // Actualizar si ya existe
+                    $stmt_fc_update = $pdo->prepare("
+                        UPDATE flujo_caja 
+                        SET fecha = ?, descripcion = ?, monto = ?, observaciones = ?
+                        WHERE id_referencia = ? AND categoria = 'Gasto'
+                    ");
+                    $stmt_fc_update->execute([$fecha, $descripcion, $monto, $observaciones, $id]);
+                } else {
+                    // Crear si no existe
+                    $stmt_fc_insert = $pdo->prepare("
+                        INSERT INTO flujo_caja 
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?)
+                    ");
+                    
+                    // Obtener número de gasto
+                    $stmt_gasto = $pdo->prepare("SELECT numero_gasto FROM gastos WHERE id = ?");
+                    $stmt_gasto->execute([$id]);
+                    $gasto_num = $stmt_gasto->fetch(PDO::FETCH_ASSOC);
+                    
+                    $stmt_fc_insert->execute([
+                        $fecha,
+                        $descripcion,
+                        $monto,
+                        $gasto_num['numero_gasto'],
+                        $id,
+                        $_SESSION['user']['id'],
+                        $observaciones
+                    ]);
+                }
+            } catch (Exception $e) {
+                // Si falla el flujo de caja, no afecta la edición del gasto
+            }
+            
             $mensaje = "Gasto actualizado correctamente";
             
             // Recargar datos
