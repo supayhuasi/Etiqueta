@@ -1,6 +1,6 @@
 <?php
-require 'config.php';
-require 'auth/check.php';
+require '../../config.php';
+require '../../auth/check.php';
 
 $empleado_id = intval($_GET['empleado_id'] ?? 0);
 $mes = $_GET['mes'] ?? date('Y-m');
@@ -65,7 +65,7 @@ foreach ($pagos as $pago) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pagos Parciales de Sueldos</title>
-    <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 <?php require 'includes/header.php'; ?>

@@ -1,6 +1,6 @@
 <?php
-require 'config.php';
-require 'auth/check.php';
+require '../../config.php';
+require '../../auth/check.php';
 
 // Obtener filtros
 $mes = $_GET['mes'] ?? date('Y-m');
@@ -62,7 +62,7 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Flujo de Caja</title>
-    <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
     <style>
         .card-ingreso { border-top: 4px solid #28A745; }
         .card-egreso { border-top: 4px solid #DC3545; }

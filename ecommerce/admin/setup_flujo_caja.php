@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require '../../config.php';
 
 // Tabla de Flujo de Caja
 $pdo->exec("

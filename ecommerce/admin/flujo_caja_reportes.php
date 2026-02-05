@@ -1,6 +1,6 @@
 <?php
-require 'config.php';
-require 'auth/check.php';
+require '../../config.php';
+require '../../auth/check.php';
 
 // Obtener parámetros
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01', strtotime('first day of previous month'));
@@ -85,7 +85,7 @@ $resumen_categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reporte de Flujo de Caja</title>
-    <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
     <style>
         .print-button { display: none; }
         @media print {

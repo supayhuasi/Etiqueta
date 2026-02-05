@@ -4,8 +4,8 @@
  * Sincroniza datos de otros módulos automáticamente
  */
 
-require 'config.php';
-require 'auth/check.php';
+require '../../config.php';
+require '../../auth/check.php';
 
 $error = '';
 $exito = '';
@@ -210,7 +210,7 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Importar Transacciones</title>
-    <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 <?php require 'includes/header.php'; ?>

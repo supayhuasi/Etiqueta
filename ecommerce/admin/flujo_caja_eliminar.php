@@ -1,6 +1,6 @@
 <?php
-require 'config.php';
-require 'auth/check.php';
+require '../../config.php';
+require '../../auth/check.php';
 
 $id = intval($_GET['id'] ?? 0);
 
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Eliminar Transacción</title>
-    <link href="assets/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 <?php require 'includes/header.php'; ?>
