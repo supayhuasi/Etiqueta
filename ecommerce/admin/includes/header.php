@@ -151,14 +151,22 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             <div class="logo-section">
                 <?php
                 // Obtener logo de la empresa
-                $stmt_logo = $pdo->query("SELECT logo FROM empresa WHERE id = 1");
-                $empresa = $stmt_logo->fetch(PDO::FETCH_ASSOC);
-                if (!empty($empresa['logo'])):
+                try {
+                    $stmt_logo = $pdo->query("SELECT logo FROM empresa WHERE id = 1");
+                    $empresa = $stmt_logo->fetch(PDO::FETCH_ASSOC);
+                    if (!empty($empresa['logo'])):
                 ?>
                     <img src="/ecommerce/uploads/empresa/<?= htmlspecialchars($empresa['logo']) ?>" alt="Logo" class="img-fluid">
-                <?php else: ?>
+                <?php 
+                    else:
+                ?>
                     <h4 class="text-primary mb-0">Tucu Roller</h4>
-                <?php endif; ?>
+                <?php 
+                    endif;
+                } catch (Exception $e) {
+                ?>
+                    <h4 class="text-primary mb-0">Tucu Roller</h4>
+                <?php } ?>
             </div>
             
             <div class="sidebar-menu">
