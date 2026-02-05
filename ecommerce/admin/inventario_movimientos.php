@@ -28,6 +28,17 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$tipo_item, $item_id]);
 $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// DEBUG: Verificar estructura de la tabla
+$debug_mode = true;
+if ($debug_mode) {
+    $stmt_debug = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos");
+    $columnas_tabla = $stmt_debug->fetchAll(PDO::FETCH_COLUMN);
+    
+    // Verificar si hay movimientos sin filtro
+    $stmt_total = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos");
+    $total_movimientos = $stmt_total->fetch()['total'];
+}
 ?>
 
 <div class="row mb-4">
@@ -39,6 +50,16 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             Tipo: <span class="badge bg-<?= $tipo_item === 'material' ? 'info' : 'success' ?>"><?= ucfirst($tipo_item) ?></span> | 
             Stock Actual: <strong><?= number_format($item['stock'], 2) ?></strong>
         </p>
+        
+        <?php if ($debug_mode): ?>
+            <div class="alert alert-warning">
+                <strong>🔍 DEBUG:</strong><br>
+                - Buscando: tipo_item='<?= $tipo_item ?>', item_id=<?= $item_id ?><br>
+                - Movimientos encontrados: <?= count($movimientos) ?><br>
+                - Total movimientos en tabla: <?= $total_movimientos ?><br>
+                - Columnas de la tabla: <?= implode(', ', $columnas_tabla) ?>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 

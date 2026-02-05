@@ -95,6 +95,17 @@ if (!empty($items)) {
             <div class="card-body">
                 <p><strong>Estado:</strong> <?= htmlspecialchars(str_replace('_', ' ', $orden['estado'] ?? 'pendiente')) ?></p>
                 <p><strong>Entrega:</strong> <?= !empty($orden['fecha_entrega']) ? date('d/m/Y', strtotime($orden['fecha_entrega'])) : '-' ?></p>
+                
+                <?php if (isset($orden['materiales_descontados'])): ?>
+                    <p><strong>Materiales:</strong> 
+                        <?php if ($orden['materiales_descontados']): ?>
+                            <span class="badge bg-success">✓ Descontados del inventario</span>
+                        <?php else: ?>
+                            <span class="badge bg-danger">⚠ Pendientes de descuento</span>
+                        <?php endif; ?>
+                    </p>
+                <?php endif; ?>
+                
                 <?php if (!empty($orden['notas'])): ?>
                     <p><strong>Notas:</strong> <?= nl2br(htmlspecialchars($orden['notas'])) ?></p>
                 <?php endif; ?>
@@ -210,6 +221,14 @@ if (!empty($items)) {
                                                     <td>
                                                         <?= htmlspecialchars($r['tipo_calculo']) ?>
                                                         <?= $merma > 0 ? ' + ' . $merma . '%' : '' ?>
+                                                        <?php if ($orden['materiales_descontados'] ?? 0): ?>
+                                                            <br>
+                                                            <a href="inventario_movimientos.php?tipo=<?= $r['tipo_item'] ?? 'producto' ?>&id=<?= $r['material_producto_id'] ?>" 
+                                                               class="btn btn-xs btn-outline-info btn-sm mt-1" 
+                                                               target="_blank">
+                                                                📊 Ver movimientos
+                                                            </a>
+                                                        <?php endif; ?>
                                                     </td>
                                                 </tr>
                                             <?php endforeach; ?>

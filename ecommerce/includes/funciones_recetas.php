@@ -91,7 +91,11 @@ function obtener_valor_condicion($pdo, $producto_id, $condicion_tipo, $condicion
  */
 function obtener_receta_con_condiciones($pdo, $producto_id, $ancho, $alto, $atributos_seleccionados = []) {
     $stmt = $pdo->prepare("
-        SELECT r.*, m.nombre as material_nombre
+        SELECT r.*, m.nombre as material_nombre,
+               CASE 
+                   WHEN EXISTS(SELECT 1 FROM ecommerce_materiales WHERE id = r.material_producto_id) THEN 'material'
+                   ELSE 'producto'
+               END as tipo_item
         FROM ecommerce_producto_recetas_productos r
         JOIN ecommerce_productos m ON r.material_producto_id = m.id
         WHERE r.producto_id = ?
