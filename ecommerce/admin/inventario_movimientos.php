@@ -4,45 +4,67 @@ require 'includes/header.php';
 $tipo_item = $_GET['tipo'] ?? 'material'; // material o producto
 $item_id = intval($_GET['id'] ?? 0);
 
-// Obtener información del item
-if ($tipo_item === 'material') {
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_materiales WHERE id = ?");
+$error_item = '';
+
+// Validar que el ID sea válido
+if ($item_id <= 0) {
+    $error_item = "ID de item inválido";
 } else {
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_productos WHERE id = ?");
+    // Obtener información del item
+    if ($tipo_item === 'material') {
+        $stmt = $pdo->prepare("SELECT * FROM ecommerce_materiales WHERE id = ?");
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM ecommerce_productos WHERE id = ?");
+    }
+    $stmt->execute([$item_id]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$item) {
+        $error_item = "Item no encontrado (ID: $item_id, Tipo: $tipo_item)";
+    }
 }
-$stmt->execute([$item_id]);
-$item = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$item) {
-    die("Item no encontrado");
+// Inicializar variables
+$movimientos = [];
+$columnas_tabla = [];
+$total_movimientos = 0;
+$total_para_este_item = 0;
+
+// Si el item existe, obtener movimientos
+if (empty($error_item) && !empty($item)) {
+    // Obtener movimientos - usando producto_id (schema actual)
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.nombre as usuario_nombre
+        FROM ecommerce_inventario_movimientos m
+        LEFT JOIN usuarios u ON m.usuario_id = u.id
+        WHERE m.producto_id = ?
+        ORDER BY m.fecha_creacion DESC
+        LIMIT 100
+    ");
+    $stmt->execute([$item_id]);
+    $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
-// Obtener movimientos - usando producto_id (schema actual)
-$stmt = $pdo->prepare("
-    SELECT m.*, u.nombre as usuario_nombre
-    FROM ecommerce_inventario_movimientos m
-    LEFT JOIN usuarios u ON m.usuario_id = u.id
-    WHERE m.producto_id = ?
-    ORDER BY m.fecha_creacion DESC
-    LIMIT 100
-");
-$stmt->execute([$item_id]);
-$movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // DEBUG: Verificar estructura de la tabla
 $debug_mode = true;
 if ($debug_mode) {
-    $stmt_debug = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos");
-    $columnas_tabla = $stmt_debug->fetchAll(PDO::FETCH_COLUMN);
-    
-    // Verificar si hay movimientos sin filtro
-    $stmt_total = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos");
-    $total_movimientos = $stmt_total->fetch()['total'];
-    
-    // Verificar movimientos para este producto específico
-    $stmt_debug_item = $pdo->prepare("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos WHERE producto_id = ?");
-    $stmt_debug_item->execute([$item_id]);
-    $total_para_este_item = $stmt_debug_item->fetch()['total'];
+    try {
+        $stmt_debug = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos");
+        $columnas_tabla = $stmt_debug->fetchAll(PDO::FETCH_COLUMN);
+        
+        // Verificar si hay movimientos sin filtro
+        $stmt_total = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos");
+        $total_movimientos = $stmt_total->fetch()['total'];
+        
+        // Verificar movimientos para este producto específico
+        if ($item_id > 0) {
+            $stmt_debug_item = $pdo->prepare("SELECT COUNT(*) as total FROM ecommerce_inventario_movimientos WHERE producto_id = ?");
+            $stmt_debug_item->execute([$item_id]);
+            $total_para_este_item = $stmt_debug_item->fetch()['total'];
+        }
+    } catch (Exception $e) {
+        // Si hay error en debug, continuar de todas formas
+    }
 }
 ?>
 
@@ -50,11 +72,18 @@ if ($debug_mode) {
     <div class="col-md-12">
         <a href="inventario.php" class="btn btn-secondary mb-3">← Volver a Inventario</a>
         <h1>📊 Historial de Movimientos</h1>
-        <h4><?= htmlspecialchars($item['nombre']) ?></h4>
-        <p class="text-muted">
-            Tipo: <span class="badge bg-<?= $tipo_item === 'material' ? 'info' : 'success' ?>"><?= ucfirst($tipo_item) ?></span> | 
-            Stock Actual: <strong><?= number_format($item['stock'], 2) ?></strong>
-        </p>
+        
+        <?php if (!empty($error_item)): ?>
+            <div class="alert alert-danger">
+                <strong>Error:</strong> <?= htmlspecialchars($error_item) ?>
+            </div>
+        <?php else: ?>
+            <h4><?= htmlspecialchars($item['nombre']) ?></h4>
+            <p class="text-muted">
+                Tipo: <span class="badge bg-<?= $tipo_item === 'material' ? 'info' : 'success' ?>"><?= ucfirst($tipo_item) ?></span> | 
+                Stock Actual: <strong><?= number_format($item['stock'], 2) ?></strong>
+            </p>
+        <?php endif; ?>
         
         <?php if ($debug_mode): ?>
             <div class="alert alert-warning">
@@ -81,10 +110,19 @@ if ($debug_mode) {
 </div>
 
 <!-- Tabla de movimientos -->
+<?php if (empty($error_item) && !empty($item)): ?>
 <div class="card">
     <div class="card-body">
         <?php if (empty($movimientos)): ?>
-            <div class="alert alert-info">No hay movimientos registrados</div>
+            <div class="alert alert-info">
+                <strong>No hay movimientos registrados</strong><br>
+                <small>Este producto aún no tiene ningún movimiento en el historial. Los movimientos se registran cuando:</small>
+                <ul style="margin-top: 10px;">
+                    <li>Se crea una orden de producción (se descuentan materiales)</li>
+                    <li>Se realiza un ajuste manual de inventario</li>
+                    <li>Se procesa un pedido (descuento de stock)</li>
+                </ul>
+            </div>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover">
@@ -157,5 +195,6 @@ if ($debug_mode) {
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 
 <?php require 'includes/footer.php'; ?>
