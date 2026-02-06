@@ -23,8 +23,9 @@ if (!$gasto) {
 }
 
 // Eliminar archivo si existe
-if (!empty($gasto['archivo']) && file_exists("../../uploads/gastos/" . $gasto['archivo'])) {
-    unlink("../../uploads/gastos/" . $gasto['archivo']);
+$upload_dir = realpath(__DIR__ . '/../../uploads') . '/gastos/';
+if (!empty($gasto['archivo']) && file_exists($upload_dir . $gasto['archivo'])) {
+    unlink($upload_dir . $gasto['archivo']);
 }
 
 // Eliminar historial

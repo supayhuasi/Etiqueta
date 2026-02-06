@@ -64,12 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errores[] = "El archivo es muy grande";
         } else {
             // Eliminar archivo anterior si existe
-            if (!empty($gasto['archivo']) && file_exists("../../uploads/gastos/" . $gasto['archivo'])) {
-                unlink("../../uploads/gastos/" . $gasto['archivo']);
+            $upload_dir = realpath(__DIR__ . '/../../uploads') . '/gastos/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0775, true);
+            }
+            if (!empty($gasto['archivo']) && file_exists($upload_dir . $gasto['archivo'])) {
+                unlink($upload_dir . $gasto['archivo']);
             }
             
             $archivo = "gasto_" . time() . "." . $ext;
-            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "../../uploads/gastos/" . $archivo)) {
+            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo)) {
                 $errores[] = "Error al subir el archivo";
                 $archivo = $gasto['archivo'];
             }

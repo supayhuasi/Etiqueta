@@ -52,7 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errores[] = "El archivo es muy grande (máximo 5MB)";
         } else {
             $archivo = "gasto_" . time() . "." . $ext;
-            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "../../uploads/gastos/" . $archivo)) {
+            $upload_dir = realpath(__DIR__ . '/../../uploads') . '/gastos/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0775, true);
+            }
+            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo)) {
                 $errores[] = "Error al subir el archivo";
                 $archivo = null;
             }
