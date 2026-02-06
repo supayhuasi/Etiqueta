@@ -88,11 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            $observaciones, $archivo, $id]);
             
             // Si el nuevo estado es "Pagado", registrar en flujo de caja
-            $stmt_estado = $pdo->prepare("SELECT nombre FROM estados_gastos WHERE id = ?");
-            $stmt_estado->execute([$estado_gasto_id]);
-            $estado_info = $stmt_estado->fetch(PDO::FETCH_ASSOC);
-            
-            if (!empty($estado_info) && $estado_info['nombre'] === 'Pagado') {
+            $stmt_pagado = $pdo->prepare("SELECT id FROM estados_gastos WHERE LOWER(nombre) = 'pagado' LIMIT 1");
+            $stmt_pagado->execute();
+            $pagado_id = $stmt_pagado->fetchColumn();
+
+            if ($pagado_id && (int)$estado_gasto_id === (int)$pagado_id) {
                 try {
                     // Verificar si ya existe en flujo_caja
                     $stmt_fc_check = $pdo->prepare("
@@ -102,8 +102,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ");
                     $stmt_fc_check->execute([$id]);
                     $fc_existe = $stmt_fc_check->fetch(PDO::FETCH_ASSOC);
-                    
-                    if (!$fc_existe) {
+
+                    if ($fc_existe) {
+                        $stmt_fc_update = $pdo->prepare("
+                            UPDATE flujo_caja
+                            SET fecha = ?, descripcion = ?, monto = ?, observaciones = ?
+                            WHERE id_referencia = ? AND categoria = 'Gasto'
+                        ");
+                        $stmt_fc_update->execute([
+                            $fecha,
+                            $descripcion,
+                            $monto,
+                            $observaciones ?: 'Actualizado desde edición en estado Pagado',
+                            $id
+                        ]);
+                    } else {
                         // Solo crear si no existe
                         $stmt_fc = $pdo->prepare("
                             INSERT INTO flujo_caja 
@@ -117,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $gasto['numero_gasto'],
                             $id,
                             $_SESSION['user']['id'],
-                            $observaciones ?: 'Registrado desde cambio de estado a Pagado'
+                            $observaciones ?: 'Registrado desde edición'
                         ]);
                     }
                 } catch (Exception $e) {
