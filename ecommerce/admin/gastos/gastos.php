@@ -8,8 +8,8 @@ if (!isset($_SESSION['user'])) {
 }
 
 // Verificar que sea admin
-if ($_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado. Solo administradores pueden acceder a este módulo.");
+if (!isset($can_access) || !$can_access('gastos')) {
+    die("Acceso denegado. No tenés permisos para este módulo.");
 }
 
 // Obtener mes seleccionado o usar mes actual

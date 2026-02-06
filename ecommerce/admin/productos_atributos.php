@@ -5,7 +5,9 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
         session_start();
     }
 
-    if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
+    $role = $_SESSION['rol'] ?? '';
+    $allowed_roles = ['admin', 'usuario'];
+    if (!isset($_SESSION['user']) || !in_array($role, $allowed_roles, true)) {
         http_response_code(403);
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Acceso denegado']);

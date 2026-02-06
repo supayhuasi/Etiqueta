@@ -7,7 +7,7 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-if ($_SESSION['rol'] !== 'admin') {
+if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
 

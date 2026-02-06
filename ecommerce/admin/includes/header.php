@@ -29,9 +29,107 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-// Verificar que sea admin
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    die("Acceso denegado. Solo administradores pueden acceder.");
+// Verificar que tenga rol válido
+if (!isset($_SESSION['rol'])) {
+    die("Acceso denegado. Rol no válido.");
+}
+
+// Permisos de menú por rol
+// Ajustar según tus necesidades
+$role = $_SESSION['rol'] ?? 'usuario';
+$role_permissions = [
+    'admin' => ['*'],
+    'usuario' => [
+        'dashboard',
+        'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
+        'pedidos', 'ordenes_produccion',
+        'inventario',
+        'flujo_caja',
+        'cheques',
+        'gastos',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+    ],
+    'operario' => [
+        'dashboard',
+        'ordenes_produccion',
+        'inventario',
+        'asistencias',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+    ]
+];
+
+$can_access = function (string $key) use ($role_permissions, $role): bool {
+    if (!isset($role_permissions[$role])) {
+        return $key === 'dashboard' || $key === 'tienda' || $key === 'inicio_principal' || $key === 'dashboard_principal';
+    }
+    $allowed = $role_permissions[$role];
+    return in_array('*', $allowed, true) || in_array($key, $allowed, true);
+};
+
+$can_access_any = function (array $keys) use ($can_access): bool {
+    foreach ($keys as $key) {
+        if ($can_access($key)) {
+            return true;
+        }
+    }
+    return false;
+};
+
+// Control de acceso por página
+$page_permissions = [
+    'index.php' => 'dashboard',
+    'categorias.php' => 'categorias',
+    'categorias_crear.php' => 'categorias',
+    'categorias_editar.php' => 'categorias',
+    'productos.php' => 'productos',
+    'productos_crear.php' => 'productos',
+    'productos_editar.php' => 'productos',
+    'matriz_precios.php' => 'matriz_precios',
+    'listas_precios.php' => 'listas_precios',
+    'listas_precios_crear.php' => 'listas_precios',
+    'listas_precios_editar.php' => 'listas_precios',
+    'precios_ecommerce.php' => 'precios_ecommerce',
+    'empresa.php' => 'empresa',
+    'trabajos.php' => 'trabajos',
+    'mp_config.php' => 'mp_config',
+    'pedidos.php' => 'pedidos',
+    'ordenes_produccion.php' => 'ordenes_produccion',
+    'facturacion_clientes.php' => 'facturacion_clientes',
+    'cotizaciones.php' => 'cotizaciones',
+    'cotizacion_crear.php' => 'cotizaciones',
+    'cotizacion_detalle.php' => 'cotizaciones',
+    'cotizacion_clientes.php' => 'cotizacion_clientes',
+    'inventario.php' => 'inventario',
+    'inventario_movimientos.php' => 'inventario',
+    'proveedores.php' => 'proveedores',
+    'compras.php' => 'compras',
+    'compras_crear.php' => 'compras',
+    'compras_detalle.php' => 'compras',
+    'inventario_ajustes.php' => 'inventario_ajustes',
+    'sueldos.php' => 'sueldos',
+    'pagar_sueldo.php' => 'sueldos',
+    'plantillas.php' => 'plantillas',
+    'asistencias.php' => 'asistencias',
+    'flujo_caja.php' => 'flujo_caja',
+    'flujo_caja_ingreso.php' => 'flujo_caja',
+    'flujo_caja_egreso.php' => 'flujo_caja',
+    'flujo_caja_reportes.php' => 'flujo_caja',
+    'pagos_sueldos_parciales.php' => 'flujo_caja',
+    'cheques.php' => 'cheques',
+    'cheques_crear.php' => 'cheques',
+    'cheques_editar.php' => 'cheques',
+    'cheques_cambiar_estado.php' => 'cheques',
+    'gastos.php' => 'gastos',
+    'gastos_crear.php' => 'gastos',
+    'gastos_editar.php' => 'gastos',
+    'gastos_cambiar_estado.php' => 'gastos',
+    'usuarios_lista.php' => 'usuarios',
+    'roles_usuarios.php' => 'roles'
+];
+
+$current_page = basename($_SERVER['PHP_SELF']);
+if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$current_page])) {
+    die("Acceso denegado. No tenés permisos para esta sección.");
 }
 ?>
 <!DOCTYPE html>
@@ -171,116 +269,190 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
             
             <div class="sidebar-menu">
                 <!-- Inicio -->
+                <?php if ($can_access('dashboard')): ?>
                 <div class="menu-section">
                     <a href="<?= $admin_url ?>index.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? '' : 'collapsed' ?>" style="cursor: default;">
                         <span><i class="bi bi-house-door"></i> Inicio</span>
                     </a>
                 </div>
+                <?php endif; ?>
 
                 <!-- Catálogo -->
+                <?php if ($can_access_any(['categorias', 'productos', 'matriz_precios', 'listas_precios', 'precios_ecommerce'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCatalogo">
                         <span><i class="bi bi-box-seam"></i> Catálogo</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCatalogo">
+                        <?php if ($can_access('categorias')): ?>
                         <a href="<?= $admin_url ?>categorias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'categorias.php' ? 'active' : '' ?>"><i class="bi bi-folder"></i> Categorías</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('productos')): ?>
                         <a href="<?= $admin_url ?>productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'productos.php' ? 'active' : '' ?>"><i class="bi bi-box"></i> Productos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('matriz_precios')): ?>
                         <a href="<?= $admin_url ?>matriz_precios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'matriz_precios.php' ? 'active' : '' ?>"><i class="bi bi-table"></i> Matriz de Precios</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('listas_precios')): ?>
                         <a href="<?= $admin_url ?>listas_precios.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['listas_precios.php', 'listas_precios_crear.php', 'listas_precios_editar.php']) ? 'active' : '' ?>"><i class="bi bi-currency-dollar"></i> Listas de Precios</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('precios_ecommerce')): ?>
                         <a href="<?= $admin_url ?>precios_ecommerce.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_ecommerce.php' ? 'active' : '' ?>"><i class="bi bi-cart"></i> Precios Ecommerce</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Empresa -->
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuEmpresa">
+                        <?php if ($can_access('empresa')): ?>
                         <a href="<?= $admin_url ?>empresa.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empresa.php' ? 'active' : '' ?>"><i class="bi bi-info-circle"></i> Información</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('trabajos')): ?>
                         <a href="<?= $admin_url ?>trabajos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'trabajos.php' ? 'active' : '' ?>"><i class="bi bi-images"></i> Trabajos Realizados</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Ventas -->
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'cotizaciones', 'cotizacion_clientes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuVentas">
+                        <?php if ($can_access('pedidos')): ?>
                         <a href="<?= $admin_url ?>pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>"><i class="bi bi-receipt"></i> Pedidos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('ordenes_produccion')): ?>
                         <a href="<?= $admin_url ?>ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>"><i class="bi bi-gear"></i> Órdenes de Producción</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('facturacion_clientes')): ?>
                         <a href="<?= $admin_url ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark-text"></i> Facturación</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('cotizaciones')): ?>
                         <a href="<?= $admin_url ?>cotizaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizaciones.php', 'cotizacion_crear.php', 'cotizacion_detalle.php']) ? 'active' : '' ?>"><i class="bi bi-file-earmark-richtext"></i> Cotizaciones</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('cotizacion_clientes')): ?>
                         <a href="<?= $admin_url ?>cotizacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'cotizacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Clientes Cotización</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Compras e Inventario -->
+                <?php if ($can_access_any(['inventario', 'proveedores', 'compras', 'inventario_ajustes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCompras">
                         <span><i class="bi bi-bag"></i> Compras e Inventario</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCompras">
+                        <?php if ($can_access('inventario')): ?>
                         <a href="<?= $admin_url ?>inventario.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['inventario.php', 'inventario_movimientos.php']) ? 'active' : '' ?>"><i class="bi bi-boxes"></i> Inventario</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('proveedores')): ?>
                         <a href="<?= $admin_url ?>proveedores.php" class="<?= basename($_SERVER['PHP_SELF']) === 'proveedores.php' ? 'active' : '' ?>"><i class="bi bi-truck"></i> Proveedores</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('compras')): ?>
                         <a href="<?= $admin_url ?>compras.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['compras.php', 'compras_crear.php', 'compras_detalle.php']) ? 'active' : '' ?>"><i class="bi bi-basket"></i> Compras</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('inventario_ajustes')): ?>
                         <a href="<?= $admin_url ?>inventario_ajustes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'inventario_ajustes.php' ? 'active' : '' ?>"><i class="bi bi-sliders"></i> Ajustes de Inventario</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Recursos Humanos -->
+                <?php if ($can_access_any(['sueldos', 'plantillas', 'asistencias'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuRRHH">
                         <span><i class="bi bi-person-badge"></i> Recursos Humanos</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuRRHH">
+                        <?php if ($can_access('sueldos')): ?>
                         <a href="<?= $admin_url ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php']) ? 'active' : '' ?>"><i class="bi bi-cash-coin"></i> Sueldos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('plantillas')): ?>
                         <a href="<?= $admin_url ?>sueldos/plantillas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'plantillas.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark"></i> Plantillas</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('asistencias')): ?>
                         <a href="<?= $admin_url ?>asistencias/asistencias.php" class="<?= basename($_SERVER['PHP_SELF']) === 'asistencias.php' ? 'active' : '' ?>"><i class="bi bi-calendar-check"></i> Asistencias</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Finanzas -->
+                <?php if ($can_access_any(['flujo_caja', 'cheques', 'gastos'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas">
                         <span><i class="bi bi-cash-stack"></i> Finanzas</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuFinanzas">
+                        <?php if ($can_access('flujo_caja')): ?>
                         <a href="<?= $admin_url ?>flujo_caja.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['flujo_caja.php', 'flujo_caja_ingreso.php', 'flujo_caja_egreso.php', 'flujo_caja_reportes.php', 'pagos_sueldos_parciales.php']) ? 'active' : '' ?>"><i class="bi bi-cash"></i> Flujo de Caja</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('cheques')): ?>
                         <a href="<?= $admin_url ?>cheques/cheques.php" class="<?= basename($_SERVER['PHP_SELF']) === 'cheques.php' ? 'active' : '' ?>"><i class="bi bi-credit-card-2-front"></i> Cheques</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('gastos')): ?>
                         <a href="<?= $admin_url ?>gastos/gastos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'gastos.php' ? 'active' : '' ?>"><i class="bi bi-wallet2"></i> Gastos</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Sistema -->
+                <?php if ($can_access_any(['inicio_principal', 'scan', 'dashboard_principal', 'usuarios', 'roles'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuSistema">
                         <span><i class="bi bi-gear-fill"></i> Sistema</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuSistema">
+                        <?php if ($can_access('inicio_principal')): ?>
                         <a href="<?= $relative_root ?>index.php"><i class="bi bi-house"></i> Inicio Principal</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('scan')): ?>
                         <a href="<?= $relative_root ?>scan.php"><i class="bi bi-upc-scan"></i> Escaneo</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('dashboard_principal')): ?>
                         <a href="<?= $relative_root ?>dashboard.php"><i class="bi bi-speedometer"></i> Dashboard</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('usuarios')): ?>
                         <a href="<?= $relative_root ?>usuarios_lista.php"><i class="bi bi-people"></i> Usuarios</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('roles')): ?>
                         <a href="<?= $relative_root ?>roles_usuarios.php"><i class="bi bi-shield-check"></i> Roles</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Botón Ir a Tienda -->
+                <?php if ($can_access('tienda')): ?>
                 <div class="menu-section mt-3">
                     <a href="/ecommerce/index.php" target="_blank" class="btn btn-success w-100">
                         <i class="bi bi-shop"></i> Ir a la Tienda
                     </a>
                 </div>
+                <?php endif; ?>
             </div>
         </div>
 

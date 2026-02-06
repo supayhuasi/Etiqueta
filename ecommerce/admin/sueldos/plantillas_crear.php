@@ -2,7 +2,8 @@
 session_start();
 require '../includes/header.php';
 
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
+// Permisos
+if (!isset($can_access) || !$can_access('plantillas')) {
     die("Acceso denegado");
 }
 

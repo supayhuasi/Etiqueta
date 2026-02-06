@@ -6,7 +6,9 @@ if (session_status() === PHP_SESSION_NONE) {
 require '../../config.php';
 require '../../code128.php';
 
-if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
+$role = $_SESSION['rol'] ?? '';
+$allowed_roles = ['admin', 'usuario', 'operario'];
+if (!isset($_SESSION['user']) || !in_array($role, $allowed_roles, true)) {
     die('Acceso denegado');
 }
 
