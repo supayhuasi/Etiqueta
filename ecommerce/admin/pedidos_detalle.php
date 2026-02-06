@@ -212,6 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } catch (Exception $e) {
                 // Si falla el flujo de caja, no afecta el registro del pago
+                $_SESSION['flujo_error_pago'] = $e->getMessage();
             }
 
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
@@ -297,6 +298,13 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+<?php endif; ?>
+
+<?php if (!empty($_SESSION['flujo_error_pago'])): ?>
+    <div class="alert alert-warning">
+        El pago se registró, pero no se pudo impactar en flujo de caja: <?= htmlspecialchars($_SESSION['flujo_error_pago']) ?>
+    </div>
+    <?php unset($_SESSION['flujo_error_pago']); ?>
 <?php endif; ?>
 
 <div class="card mb-4" id="pagos">
