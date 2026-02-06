@@ -6,7 +6,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
     }
 
     $role = $_SESSION['rol'] ?? '';
-    $allowed_roles = ['admin', 'usuario'];
+    $allowed_roles = ['admin', 'usuario', 'ventas'];
     if (!isset($_SESSION['user']) || !in_array($role, $allowed_roles, true)) {
         http_response_code(403);
         header('Content-Type: application/json');
