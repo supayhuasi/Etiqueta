@@ -7,6 +7,18 @@ if (!isset($pdo)) {
   require __DIR__ . '/../config.php';
 }
 
+$script_path_public = $_SERVER['SCRIPT_NAME'] ?? '';
+$public_base = '';
+if ($script_path_public) {
+  if (strpos($script_path_public, '/ecommerce/') !== false) {
+    $public_base = preg_replace('#/ecommerce/.*$#', '/ecommerce', $script_path_public);
+  } elseif (strpos($script_path_public, '/admin/') !== false) {
+    $public_base = rtrim(preg_replace('#/admin/.*$#', '', $script_path_public), '/');
+  } else {
+    $public_base = rtrim(dirname($script_path_public), '/\\');
+  }
+}
+
 $empresa_menu = null;
 $ga_config = [
   'enabled' => false,
@@ -25,7 +37,7 @@ $logo_menu_src = null;
 if (!empty($empresa_menu['logo'])) {
   $logo_menu_path = __DIR__ . '/../uploads/' . $empresa_menu['logo'];
   if (file_exists($logo_menu_path)) {
-    $logo_menu_src = 'uploads/' . $empresa_menu['logo'];
+    $logo_menu_src = $public_base . '/uploads/' . $empresa_menu['logo'];
   }
 }
 

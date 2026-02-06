@@ -75,6 +75,24 @@ try {
 
     // Tabla de pedidos
     $pdo->exec("
+
+    // Asegurar columnas de Mercado Pago si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'mercadopago_preference_id'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN mercadopago_preference_id VARCHAR(255) AFTER observaciones");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'mercadopago_payment_id'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN mercadopago_payment_id VARCHAR(255) AFTER mercadopago_preference_id");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'mercadopago_status'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN mercadopago_status VARCHAR(50) AFTER mercadopago_payment_id");
+    }
+    $idx = $pdo->query("SHOW INDEX FROM ecommerce_pedidos WHERE Key_name = 'idx_mp_payment'");
+    if ($idx->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD INDEX idx_mp_payment (mercadopago_payment_id)");
+    }
         CREATE TABLE IF NOT EXISTS ecommerce_pedidos (
             id INT PRIMARY KEY AUTO_INCREMENT,
             numero_pedido VARCHAR(50) NOT NULL UNIQUE,
