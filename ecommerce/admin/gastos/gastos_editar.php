@@ -92,11 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_estado->execute([$estado_gasto_id]);
             $estado_info = $stmt_estado->fetch(PDO::FETCH_ASSOC);
             
-            error_log("Estado info: " . json_encode($estado_info)); // DEBUG
-            error_log("Estado nuevo ID: " . $estado_gasto_id); // DEBUG
-            
             if (!empty($estado_info) && $estado_info['nombre'] === 'Pagado') {
-                error_log("Estado es Pagado, creando en flujo_caja"); // DEBUG
                 try {
                     // Verificar si ya existe en flujo_caja
                     $stmt_fc_check = $pdo->prepare("
@@ -121,15 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $gasto['numero_gasto'],
                             $id,
                             $_SESSION['user']['id'],
-                            $observaciones ?: 'Registrado desde edición'
+                            $observaciones ?: 'Registrado desde cambio de estado a Pagado'
                         ]);
-                        error_log("Flujo de caja creado exitosamente"); // DEBUG
-                    } else {
-                        error_log("Flujo de caja ya existe"); // DEBUG
                     }
                 } catch (Exception $e) {
-                    error_log("Error al crear flujo_caja: " . $e->getMessage()); // DEBUG
-                    // Si falla el flujo de caja, no afecta la edición
+                    // Si falla el flujo de caja, no afecta el cambio de estado
                 }
             }
             
