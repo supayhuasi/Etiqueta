@@ -12,17 +12,18 @@ try {
         )
     ");
 
-    // Insertar roles por defecto si no existen
-    $stmt = $pdo->query("SELECT COUNT(*) FROM roles");
-    if ($stmt->fetchColumn() == 0) {
-        $pdo->exec("
-            INSERT INTO roles (nombre, descripcion) VALUES
-            ('admin', 'Administrador del sistema'),
-            ('usuario', 'Usuario regular'),
-            ('operario', 'Operario de producción')
-        ");
-        echo "✓ Roles creados<br>";
+    // Insertar roles por defecto si no existen (idempotente)
+    $roles_default = [
+        ['admin', 'Administrador del sistema'],
+        ['usuario', 'Usuario regular'],
+        ['operario', 'Operario de producción'],
+        ['ventas', 'Usuario de ventas']
+    ];
+    $stmt = $pdo->prepare("INSERT IGNORE INTO roles (nombre, descripcion) VALUES (?, ?)");
+    foreach ($roles_default as $role) {
+        $stmt->execute($role);
     }
+    echo "✓ Roles creados/actualizados<br>";
 
     // Intentar agregar columna rol_id a usuarios si no existe
     $stmt = $pdo->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'usuarios' AND COLUMN_NAME = 'rol_id'");

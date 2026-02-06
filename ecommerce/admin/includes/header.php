@@ -54,6 +54,13 @@ $role_permissions = [
         'ordenes_produccion',
         'inventario',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+    ],
+    'ventas' => [
+        'dashboard',
+        'pedidos',
+        'cotizaciones',
+        'cotizacion_clientes',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
 
