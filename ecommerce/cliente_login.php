@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email) || empty($password)) {
         $error = 'Email y contraseña son obligatorios.';
     } else {
-        $stmt = $pdo->prepare("SELECT id, nombre, password_hash, activo FROM ecommerce_clientes WHERE email = ? LIMIT 1");
+        $stmt = $pdo->prepare("SELECT id, nombre, password_hash, activo, email_verificado, email_verificado_en FROM ecommerce_clientes WHERE email = ? LIMIT 1");
         $stmt->execute([$email]);
         $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -41,6 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'No existe una cuenta con ese email.';
         } elseif ((int)$cliente['activo'] !== 1) {
             $error = 'La cuenta está inactiva.';
+        } elseif ((int)($cliente['email_verificado'] ?? 0) !== 1 && empty($cliente['email_verificado_en'])) {
+            $error = 'La cuenta no está verificada. Revisá tu email o reenviá la verificación.';
         } elseif (!password_verify($password, $cliente['password_hash'])) {
             $error = 'Credenciales inválidas.';
         } else {
@@ -79,7 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="password" name="password" class="form-control" required>
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
-                            <a href="cliente_registro.php" class="text-muted">Crear cuenta</a>
+                            <div>
+                                <a href="cliente_registro.php" class="text-muted">Crear cuenta</a>
+                                <span class="mx-2 text-muted">|</span>
+                                <a href="cliente_reenviar_verificacion.php" class="text-muted">Reenviar verificación</a>
+                            </div>
                             <button type="submit" class="btn btn-primary">Ingresar</button>
                         </div>
                     </form>

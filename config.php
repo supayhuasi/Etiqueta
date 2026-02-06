@@ -14,3 +14,15 @@ try {
 } catch (PDOException $e) {
     die("Error DB: " . $e->getMessage());
 }
+
+// Configuración de correo (SMTP)
+$email_config = [
+    'from_email' => 'contacto@tucuroller.com.ar',
+    'from_name' => 'Tucu Roller',
+    'smtp_host' => 'c2331001.ferozo.com',
+    'smtp_port' => 465,
+    'smtp_user' => 'contacto@tucuroller.com.ar',
+    'smtp_pass' => 'k6Af*@7vvisibility_off',
+    'smtp_secure' => 'ssl',
+    'smtp_auth' => true
+];

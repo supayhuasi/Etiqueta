@@ -2,6 +2,7 @@
 require 'config.php';
 require 'includes/header.php';
 require 'includes/cliente_auth.php';
+require 'includes/mailer.php';
 
 if (!empty($_SESSION['cliente_id'])) {
     header('Location: mis_pedidos.php');
@@ -44,11 +45,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $stmt->execute([$email, $hash, $nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal]);
 
-                $_SESSION['cliente_id'] = $pdo->lastInsertId();
-                $_SESSION['cliente_nombre'] = $nombre;
+                $cliente_id = $pdo->lastInsertId();
+                $token = bin2hex(random_bytes(32));
+                $expira = date('Y-m-d H:i:s', time() + 24 * 60 * 60);
+                $stmt = $pdo->prepare("UPDATE ecommerce_clientes SET email_verificacion_token = ?, email_verificacion_expira = ? WHERE id = ?");
+                $stmt->execute([$token, $expira, $cliente_id]);
 
-                header('Location: mis_pedidos.php?mensaje=registro');
-                exit;
+                $baseUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
+                $verifyUrl = $baseUrl . '/ecommerce/cliente_verificar.php?token=' . urlencode($token);
+
+                $asunto = 'Verificá tu cuenta';
+                $html = "<p>Hola " . htmlspecialchars($nombre) . ",</p>"
+                    . "<p>Para verificar tu cuenta, hacé clic en el siguiente enlace:</p>"
+                    . "<p><a href=\"{$verifyUrl}\">Verificar cuenta</a></p>"
+                    . "<p>Si no creaste esta cuenta, podés ignorar este mensaje.</p>";
+
+                if (enviar_email($email, $asunto, $html)) {
+                    $mensaje = 'Cuenta creada. Revisá tu email para verificarla.';
+                } else {
+                    $mensaje = 'Cuenta creada, pero no se pudo enviar el email de verificación.';
+                }
             }
         } catch (Exception $e) {
             $error = 'Error al registrar: ' . $e->getMessage();
@@ -64,6 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <?php if (!empty($error)): ?>
                 <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($mensaje)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
             <?php endif; ?>
 
             <div class="card">

@@ -12,7 +12,7 @@ function cliente_actual(PDO $pdo): ?array {
         return null;
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE id = ? AND activo = 1");
+    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE id = ? AND activo = 1 AND (email_verificado = 1 OR email_verificado_en IS NOT NULL)");
     $stmt->execute([$_SESSION['cliente_id']]);
     $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
 

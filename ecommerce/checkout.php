@@ -2,6 +2,7 @@
 require 'config.php';
 require 'includes/header.php';
 require 'includes/cliente_auth.php';
+require 'includes/mailer.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -42,6 +43,44 @@ $error = '';
 // Obtener configuración de Mercado Pago
 $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
 $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
+
+function enviar_correos_pedido(PDO $pdo, string $numero_pedido, string $email_cliente, string $nombre_cliente, float $total, string $metodo_pago): void {
+    $email_cliente = trim($email_cliente);
+    $empresa_email = '';
+    $empresa_nombre = 'Ecommerce';
+
+    try {
+        $stmt = $pdo->query("SELECT nombre, email FROM ecommerce_empresa LIMIT 1");
+        $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($empresa) {
+            $empresa_email = $empresa['email'] ?? '';
+            $empresa_nombre = $empresa['nombre'] ?? $empresa_nombre;
+        }
+    } catch (Exception $e) {
+    }
+
+    $asunto_cliente = "Pedido {$numero_pedido} recibido";
+    $html_cliente = "<p>Hola " . htmlspecialchars($nombre_cliente) . ",</p>"
+        . "<p>Recibimos tu pedido <strong>{$numero_pedido}</strong>.</p>"
+        . "<p>Total: <strong>$" . number_format($total, 2, ',', '.') . "</strong></p>"
+        . "<p>Método de pago: <strong>" . htmlspecialchars($metodo_pago) . "</strong></p>"
+        . "<p>Gracias por tu compra.</p>";
+
+    if ($email_cliente !== '' && strpos($email_cliente, 'sin-email-') === false) {
+        enviar_email($email_cliente, $asunto_cliente, $html_cliente);
+    }
+
+    if (!empty($empresa_email)) {
+        $asunto_admin = "Nuevo pedido {$numero_pedido}";
+        $html_admin = "<p>Nuevo pedido recibido.</p>"
+            . "<p>Número: <strong>{$numero_pedido}</strong></p>"
+            . "<p>Cliente: <strong>" . htmlspecialchars($nombre_cliente) . "</strong></p>"
+            . "<p>Email: <strong>" . htmlspecialchars($email_cliente) . "</strong></p>"
+            . "<p>Total: <strong>$" . number_format($total, 2, ',', '.') . "</strong></p>"
+            . "<p>Método de pago: <strong>" . htmlspecialchars($metodo_pago) . "</strong></p>";
+        enviar_email($empresa_email, $asunto_admin, $html_admin);
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = $_POST['email'] ?? '';
@@ -168,6 +207,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $atributos_json
                 ]);
             }
+
+            enviar_correos_pedido($pdo, $numero_pedido, $email, $nombre, (float)$total, $metodo_pago);
             
             // Si es tarjeta de crédito y Mercado Pago está disponible
             if ($metodo_pago === 'Tarjeta de Crédito' && $config_mp) {

@@ -66,12 +66,42 @@ try {
             ciudad VARCHAR(100),
             direccion VARCHAR(255),
             codigo_postal VARCHAR(10),
+            email_verificado TINYINT DEFAULT 0,
+            email_verificado_en DATETIME,
+            email_verificacion_token VARCHAR(64),
+            email_verificacion_expira DATETIME,
             activo TINYINT DEFAULT 1,
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_email (email)
+            INDEX idx_email (email),
+            INDEX idx_verificacion_token (email_verificacion_token)
         )
     ");
+
+    // Agregar columnas de verificación de email si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'email_verificado'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificado TINYINT DEFAULT 0 AFTER codigo_postal");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'email_verificado_en'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificado_en DATETIME AFTER email_verificado");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'email_verificacion_token'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificacion_token VARCHAR(64) AFTER email_verificado_en");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'email_verificacion_expira'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificacion_expira DATETIME AFTER email_verificacion_token");
+    }
+    $idx = $pdo->query("SHOW INDEX FROM ecommerce_clientes WHERE Key_name = 'idx_verificacion_token'");
+    if ($idx->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD INDEX idx_verificacion_token (email_verificacion_token)");
+    }
+
+    // Marcar como verificados a clientes existentes sin token
+    $pdo->exec("UPDATE ecommerce_clientes SET email_verificado = 1, email_verificado_en = COALESCE(email_verificado_en, NOW()) WHERE email_verificado = 0 AND (email_verificacion_token IS NULL OR email_verificacion_token = '')");
 
     // Tabla de pedidos
     $pdo->exec("
