@@ -19,8 +19,16 @@ $depth = substr_count($current_dir, '/');
 $relative_root = str_repeat('../', $depth);
 
 // Usar URL absoluta desde el servidor para evitar problemas con rutas relativas
-// Esto siempre funciona correctamente desde cualquier ubicación
-$admin_url = '/ecommerce/admin/';  // URL absoluta desde raíz del servidor
+// Detectar automáticamente la base del admin (funciona con /ecommerce/admin o /admin)
+$script_path = $_SERVER['SCRIPT_NAME'] ?? '';
+$admin_url = '/ecommerce/admin/'; // fallback
+if ($script_path) {
+    if (strpos($script_path, '/admin/') !== false) {
+        $admin_url = preg_replace('#/admin/.*$#', '/admin/', $script_path);
+    } else {
+        $admin_url = rtrim(dirname($script_path), '/\\') . '/';
+    }
+}
 
 // Verificar que esté logueado
 if (!isset($_SESSION['user'])) {
