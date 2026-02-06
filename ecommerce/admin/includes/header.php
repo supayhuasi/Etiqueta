@@ -32,8 +32,8 @@ if ($script_path) {
 
 // Verificar que esté logueado
 if (!isset($_SESSION['user'])) {
-    // Redirigir al login del admin (en /ecommerce/admin/auth/login.php)
-    header("Location: /ecommerce/admin/auth/login.php");
+    // Redirigir al login del admin usando la base detectada
+    header("Location: {$admin_url}auth/login.php");
     exit;
 }
 
