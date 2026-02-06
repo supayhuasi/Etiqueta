@@ -8,6 +8,19 @@ $producto_id = $_GET['id'] ?? 0;
 // Determinar la ruta correcta para las imágenes
 $image_path = 'uploads/';
 
+function resolver_upload_url(string $relPath): string {
+    $relPath = ltrim($relPath, '/');
+    $local = __DIR__ . '/uploads/' . $relPath; // ecommerce/uploads
+    if (file_exists($local)) {
+        return 'uploads/' . $relPath;
+    }
+    $root = __DIR__ . '/../uploads/' . $relPath; // raiz /uploads
+    if (file_exists($root)) {
+        return '/uploads/' . $relPath;
+    }
+    return 'uploads/' . $relPath;
+}
+
 // Configuración de lista de precios pública
 $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
@@ -338,7 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php if (!empty($producto['manual_archivo'])): ?>
                         <div class="alert alert-success mb-4">
                             <h6 class="mb-2">📄 <?= htmlspecialchars($producto['manual_titulo'] ?? 'Manual de la categoría') ?></h6>
-                            <a href="../uploads/categorias/<?= htmlspecialchars($producto['manual_archivo']) ?>" target="_blank" class="btn btn-sm btn-success">
+                            <a href="<?= htmlspecialchars(resolver_upload_url('manuales/' . $producto['manual_archivo'])) ?>" target="_blank" class="btn btn-sm btn-success">
                                 <i class="bi bi-file-pdf"></i> Ver PDF
                             </a>
                         </div>
@@ -458,7 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="<?= '/uploads/atributos/' . htmlspecialchars($opcion['imagen']) ?>" 
+                                                            <img src="<?= htmlspecialchars(resolver_upload_url('atributos/' . $opcion['imagen'])) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>

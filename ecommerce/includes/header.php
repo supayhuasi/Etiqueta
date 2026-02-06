@@ -35,9 +35,14 @@ try {
 
 $logo_menu_src = null;
 if (!empty($empresa_menu['logo'])) {
-  $logo_menu_path = __DIR__ . '/../uploads/' . $empresa_menu['logo'];
-  if (file_exists($logo_menu_path)) {
-    $logo_menu_src = $public_base . '/uploads/' . $empresa_menu['logo'];
+  $logo_filename = $empresa_menu['logo'];
+  $logo_local_path = __DIR__ . '/../uploads/' . $logo_filename; // ecommerce/uploads
+  $logo_root_path = __DIR__ . '/../../uploads/' . $logo_filename; // raiz /uploads
+
+  if (file_exists($logo_local_path)) {
+    $logo_menu_src = $public_base . '/uploads/' . $logo_filename;
+  } elseif (file_exists($logo_root_path)) {
+    $logo_menu_src = '/uploads/' . $logo_filename;
   }
 }
 

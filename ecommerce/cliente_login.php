@@ -13,9 +13,14 @@ try {
 
 $logo_src = null;
 if (!empty($empresa['logo'])) {
-    $logo_path = __DIR__ . '/uploads/' . $empresa['logo'];
-    if (file_exists($logo_path)) {
-        $logo_src = 'uploads/' . $empresa['logo'];
+    $logo_filename = $empresa['logo'];
+    $logo_local_path = __DIR__ . '/uploads/' . $logo_filename; // ecommerce/uploads
+    $logo_root_path = __DIR__ . '/../uploads/' . $logo_filename; // raiz /uploads
+
+    if (file_exists($logo_local_path)) {
+        $logo_src = 'uploads/' . $logo_filename;
+    } elseif (file_exists($logo_root_path)) {
+        $logo_src = '/uploads/' . $logo_filename;
     }
 }
 
