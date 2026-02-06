@@ -179,6 +179,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user']['id'] ?? null
             ]);
 
+            $pago_id = $pdo->lastInsertId();
+
+            // Registrar ingreso en flujo de caja
+            try {
+                $stmt_fc_check = $pdo->prepare("
+                    SELECT id FROM flujo_caja
+                    WHERE id_referencia = ? AND categoria = 'Pago Pedido'
+                    LIMIT 1
+                ");
+                $stmt_fc_check->execute([$pago_id]);
+                $fc_existe = $stmt_fc_check->fetch(PDO::FETCH_ASSOC);
+
+                if (!$fc_existe) {
+                    $descripcion_fc = 'Pago pedido ' . $pedido['numero_pedido'] . ' (' . $metodo . ')';
+                    $referencia_fc = $referencia ?: $pedido['numero_pedido'];
+
+                    $stmt_fc = $pdo->prepare("
+                        INSERT INTO flujo_caja
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
+                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt_fc->execute([
+                        date('Y-m-d'),
+                        $descripcion_fc,
+                        $monto,
+                        $referencia_fc,
+                        $pago_id,
+                        $_SESSION['user']['id'] ?? null,
+                        $notas ?: 'Registrado desde pedido'
+                    ]);
+                }
+            } catch (Exception $e) {
+                // Si falla el flujo de caja, no afecta el registro del pago
+            }
+
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
         } elseif ($accion === 'cancelar_pedido') {
