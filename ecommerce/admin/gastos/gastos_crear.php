@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errores[] = "El archivo es muy grande (máximo 5MB)";
         } else {
             $archivo = "gasto_" . time() . "." . $ext;
-            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "../../uploads/gastos/" . $archivo)) {
+            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], "../uploads/gastos/" . $archivo)) {
                 $errores[] = "Error al subir el archivo";
                 $archivo = null;
             }
