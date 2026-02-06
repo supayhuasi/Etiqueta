@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt_fc = $pdo->prepare("
                             INSERT INTO flujo_caja 
                             (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?)
+                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt_fc->execute([
                             $gasto['fecha'],
