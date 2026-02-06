@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $observaciones ?: 'Registrado desde creación en estado Pagado'
                     ]);
                 } catch (Exception $e) {
-                    // Si falla el flujo de caja, no afecta el gasto
+                    $flujo_error = $e->getMessage();
                 }
             }
 
@@ -128,6 +128,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="alert alert-success" role="alert">
                     <?= $mensaje ?>
                     <br><a href="gastos.php" class="btn btn-primary btn-sm mt-2">Volver a Gastos</a>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($flujo_error)): ?>
+                <div class="alert alert-warning" role="alert">
+                    El gasto se creó, pero no se pudo registrar en flujo de caja: <?= htmlspecialchars($flujo_error) ?>
                 </div>
             <?php endif; ?>
 
