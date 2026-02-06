@@ -228,7 +228,7 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
             }
             
             $filename = 'atributo_' . $atributo_id . '_' . time() . '.' . $ext;
-            $dir = '../../uploads/atributos/';
+            $dir = '../uploads/atributos/';
             
             if (!is_dir($dir)) mkdir($dir, 0755, true);
             

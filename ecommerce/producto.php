@@ -6,7 +6,7 @@ require 'includes/precios_publico.php';
 $producto_id = $_GET['id'] ?? 0;
 
 // Determinar la ruta correcta para las imágenes
-$image_path = '../uploads/';
+$image_path = 'uploads/';
 
 function resolver_upload_url(string $relPath): string {
     $relPath = ltrim($relPath, '/');
@@ -471,7 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="<?= htmlspecialchars('../uploads/atributos/' . $opcion['imagen']) ?>" 
+                                                            <img src="<?= htmlspecialchars('uploads/atributos/' . $opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>
