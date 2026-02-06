@@ -74,6 +74,19 @@ try {
         $pdo->exec("INSERT INTO ecommerce_empresa (nombre, email) VALUES ('Mi Empresa', 'info@empresa.com')");
     }
 
+    // Verificar columnas para Google Analytics
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'ga_enabled'");
+    if ($stmt->rowCount() === 0) {
+        echo "Agregando columna ga_enabled a ecommerce_empresa...\n";
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN ga_enabled TINYINT(1) DEFAULT 0 AFTER redes_sociales");
+    }
+
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'ga_measurement_id'");
+    if ($stmt->rowCount() === 0) {
+        echo "Agregando columna ga_measurement_id a ecommerce_empresa...\n";
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN ga_measurement_id VARCHAR(50) AFTER ga_enabled");
+    }
+
     // Verificar tabla ecommerce_config
     $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_config'");
     if ($stmt->rowCount() === 0) {

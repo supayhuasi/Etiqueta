@@ -8,9 +8,15 @@ if (!isset($pdo)) {
 }
 
 $empresa_menu = null;
+$ga_config = [
+  'enabled' => false,
+  'measurement_id' => ''
+];
 try {
-  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales FROM ecommerce_empresa LIMIT 1");
+  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id FROM ecommerce_empresa LIMIT 1");
   $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
+  $ga_config['enabled'] = !empty($empresa_menu['ga_enabled']);
+  $ga_config['measurement_id'] = $empresa_menu['ga_measurement_id'] ?? '';
 } catch (Exception $e) {
   $empresa_menu = null;
 }
@@ -32,6 +38,15 @@ $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php if (!empty($ga_config['enabled']) && !empty($ga_config['measurement_id'])): ?>
+      <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($ga_config['measurement_id']) ?>"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', <?= json_encode($ga_config['measurement_id']) ?>);
+      </script>
+    <?php endif; ?>
     <title>Tucu Roller - Tienda Online</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
@@ -83,6 +98,9 @@ $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
         </li>
         <li class="nav-item">
           <a class="nav-link" href="contacto.php">Contacto</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/" target="_blank" rel="noopener">Admin</a>
         </li>
         <?php if (!empty($_SESSION['cliente_id'])): ?>
           <li class="nav-item">

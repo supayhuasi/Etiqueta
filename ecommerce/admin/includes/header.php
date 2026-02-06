@@ -119,6 +119,7 @@ $page_permissions = [
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
     'cotizacion_clientes.php' => 'cotizacion_clientes',
+    'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
     'inventario_reporte_productos.php' => 'inventario',
@@ -327,7 +328,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -342,6 +343,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('google_analytics')): ?>
+                        <a href="<?= $admin_url ?>google_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'google_analytics.php' ? 'active' : '' ?>"><i class="bi bi-graph-up"></i> Google Analytics</a>
                         <?php endif; ?>
                     </div>
                 </div>
