@@ -435,10 +435,10 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <a href="<?= $relative_root ?>dashboard.php"><i class="bi bi-speedometer"></i> Dashboard</a>
                         <?php endif; ?>
                         <?php if ($can_access('usuarios')): ?>
-                        <a href="<?= $relative_root ?>usuarios_lista.php"><i class="bi bi-people"></i> Usuarios</a>
+                        <a href="<?= $admin_url ?>usuarios_lista.php"><i class="bi bi-people"></i> Usuarios</a>
                         <?php endif; ?>
                         <?php if ($can_access('roles')): ?>
-                        <a href="<?= $relative_root ?>roles_usuarios.php"><i class="bi bi-shield-check"></i> Roles</a>
+                        <a href="<?= $admin_url ?>roles_usuarios.php"><i class="bi bi-shield-check"></i> Roles</a>
                         <?php endif; ?>
                     </div>
                 </div>

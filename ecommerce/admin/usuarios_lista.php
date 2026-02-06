@@ -15,8 +15,8 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <p class="text-muted">Listado de usuarios del sistema</p>
 
 <div class="mb-3 d-flex gap-2">
-    <a href="<?= $relative_root ?>usuarios_crear.php" class="btn btn-primary">Crear Usuario</a>
-    <a href="<?= $relative_root ?>roles_usuarios.php" class="btn btn-outline-secondary">Gestionar Roles</a>
+    <a href="<?= $admin_url ?>usuarios_crear.php" class="btn btn-primary">Crear Usuario</a>
+    <a href="<?= $admin_url ?>roles_usuarios.php" class="btn btn-outline-secondary">Gestionar Roles</a>
 </div>
 
 <div class="card">
@@ -30,12 +30,13 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <th>Nombre</th>
                         <th>Rol</th>
                         <th>Estado</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($usuarios)): ?>
                         <tr>
-                            <td colspan="5" class="text-center text-muted">No hay usuarios registrados</td>
+                            <td colspan="6" class="text-center text-muted">No hay usuarios registrados</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($usuarios as $user): ?>
@@ -52,6 +53,9 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <span class="badge <?= !empty($user['activo']) ? 'bg-success' : 'bg-secondary' ?>">
                                         <?= !empty($user['activo']) ? 'Activo' : 'Inactivo' ?>
                                     </span>
+                                </td>
+                                <td>
+                                    <a href="<?= $admin_url ?>usuarios_editar.php?id=<?= (int)$user['id'] ?>" class="btn btn-sm btn-outline-primary">Editar</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
