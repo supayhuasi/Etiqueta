@@ -6,7 +6,7 @@ require 'includes/precios_publico.php';
 $producto_id = $_GET['id'] ?? 0;
 
 // Determinar la ruta correcta para las imágenes
-$image_path = 'uploads/';
+$image_path = '/uploads/';
 
 function resolver_upload_url(string $relPath): string {
     $relPath = ltrim($relPath, '/');
