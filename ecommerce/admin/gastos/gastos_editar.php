@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errores[] = "El archivo es muy grande";
         } else {
             // Eliminar archivo anterior si existe
-            $upload_dir = realpath(__DIR__ . '/../../uploads') . '/gastos/';
+            $upload_dir = __DIR__ . '/../../uploads/gastos/';
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0775, true);
             }
@@ -73,7 +73,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             $archivo = "gasto_" . time() . "." . $ext;
-            if (!move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo)) {
+            $upload_error = $_FILES['archivo']['error'] ?? UPLOAD_ERR_OK;
+            if ($upload_error !== UPLOAD_ERR_OK) {
+                $errores[] = "Error al subir el archivo (código: $upload_error)";
+                $archivo = $gasto['archivo'];
+            } elseif (!is_writable($upload_dir)) {
+                $errores[] = "La carpeta de subida no tiene permisos de escritura: $upload_dir";
+                $archivo = $gasto['archivo'];
+            } elseif (!is_uploaded_file($_FILES['archivo']['tmp_name'])) {
+                $errores[] = "El archivo temporal no es válido";
+                $archivo = $gasto['archivo'];
+            } elseif (!move_uploaded_file($_FILES['archivo']['tmp_name'], $upload_dir . $archivo)) {
                 $errores[] = "Error al subir el archivo";
                 $archivo = $gasto['archivo'];
             }
