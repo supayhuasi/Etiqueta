@@ -1,4 +1,5 @@
 <?php
+require '../includes/header.php';
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -28,6 +29,10 @@ if (!empty($gasto['archivo']) && file_exists("uploads/gastos/" . $gasto['archivo
 
 // Eliminar historial
 $stmt = $pdo->prepare("DELETE FROM historial_gastos WHERE gasto_id = ?");
+$stmt->execute([$id]);
+
+// Eliminar movimiento en flujo de caja si existe
+$stmt = $pdo->prepare("DELETE FROM flujo_caja WHERE id_referencia = ? AND categoria = 'Gasto'");
 $stmt->execute([$id]);
 
 // Eliminar gasto
