@@ -18,7 +18,7 @@ function resolver_upload_url(string $relPath): string {
     if (file_exists($root)) {
         return '/uploads/' . $relPath;
     }
-    return 'uploads/' . $relPath;
+    return '/uploads/' . $relPath;
 }
 
 // Configuración de lista de precios pública
@@ -471,7 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
                                                             <div class="rounded" style="width: 80px; height: 80px; background-color: <?= htmlspecialchars($opcion['color']) ?>; border: 1px solid #ddd;"></div>
                                                         <?php elseif (!empty($opcion['imagen'])): ?>
-                                                            <img src="<?= htmlspecialchars(resolver_upload_url('atributos/' . $opcion['imagen'])) ?>" 
+                                                            <img src="<?= htmlspecialchars('/uploads/atributos/' . $opcion['imagen']) ?>" 
                                                                  alt="<?= htmlspecialchars($opcion['nombre']) ?>" 
                                                                  style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; display: block;">
                                                         <?php else: ?>
