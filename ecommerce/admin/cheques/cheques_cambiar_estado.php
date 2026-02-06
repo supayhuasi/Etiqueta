@@ -34,6 +34,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE id = ?
         ");
         $stmt->execute([$estado, $pagado, $fecha_pago ?: null, $observaciones, $id]);
+
+        // Si el nuevo estado es "pagado", registrar en flujo de caja
+        if ($estado === 'pagado') {
+            try {
+                // Verificar si ya existe en flujo_caja
+                $stmt_fc_check = $pdo->prepare("
+                    SELECT id FROM flujo_caja
+                    WHERE id_referencia = ? AND categoria = 'Cheque'
+                    LIMIT 1
+                ");
+                $stmt_fc_check->execute([$id]);
+                $fc_existe = $stmt_fc_check->fetch(PDO::FETCH_ASSOC);
+
+                if (!$fc_existe) {
+                    $fecha_movimiento = $fecha_pago ?: $cheque['fecha_emision'];
+                    $descripcion_mov = 'Cheque #' . $cheque['numero_cheque'] . ' - ' . $cheque['beneficiario'];
+
+                    $stmt_fc = $pdo->prepare("
+                        INSERT INTO flujo_caja 
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Cheque', ?, ?, ?, ?, ?)
+                    ");
+                    $stmt_fc->execute([
+                        $fecha_movimiento,
+                        $descripcion_mov,
+                        $cheque['monto'],
+                        $cheque['numero_cheque'],
+                        $id,
+                        $_SESSION['user']['id'],
+                        $observaciones ?: 'Registrado desde cambio de estado a Pagado'
+                    ]);
+                }
+            } catch (Exception $e) {
+                // Si falla el flujo de caja, no afecta el cambio de estado
+            }
+        }
         
         $mensaje = "Estado del cheque actualizado correctamente";
         
