@@ -196,15 +196,45 @@ function toggleMedidas() {
     }
 }
 
+function normalizarTexto(texto) {
+    return (texto || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+}
+
 function syncProductoSeleccionado() {
-    const input = document.getElementById('producto_input').value.trim();
+    const inputEl = document.getElementById('producto_input');
+    const input = inputEl.value;
+    const inputNorm = normalizarTexto(input);
     const datalist = document.getElementById('productos_datalist');
-    const option = Array.from(datalist.options).find(o => o.value === input);
     const hidden = document.getElementById('producto_id');
 
+    let option = Array.from(datalist.options).find(o => o.value === input);
+    if (!option && inputNorm) {
+        option = Array.from(datalist.options).find(o => normalizarTexto(o.value) === inputNorm) || null;
+    }
+
+    if (!option && inputNorm) {
+        const startMatches = Array.from(datalist.options).filter(o => normalizarTexto(o.value).startsWith(inputNorm));
+        if (startMatches.length === 1) {
+            option = startMatches[0];
+            inputEl.value = option.value;
+        }
+    }
+
+    if (!option && /^\d+$/.test(inputNorm)) {
+        const idMatch = Array.from(datalist.options).find(o => String(o.getAttribute('data-id') || '') === inputNorm) || null;
+        if (idMatch) {
+            option = idMatch;
+            inputEl.value = option.value;
+        }
+    }
+
     if (option) {
-        hidden.value = option.dataset.id;
-        hidden.dataset.tipo = option.dataset.tipo;
+        hidden.value = option.getAttribute('data-id') || '';
+        hidden.dataset.tipo = option.getAttribute('data-tipo') || 'fijo';
     } else {
         hidden.value = '';
         hidden.dataset.tipo = 'fijo';
