@@ -53,7 +53,6 @@ $role_permissions = [
         'dashboard',
         'ordenes_produccion',
         'inventario',
-        'asistencias',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
