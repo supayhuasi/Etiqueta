@@ -18,7 +18,29 @@ function cargar_autoloads_composer(): void {
 }
 
 function enviar_email(string $to, string $subject, string $html, ?string $text = null): bool {
-    global $email_config;
+    global $email_config, $pdo;
+
+    // Cargar configuración desde la base si existe
+    try {
+        if (isset($pdo)) {
+            $stmt = $pdo->query("SELECT * FROM ecommerce_email_config WHERE activo = 1 LIMIT 1");
+            $email_db = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($email_db) {
+                $email_config = array_merge($email_config ?? [], [
+                    'from_email' => $email_db['from_email'] ?? ($email_config['from_email'] ?? null),
+                    'from_name' => $email_db['from_name'] ?? ($email_config['from_name'] ?? null),
+                    'smtp_host' => $email_db['smtp_host'] ?? ($email_config['smtp_host'] ?? null),
+                    'smtp_port' => $email_db['smtp_port'] ?? ($email_config['smtp_port'] ?? null),
+                    'smtp_user' => $email_db['smtp_user'] ?? ($email_config['smtp_user'] ?? null),
+                    'smtp_pass' => $email_db['smtp_pass'] ?? ($email_config['smtp_pass'] ?? null),
+                    'smtp_secure' => $email_db['smtp_secure'] ?? ($email_config['smtp_secure'] ?? null),
+                    'smtp_auth' => isset($email_db['smtp_auth']) ? (bool)$email_db['smtp_auth'] : ($email_config['smtp_auth'] ?? null)
+                ]);
+            }
+        }
+    } catch (Exception $e) {
+        // Ignorar errores de configuración en DB
+    }
 
     $fromEmail = $email_config['from_email'] ?? 'no-reply@localhost';
     $fromName = $email_config['from_name'] ?? 'Ecommerce';

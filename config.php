@@ -17,12 +17,12 @@ try {
 
 // Configuración de correo (SMTP)
 $email_config = [
-    'from_email' => 'contacto@tucuroller.com.ar',
-    'from_name' => 'Tucu Roller',
-    'smtp_host' => 'c2331001.ferozo.com',
-    'smtp_port' => 465,
-    'smtp_user' => 'contacto@tucuroller.com.ar',
-    'smtp_pass' => 'k6Af*@7vvisibility_off',
-    'smtp_secure' => 'ssl',
-    'smtp_auth' => true
+    'from_email' => getenv('SMTP_FROM_EMAIL') ?: 'contacto@tucuroller.com.ar',
+    'from_name' => getenv('SMTP_FROM_NAME') ?: 'Tucu Roller',
+    'smtp_host' => getenv('SMTP_HOST') ?: 'c2331001.ferozo.com',
+    'smtp_port' => (int)(getenv('SMTP_PORT') ?: 465),
+    'smtp_user' => getenv('SMTP_USER') ?: 'contacto@tucuroller.com.ar',
+    'smtp_pass' => getenv('SMTP_PASS') ?: '',
+    'smtp_secure' => getenv('SMTP_SECURE') ?: 'ssl',
+    'smtp_auth' => (getenv('SMTP_AUTH') === false) ? true : filter_var(getenv('SMTP_AUTH'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true
 ];

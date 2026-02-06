@@ -19,9 +19,14 @@ try {
 
 $logo_src = null;
 if (!empty($empresa['logo'])) {
-  $logo_path = $base_path . '/ecommerce/uploads/' . $empresa['logo'];
-  if (file_exists($logo_path)) {
-    $logo_src = '../../uploads/' . $empresa['logo'];
+  $logo_filename = $empresa['logo'];
+  $logo_local_path = $base_path . '/ecommerce/uploads/' . $logo_filename;
+  $logo_root_path = $base_path . '/uploads/' . $logo_filename;
+
+  if (file_exists($logo_local_path)) {
+    $logo_src = '../../uploads/' . $logo_filename;
+  } elseif (file_exists($logo_root_path)) {
+    $logo_src = '/uploads/' . $logo_filename;
   }
 }
 ?>

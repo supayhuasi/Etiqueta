@@ -49,7 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "La imagen es muy grande (máx 5MB)";
                 } else {
                     $logo = "logo_" . time() . "." . $ext;
-                    if (!move_uploaded_file($_FILES['logo']['tmp_name'], "../uploads/" . $logo)) {
+                    $dir_logo = "../../uploads/";
+                    if (!is_dir($dir_logo)) {
+                        mkdir($dir_logo, 0755, true);
+                    }
+                    if (!move_uploaded_file($_FILES['logo']['tmp_name'], $dir_logo . $logo)) {
                         $error = "Error al subir la imagen";
                         $logo = $empresa['logo'] ?? null;
                     }

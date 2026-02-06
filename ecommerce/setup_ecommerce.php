@@ -207,6 +207,26 @@ try {
     ");
     $pdo->exec("INSERT INTO ecommerce_config (id, lista_precio_id) VALUES (1, NULL) ON DUPLICATE KEY UPDATE id = id");
 
+    // Configuración de correo (SMTP)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_email_config (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            from_email VARCHAR(255),
+            from_name VARCHAR(255),
+            smtp_host VARCHAR(255),
+            smtp_port INT,
+            smtp_user VARCHAR(255),
+            smtp_pass VARCHAR(255),
+            smtp_secure VARCHAR(20),
+            smtp_auth TINYINT DEFAULT 1,
+            activo TINYINT DEFAULT 1,
+            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_activo (activo)
+        )
+    ");
+
+    $pdo->exec("INSERT INTO ecommerce_email_config (id, activo) VALUES (1, 1) ON DUPLICATE KEY UPDATE id = id");
+
     // Tabla de proveedores
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_proveedores (

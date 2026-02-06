@@ -110,6 +110,7 @@ $page_permissions = [
     'listas_precios_editar.php' => 'listas_precios',
     'precios_ecommerce.php' => 'precios_ecommerce',
     'empresa.php' => 'empresa',
+    'email_config.php' => 'email_config',
     'trabajos.php' => 'trabajos',
     'mp_config.php' => 'mp_config',
     'pedidos.php' => 'pedidos',
@@ -276,9 +277,24 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                     $stmt_logo = $pdo->query("SELECT logo FROM ecommerce_empresa WHERE id = 1");
                     $empresa_logo = $stmt_logo->fetch(PDO::FETCH_ASSOC);
                     if (!empty($empresa_logo['logo'])):
+                        $logo_filename = $empresa_logo['logo'];
+                        $logo_local_path = $base_path . '/ecommerce/uploads/' . $logo_filename;
+                        $logo_root_path = $base_path . '/uploads/' . $logo_filename;
+                        $logo_src = null;
+                        if (file_exists($logo_local_path)) {
+                            $logo_src = $public_base . '/uploads/' . $logo_filename;
+                        } elseif (file_exists($logo_root_path)) {
+                            $logo_src = '/uploads/' . $logo_filename;
+                        }
+                        if ($logo_src):
                 ?>
-                    <img src="<?= $public_base ?>/uploads/<?= htmlspecialchars($empresa_logo['logo']) ?>" alt="Logo" class="img-fluid">
+                    <img src="<?= htmlspecialchars($logo_src) ?>" alt="Logo" class="img-fluid">
                 <?php 
+                        else:
+                ?>
+                    <h4 class="text-primary mb-0">Tucu Roller</h4>
+                <?php 
+                        endif;
                     else:
                 ?>
                     <h4 class="text-primary mb-0">Tucu Roller</h4>
@@ -328,7 +344,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -346,6 +362,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('google_analytics')): ?>
                         <a href="<?= $admin_url ?>google_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'google_analytics.php' ? 'active' : '' ?>"><i class="bi bi-graph-up"></i> Google Analytics</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('email_config')): ?>
+                        <a href="<?= $admin_url ?>email_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email_config.php' ? 'active' : '' ?>"><i class="bi bi-envelope"></i> Email (SMTP)</a>
                         <?php endif; ?>
                     </div>
                 </div>
