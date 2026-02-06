@@ -27,7 +27,7 @@ if (!$empresa) {
     $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($error)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     $ga_enabled = isset($_POST['ga_enabled']) ? 1 : 0;
     $ga_measurement_id = trim($_POST['ga_measurement_id'] ?? '');
 
