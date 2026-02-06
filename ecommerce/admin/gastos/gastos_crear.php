@@ -83,6 +83,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->execute([$gasto_id, $estado_gasto_id, $_SESSION['user']['id'], 'Gasto creado']);
             
+            // Si el estado inicial es "Pagado", registrar en flujo de caja
+            $stmt_pagado = $pdo->prepare("SELECT id FROM estados_gastos WHERE LOWER(nombre) = 'pagado' LIMIT 1");
+            $stmt_pagado->execute();
+            $pagado_id = $stmt_pagado->fetchColumn();
+
+            if ($pagado_id && (int)$estado_gasto_id === (int)$pagado_id) {
+                try {
+                    $stmt_fc = $pdo->prepare("
+                        INSERT INTO flujo_caja 
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?)
+                    ");
+                    $stmt_fc->execute([
+                        $fecha,
+                        $descripcion,
+                        $monto,
+                        $numero_gasto,
+                        $gasto_id,
+                        $_SESSION['user']['id'],
+                        $observaciones ?: 'Registrado desde creación en estado Pagado'
+                    ]);
+                } catch (Exception $e) {
+                    // Si falla el flujo de caja, no afecta el gasto
+                }
+            }
+
             $mensaje = "Gasto creado correctamente";
         } catch (Exception $e) {
             $error = "Error al guardar: " . $e->getMessage();
