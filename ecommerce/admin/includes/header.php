@@ -22,12 +22,18 @@ $relative_root = str_repeat('../', $depth);
 // Detectar automáticamente la base del admin (funciona con /ecommerce/admin o /admin)
 $script_path = $_SERVER['SCRIPT_NAME'] ?? '';
 $admin_url = '/ecommerce/admin/'; // fallback
+$public_base = '/ecommerce'; // fallback
 if ($script_path) {
     if (strpos($script_path, '/admin/') !== false) {
         $admin_url = preg_replace('#/admin/.*$#', '/admin/', $script_path);
+        $public_base = rtrim(preg_replace('#/admin/.*$#', '', $script_path), '/');
     } else {
         $admin_url = rtrim(dirname($script_path), '/\\') . '/';
+        $public_base = rtrim(dirname($script_path), '/\\');
     }
+}
+if ($public_base === '') {
+    $public_base = '';
 }
 
 // Verificar que esté logueado
@@ -270,7 +276,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                     $empresa_logo = $stmt_logo->fetch(PDO::FETCH_ASSOC);
                     if (!empty($empresa_logo['logo'])):
                 ?>
-                    <img src="/ecommerce/uploads/<?= htmlspecialchars($empresa_logo['logo']) ?>" alt="Logo" class="img-fluid">
+                    <img src="<?= $public_base ?>/uploads/<?= htmlspecialchars($empresa_logo['logo']) ?>" alt="Logo" class="img-fluid">
                 <?php 
                     else:
                 ?>
