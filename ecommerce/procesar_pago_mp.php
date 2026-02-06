@@ -76,7 +76,7 @@ try {
     
     // URL de retorno
     $success_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_success.php?pedido_id=' . $pedido_id;
-    $failure_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_failure.php?pedido_id=' . $pedido_id;
+    $failure_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_failure.php?pedido_id=' . $pedido_id;
     $pending_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_pending.php?pedido_id=' . $pedido_id;
     
     // Construir preferencia de pago
