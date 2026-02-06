@@ -196,19 +196,33 @@ function toggleMedidas() {
     }
 }
 
-document.getElementById('producto_input').addEventListener('input', function() {
-    const input = this.value.trim();
+function syncProductoSeleccionado() {
+    const input = document.getElementById('producto_input').value.trim();
     const datalist = document.getElementById('productos_datalist');
     const option = Array.from(datalist.options).find(o => o.value === input);
     const hidden = document.getElementById('producto_id');
+
     if (option) {
         hidden.value = option.dataset.id;
         hidden.dataset.tipo = option.dataset.tipo;
-        toggleMedidas();
     } else {
         hidden.value = '';
         hidden.dataset.tipo = 'fijo';
-        toggleMedidas();
+    }
+    toggleMedidas();
+}
+
+const productoInput = document.getElementById('producto_input');
+productoInput.addEventListener('input', syncProductoSeleccionado);
+productoInput.addEventListener('change', syncProductoSeleccionado);
+productoInput.addEventListener('blur', syncProductoSeleccionado);
+
+document.querySelector('form').addEventListener('submit', function(e) {
+    syncProductoSeleccionado();
+    if (!document.getElementById('producto_id').value) {
+        e.preventDefault();
+        alert('Seleccione un producto');
+        productoInput.focus();
     }
 });
 </script>
