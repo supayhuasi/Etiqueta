@@ -63,15 +63,6 @@ if (is_dir($trabajos_dir)) {
                         <?= htmlspecialchars($empresa['marquesina_texto']) ?>
                     <?php endif; ?>
                 </div>
-                <div class="marquesina__content" aria-hidden="true">
-                    <?php if (!empty($empresa['marquesina_link'])): ?>
-                        <a href="<?= htmlspecialchars($empresa['marquesina_link']) ?>" class="marquesina__link" style="color: inherit;">
-                            <?= htmlspecialchars($empresa['marquesina_texto']) ?>
-                        </a>
-                    <?php else: ?>
-                        <?= htmlspecialchars($empresa['marquesina_texto']) ?>
-                    <?php endif; ?>
-                </div>
             </div>
         </div>
     </div>
