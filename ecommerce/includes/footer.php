@@ -68,3 +68,9 @@ $wa_url = $wa_num_clean ? 'https://wa.me/' . $wa_num_clean . '?text=' . urlencod
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
+<?php
+if (ob_get_level()) {
+  ob_end_flush();
+}
+?>

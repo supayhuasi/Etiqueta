@@ -11,10 +11,11 @@ if (($_GET['mensaje'] ?? '') === 'registro') {
 }
 
 $stmt = $pdo->prepare("
-    SELECT id, numero_pedido, total, estado, fecha_creacion
-    FROM ecommerce_pedidos
-    WHERE cliente_id = ?
-    ORDER BY fecha_creacion DESC
+    SELECT p.id, p.numero_pedido, p.total, p.estado, p.fecha_creacion, op.estado AS estado_produccion
+    FROM ecommerce_pedidos p
+    LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p.id
+    WHERE p.cliente_id = ?
+    ORDER BY p.fecha_creacion DESC
 ");
 $stmt->execute([$cliente['id']]);
 $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -53,7 +54,12 @@ $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <td><strong><?= htmlspecialchars($pedido['numero_pedido']) ?></strong></td>
                             <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_creacion'])) ?></td>
                             <td>$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
-                            <td><span class="badge bg-secondary"><?= htmlspecialchars(str_replace('_', ' ', $pedido['estado'])) ?></span></td>
+                            <td>
+                                <span class="badge bg-secondary">Pedido: <?= htmlspecialchars(str_replace('_', ' ', $pedido['estado'])) ?></span>
+                                <?php if (!empty($pedido['estado_produccion'])): ?>
+                                    <span class="badge bg-info text-dark ms-1">Producción: <?= htmlspecialchars(str_replace('_', ' ', $pedido['estado_produccion'])) ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end">
                                 <a href="pedido_detalle.php?id=<?= $pedido['id'] ?>" class="btn btn-sm btn-outline-primary">Ver detalle</a>
                             </td>

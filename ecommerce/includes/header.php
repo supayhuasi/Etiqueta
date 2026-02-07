@@ -3,6 +3,10 @@ if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
 
+if (!ob_get_level()) {
+  ob_start();
+}
+
 if (!isset($pdo)) {
   require __DIR__ . '/../config.php';
 }
@@ -212,18 +216,6 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
         <li class="nav-item">
           <a class="nav-link" href="/admin/" target="_blank" rel="noopener">Admin</a>
         </li>
-        <?php if (!empty($_SESSION['cliente_id'])): ?>
-          <li class="nav-item">
-            <a class="nav-link" href="mis_pedidos.php">Mis pedidos</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="cliente_logout.php">Salir<?= !empty($_SESSION['cliente_nombre']) ? ' (' . htmlspecialchars($_SESSION['cliente_nombre']) . ')' : '' ?></a>
-          </li>
-        <?php else: ?>
-          <li class="nav-item">
-            <a class="nav-link" href="cliente_login.php">Ingresar</a>
-          </li>
-        <?php endif; ?>
         <li class="nav-item">
           <a class="nav-link position-relative" href="carrito.php">
              Carrito
@@ -234,6 +226,24 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
             <?php endif; ?>
           </a>
         </li>
+        <?php if (!empty($_SESSION['cliente_id'])): ?>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="cuentaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <?= htmlspecialchars($_SESSION['cliente_nombre'] ?? 'Mi cuenta') ?>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="cuentaMenu">
+              <li><a class="dropdown-item" href="mis_pedidos.php">Mis pedidos</a></li>
+              <li><a class="dropdown-item" href="cliente_perfil.php">Editar datos</a></li>
+              <li><a class="dropdown-item" href="cliente_cambiar_clave.php">Cambiar clave</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="cliente_logout.php">Salir</a></li>
+            </ul>
+          </li>
+        <?php else: ?>
+          <li class="nav-item">
+            <a class="nav-link" href="cliente_login.php">Ingresar</a>
+          </li>
+        <?php endif; ?>
       </ul>
     </div>
   </div>
