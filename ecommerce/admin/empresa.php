@@ -86,23 +86,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            if (isset($_FILES['favicon']) && $_FILES['favicon']['error'] == 0) {
-                $tipos_permitidos = ['png', 'jpg', 'jpeg', 'ico', 'svg'];
-                $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
-
-                if (!in_array($ext, $tipos_permitidos)) {
-                    $error = "Tipo de favicon no permitido";
-                } else if ($_FILES['favicon']['size'] > 2097152) {
-                    $error = "El favicon es muy grande (máx 2MB)";
+            if (isset($_FILES['favicon']) && $_FILES['favicon']['error'] !== UPLOAD_ERR_NO_FILE) {
+                if ($_FILES['favicon']['error'] !== UPLOAD_ERR_OK) {
+                    $error = "Error al subir el favicon (código " . (int)$_FILES['favicon']['error'] . ")";
                 } else {
-                    $favicon = "favicon_" . time() . "." . $ext;
-                    $dir_logo = "../../uploads/";
-                    if (!is_dir($dir_logo)) {
-                        mkdir($dir_logo, 0755, true);
-                    }
-                    if (!move_uploaded_file($_FILES['favicon']['tmp_name'], $dir_logo . $favicon)) {
-                        $error = "Error al subir el favicon";
-                        $favicon = $empresa['favicon'] ?? null;
+                    $tipos_permitidos = ['png', 'jpg', 'jpeg', 'ico', 'svg'];
+                    $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
+
+                    if (!in_array($ext, $tipos_permitidos)) {
+                        $error = "Tipo de favicon no permitido";
+                    } else if ($_FILES['favicon']['size'] > 2097152) {
+                        $error = "El favicon es muy grande (máx 2MB)";
+                    } else {
+                        $favicon = "favicon_" . time() . "." . $ext;
+                        $dirs_posibles = ["../../uploads/", "../uploads/"];
+                        $subido = false;
+
+                        foreach ($dirs_posibles as $dir_logo) {
+                            if (!is_dir($dir_logo)) {
+                                @mkdir($dir_logo, 0755, true);
+                            }
+                            if (is_dir($dir_logo) && is_writable($dir_logo)) {
+                                if (move_uploaded_file($_FILES['favicon']['tmp_name'], $dir_logo . $favicon)) {
+                                    $subido = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!$subido) {
+                            $error = "Error al subir el favicon. Verificá permisos de la carpeta uploads.";
+                            $favicon = $empresa['favicon'] ?? null;
+                        }
                     }
                 }
             }
