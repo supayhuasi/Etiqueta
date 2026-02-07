@@ -39,8 +39,14 @@ class PDF extends FPDF {
     }
 
     function Header() {
-        if ($this->empresa && $this->empresa['logo'] && file_exists('../../uploads/' . $this->empresa['logo'])) {
-            $this->Image('../../uploads/' . $this->empresa['logo'], 10, 6, 30);
+        if ($this->empresa && !empty($this->empresa['logo'])) {
+            $logo_local = '../../ecommerce/uploads/' . $this->empresa['logo'];
+            $logo_root = '../../uploads/' . $this->empresa['logo'];
+            if (file_exists($logo_local)) {
+                $this->Image($logo_local, 10, 6, 30);
+            } elseif (file_exists($logo_root)) {
+                $this->Image($logo_root, 10, 6, 30);
+            }
         }
 
         $this->SetFont('Arial', 'B', 16);

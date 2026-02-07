@@ -38,8 +38,16 @@ $stmt = $pdo->prepare("
 $stmt->execute([$pedido_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
+$empresa = $stmt->fetch(PDO::FETCH_ASSOC);
+
 $pdf = new PDF_Code128('P','mm','A4');
 $pdf->AddPage();
+$logo_path = !empty($empresa['logo']) ? '../../uploads/' . $empresa['logo'] : '';
+if ($logo_path && file_exists($logo_path)) {
+    $pdf->Image($logo_path, 10, 6, 30);
+    $pdf->SetY(20);
+}
 $pdf->SetFont('Arial','B',14);
 $pdf->Cell(0,8,utf8_decode('Orden de Producción'),0,1,'L');
 $pdf->SetFont('Arial','',10);

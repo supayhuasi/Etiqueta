@@ -466,7 +466,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="provincia" class="form-label">Provincia *</label>
-                                    <input type="text" class="form-control" id="provincia" name="provincia" value="<?= htmlspecialchars($cliente_actual['provincia'] ?? '') ?>" required>
+                                    <?php $provincia_actual = $cliente_actual['provincia'] ?? ''; ?>
+                                    <select class="form-select" id="provincia" name="provincia" required>
+                                        <option value="">Seleccionar</option>
+                                        <?php foreach (['Buenos Aires','Catamarca','Chaco','Chubut','Córdoba','Corrientes','Entre Ríos','Formosa','Jujuy','La Pampa','La Rioja','Mendoza','Misiones','Neuquén','Río Negro','Salta','San Juan','San Luis','Santa Cruz','Santa Fe','Santiago del Estero','Tierra del Fuego','Tucumán'] as $prov): ?>
+                                            <option value="<?= htmlspecialchars($prov) ?>" <?= $provincia_actual === $prov ? 'selected' : '' ?>><?= htmlspecialchars($prov) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -505,7 +511,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label for="envio_provincia" class="form-label">Provincia *</label>
-                                        <input type="text" class="form-control" id="envio_provincia" name="envio_provincia">
+                                        <select class="form-select" id="envio_provincia" name="envio_provincia">
+                                            <option value="">Seleccionar</option>
+                                            <?php foreach (['Buenos Aires','Catamarca','Chaco','Chubut','Córdoba','Corrientes','Entre Ríos','Formosa','Jujuy','La Pampa','La Rioja','Mendoza','Misiones','Neuquén','Río Negro','Salta','San Juan','San Luis','Santa Cruz','Santa Fe','Santiago del Estero','Tierra del Fuego','Tucumán'] as $prov): ?>
+                                                <option value="<?= htmlspecialchars($prov) ?>"><?= htmlspecialchars($prov) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
                                     </div>
                                 </div>
 

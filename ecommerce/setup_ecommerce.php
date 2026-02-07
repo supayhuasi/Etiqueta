@@ -317,6 +317,18 @@ try {
     ");
     $pdo->exec("INSERT INTO ecommerce_envio_config (id, costo_base, activo) VALUES (1, 500.00, 1) ON DUPLICATE KEY UPDATE id = id");
 
+    // Preguntas frecuentes (FAQ)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_faq (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            pregunta VARCHAR(255) NOT NULL,
+            respuesta TEXT NOT NULL,
+            activo TINYINT DEFAULT 1,
+            orden INT DEFAULT 0,
+            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+
     // Configuración de métodos de pago
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_metodos_pago (

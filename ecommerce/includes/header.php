@@ -204,6 +204,9 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
           <a class="nav-link" href="contacto.php">Contacto</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" href="faq.php">FAQ</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" href="distribuidores.php">Distribuidores</a>
         </li>
         <li class="nav-item">

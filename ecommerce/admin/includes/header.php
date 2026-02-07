@@ -81,6 +81,14 @@ $role_permissions = [
     ]
 ];
 
+// Agregar FAQ a roles con acceso estándar
+if (isset($role_permissions['usuario']) && !in_array('faq', $role_permissions['usuario'], true)) {
+    $role_permissions['usuario'][] = 'faq';
+}
+if (isset($role_permissions['ventas']) && !in_array('faq', $role_permissions['ventas'], true)) {
+    $role_permissions['ventas'][] = 'faq';
+}
+
 $can_access = function (string $key) use ($role_permissions, $role): bool {
     if (!isset($role_permissions[$role])) {
         return $key === 'dashboard' || $key === 'tienda' || $key === 'inicio_principal' || $key === 'dashboard_principal';
@@ -114,6 +122,7 @@ $page_permissions = [
     'precios_ecommerce.php' => 'precios_ecommerce',
     'empresa.php' => 'empresa',
     'email_config.php' => 'email_config',
+    'faq.php' => 'faq',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
     'mp_config.php' => 'mp_config',
@@ -350,7 +359,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -374,6 +383,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('email_config')): ?>
                         <a href="<?= $admin_url ?>email_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email_config.php' ? 'active' : '' ?>"><i class="bi bi-envelope"></i> Email (SMTP)</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('faq')): ?>
+                        <a href="<?= $admin_url ?>faq.php" class="<?= basename($_SERVER['PHP_SELF']) === 'faq.php' ? 'active' : '' ?>"><i class="bi bi-question-circle"></i> Preguntas Frecuentes</a>
                         <?php endif; ?>
                         <?php if ($can_access('envio_config')): ?>
                         <a href="<?= $admin_url ?>envio_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'envio_config.php' ? 'active' : '' ?>"><i class="bi bi-truck"></i> Envío</a>
