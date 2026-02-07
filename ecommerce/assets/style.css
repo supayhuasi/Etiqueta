@@ -1,7 +1,7 @@
 /* Estilos generales del ecommerce */
 
 :root {
-    --primary-color: #f5f7f8;
+    --primary-color: #1d4ed8;
     --secondary-color: #f39c12;
     --dark-color: #2c3e50;
     --navbar-bg: #ffffff;
@@ -151,6 +151,7 @@ body {
 .btn-primary {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
+    color: #ffffff;
 }
 
 .btn-primary:hover {
