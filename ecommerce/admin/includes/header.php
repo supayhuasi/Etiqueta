@@ -520,7 +520,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <!-- Botón Ir a Tienda -->
                 <?php if ($can_access('tienda')): ?>
                 <div class="menu-section mt-3">
-                    <a href="/ecommerce/index.php" target="_blank" class="btn btn-success w-100">
+                    <a href="/index.php" target="_blank" class="btn btn-success w-100">
                         <i class="bi bi-shop"></i> Ir a la Tienda
                     </a>
                 </div>
