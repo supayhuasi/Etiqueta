@@ -134,6 +134,13 @@ try {
             descuento_monto DECIMAL(10, 2) NULL,
             codigo_descuento VARCHAR(50) NULL,
             total DECIMAL(10, 2) NOT NULL,
+            factura_a TINYINT DEFAULT 0,
+            envio_nombre VARCHAR(255),
+            envio_telefono VARCHAR(20),
+            envio_direccion VARCHAR(255),
+            envio_localidad VARCHAR(100),
+            envio_provincia VARCHAR(100),
+            envio_codigo_postal VARCHAR(10),
             estado ENUM('pendiente_pago', 'esperando_transferencia', 'esperando_envio', 'pagado', 'pago_pendiente', 'pago_autorizado', 'pago_en_proceso', 'pago_rechazado', 'pago_reembolsado', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente_pago',
             metodo_pago VARCHAR(100),
             observaciones TEXT,
@@ -185,6 +192,34 @@ try {
     $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'codigo_descuento'");
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN codigo_descuento VARCHAR(50) NULL AFTER descuento_monto");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'factura_a'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_a TINYINT DEFAULT 0 AFTER total");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_nombre'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_nombre VARCHAR(255) AFTER factura_a");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_telefono'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_telefono VARCHAR(20) AFTER envio_nombre");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_direccion'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_direccion VARCHAR(255) AFTER envio_telefono");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_localidad'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_localidad VARCHAR(100) AFTER envio_direccion");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_provincia'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_provincia VARCHAR(100) AFTER envio_localidad");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio_codigo_postal'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_codigo_postal VARCHAR(10) AFTER envio_provincia");
     }
 
     // Tabla de items del pedido

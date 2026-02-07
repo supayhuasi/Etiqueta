@@ -155,6 +155,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $documento_tipo = $_POST['documento_tipo'] ?? '';
     $documento_numero = $_POST['documento_numero'] ?? '';
+    $factura_a = isset($_POST['factura_a']) ? 1 : 0;
+    $envio_mismo = isset($_POST['envio_mismo']) ? 1 : 0;
+    $envio_nombre = trim($_POST['envio_nombre'] ?? '');
+    $envio_telefono = trim($_POST['envio_telefono'] ?? '');
+    $envio_direccion = trim($_POST['envio_direccion'] ?? '');
+    $envio_localidad = trim($_POST['envio_localidad'] ?? '');
+    $envio_provincia = trim($_POST['envio_provincia'] ?? '');
+    $envio_codigo_postal = trim($_POST['envio_codigo_postal'] ?? '');
     $metodo_codigo = $_POST['metodo_pago'] ?? '';
     $metodo_codigo = trim($metodo_codigo);
     $metodo_codigo_key = strtolower($metodo_codigo);
@@ -171,6 +179,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     // Validar datos
     if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
         $error = "Por favor completa todos los campos obligatorios (incluyendo datos fiscales)";
+    } elseif (!$envio_mismo && (empty($envio_nombre) || empty($envio_direccion) || empty($envio_localidad) || empty($envio_provincia))) {
+        $error = "Por favor completa los datos de envío";
     } elseif ($metodo_codigo === '' || empty($metodo_pago)) {
         $error = "Seleccioná un método de pago";
     } else if (empty($carrito)) {
@@ -220,6 +230,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                 }
             }
             
+            if ($envio_mismo) {
+                $envio_nombre = $nombre;
+                $envio_telefono = $telefono;
+                $envio_direccion = $direccion;
+                $envio_localidad = $localidad;
+                $envio_provincia = $provincia;
+                $envio_codigo_postal = $codigo_postal;
+            }
+
             // Generar número de pedido
             $numero_pedido = "PED-" . date('YmdHis') . "-" . rand(1000, 9999);
             
@@ -258,10 +277,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
 
             // Crear pedido
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, metodo_pago, estado)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, factura_a, envio_nombre, envio_telefono, envio_direccion, envio_localidad, envio_provincia, envio_codigo_postal, metodo_pago, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$numero_pedido, $cliente_id, $subtotal, $envio, $descuento_monto, $codigo_descuento, $total, $metodo_pago, $estado_pedido]);
+            $stmt->execute([
+                $numero_pedido,
+                $cliente_id,
+                $subtotal,
+                $envio,
+                $descuento_monto,
+                $codigo_descuento,
+                $total,
+                $factura_a,
+                $envio_nombre,
+                $envio_telefono ?: null,
+                $envio_direccion,
+                $envio_localidad,
+                $envio_provincia,
+                $envio_codigo_postal ?: null,
+                $metodo_pago,
+                $estado_pedido
+            ]);
             $pedido_id = $pdo->lastInsertId();
             
             // Agregar items al pedido
@@ -365,6 +401,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <h5>Datos de Facturación</h5>
                         </div>
                         <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1">
+                                <label class="form-check-label" for="factura_a">Necesito Factura A</label>
+                            </div>
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="nombre" class="form-label">Nombre Completo *</label>
@@ -431,6 +471,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             </div>
                         </div>
                     </div>
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5>Datos de Envío</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="envio_mismo" name="envio_mismo" value="1" checked>
+                                <label class="form-check-label" for="envio_mismo">Los datos de facturación son los mismos para el envío</label>
+                            </div>
+
+                            <div id="envio-diferente" style="display:none;">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="envio_nombre" class="form-label">Nombre completo *</label>
+                                        <input type="text" class="form-control" id="envio_nombre" name="envio_nombre">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="envio_telefono" class="form-label">Teléfono</label>
+                                        <input type="text" class="form-control" id="envio_telefono" name="envio_telefono">
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="envio_direccion" class="form-label">Dirección *</label>
+                                    <input type="text" class="form-control" id="envio_direccion" name="envio_direccion">
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="envio_localidad" class="form-label">Localidad *</label>
+                                        <input type="text" class="form-control" id="envio_localidad" name="envio_localidad">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="envio_provincia" class="form-label">Provincia *</label>
+                                        <input type="text" class="form-control" id="envio_provincia" name="envio_provincia">
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="envio_codigo_postal" class="form-label">Código Postal</label>
+                                    <input type="text" class="form-control" id="envio_codigo_postal" name="envio_codigo_postal">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="card mb-4">
                         <div class="card-header bg-primary text-white">
@@ -482,6 +567,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
 
                         inputs.forEach(i => i.addEventListener('change', update));
                         update();
+                    })();
+                </script>
+                <script>
+                    (function() {
+                        const envioMismo = document.getElementById('envio_mismo');
+                        const envioBox = document.getElementById('envio-diferente');
+                        if (!envioMismo || !envioBox) return;
+
+                        const toggleEnvio = () => {
+                            if (envioMismo.checked) {
+                                envioBox.style.display = 'none';
+                            } else {
+                                envioBox.style.display = 'block';
+                            }
+                        };
+
+                        envioMismo.addEventListener('change', toggleEnvio);
+                        toggleEnvio();
                     })();
                 </script>
             <?php endif; ?>
