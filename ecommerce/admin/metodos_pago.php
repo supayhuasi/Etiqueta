@@ -4,6 +4,49 @@ require 'includes/header.php';
 $mensaje = '';
 $error = '';
 
+// Migración ligera si la tabla no existe
+try {
+    $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_metodos_pago'");
+    if ($stmt->rowCount() === 0) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS ecommerce_metodos_pago (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                codigo VARCHAR(50) NOT NULL UNIQUE,
+                nombre VARCHAR(100) NOT NULL,
+                tipo ENUM('manual','mercadopago') NOT NULL DEFAULT 'manual',
+                instrucciones_html TEXT NULL,
+                activo TINYINT DEFAULT 1,
+                orden INT DEFAULT 0,
+                fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_activo (activo)
+            )
+        ");
+
+        $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+            SELECT 'transferencia_bancaria', 'Transferencia Bancaria', 'manual',
+            '<p><strong>Datos para transferencia:</strong></p><ul><li>Banco: Banco Ejemplo</li><li>CBU: 0000000000000000000000</li><li>Alias: TUCU.ROLLER</li><li>Titular: Tucu Roller</li></ul><p>Luego de transferir, envíanos el comprobante.</p>',
+            1, 1
+            WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'transferencia_bancaria')
+        ");
+        $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+            SELECT 'mercadopago_tarjeta', 'Tarjeta de Crédito (Mercado Pago)', 'mercadopago',
+            '<p>Serás redirigido a Mercado Pago para completar el pago con tarjeta.</p>',
+            1, 2
+            WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'mercadopago_tarjeta')
+        ");
+        $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+            SELECT 'efectivo_entrega', 'Efectivo contra Entrega', 'manual',
+            '<p>Pagás en efectivo al recibir tu pedido.</p>',
+            1, 3
+            WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'efectivo_entrega')
+        ");
+
+        $mensaje = 'Tabla de métodos de pago creada y cargada.';
+    }
+} catch (Exception $e) {
+    $error = 'No se pudo crear la tabla de métodos de pago: ' . $e->getMessage();
+}
+
 $editar_id = isset($_GET['editar']) ? (int)$_GET['editar'] : 0;
 $metodo_editar = null;
 
