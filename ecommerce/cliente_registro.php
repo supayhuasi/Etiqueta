@@ -15,6 +15,7 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
+    $email_normalizado = strtolower($email);
     $telefono = trim($_POST['telefono'] ?? '');
     $provincia = trim($_POST['provincia'] ?? '');
     $localidad = trim($_POST['localidad'] ?? '');
@@ -37,9 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'La contraseña debe tener al menos 6 caracteres.';
     } else {
         try {
-            $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ?");
-            $stmt->execute([$email]);
-            if ($stmt->fetch()) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_clientes WHERE LOWER(email) = ?");
+            $stmt->execute([$email_normalizado]);
+            if ((int)$stmt->fetchColumn() > 0) {
                 $error = 'Ya existe una cuenta con ese email.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -50,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO ecommerce_clientes (email, password_hash, nombre, telefono, provincia, localidad, ciudad, direccion, codigo_postal, responsabilidad_fiscal, documento_tipo, documento_numero)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$email, $hash, $nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero]);
+                $stmt->execute([$email_normalizado, $hash, $nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero]);
 
                 $cliente_id = $pdo->lastInsertId();
                 $token = bin2hex(random_bytes(32));
