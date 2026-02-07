@@ -80,16 +80,16 @@ $page_titles = [
 $site_name = $empresa_menu['nombre'] ?? 'Tucu Roller';
 $default_title = ($page_titles[$page_key] ?? 'Tienda') . ' | ' . $site_name;
 
-$raw_description = $empresa_menu['descripcion'] ?? $empresa_menu['about_us'] ?? 'Tienda online de ' . $site_name;
+$raw_description = $empresa_menu['seo_description'] ?? $empresa_menu['descripcion'] ?? $empresa_menu['about_us'] ?? 'Tienda online de ' . $site_name;
 $raw_description = trim(preg_replace('/\s+/', ' ', strip_tags($raw_description)));
 if (strlen($raw_description) > 160) {
   $raw_description = substr($raw_description, 0, 157) . '...';
 }
 
-$seo_title = isset($seo_title) && $seo_title ? $seo_title : $default_title;
+$seo_title = isset($seo_title) && $seo_title ? $seo_title : (!empty($empresa_menu['seo_title']) ? $empresa_menu['seo_title'] : $default_title);
 $seo_description = isset($seo_description) && $seo_description ? $seo_description : $raw_description;
 $seo_type = isset($seo_type) && $seo_type ? $seo_type : 'website';
-$seo_image = isset($seo_image) && $seo_image ? $seo_image : ($logo_menu_src ? $request_scheme . '://' . $host . $logo_menu_src : '');
+$seo_image = isset($seo_image) && $seo_image ? $seo_image : (!empty($empresa_menu['seo_image']) ? $empresa_menu['seo_image'] : ($logo_menu_src ? $request_scheme . '://' . $host . $logo_menu_src : ''));
 $seo_canonical = isset($seo_canonical) && $seo_canonical ? $seo_canonical : $current_url;
 $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
 ?>

@@ -1,6 +1,24 @@
 <?php
 require 'includes/header.php';
 
+// Asegurar columnas SEO
+try {
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'seo_title'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN seo_title VARCHAR(255) NULL AFTER descripcion");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'seo_description'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN seo_description VARCHAR(255) NULL AFTER seo_title");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'seo_image'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN seo_image VARCHAR(255) NULL AFTER seo_description");
+    }
+} catch (Exception $e) {
+    // Ignorar errores de migración
+}
+
 // Obtener o crear registro de empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -22,6 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pais = $_POST['pais'] ?? '';
     $horario_atencion = $_POST['horario_atencion'] ?? '';
     $about_us = $_POST['about_us'] ?? '';
+    $seo_title = $_POST['seo_title'] ?? '';
+    $seo_description = $_POST['seo_description'] ?? '';
+    $seo_image = $_POST['seo_image'] ?? '';
     $terminos = $_POST['terminos'] ?? '';
     $privacidad = $_POST['privacidad'] ?? '';
     $facebook = $_POST['facebook'] ?? '';
@@ -70,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_empresa 
-                    SET nombre = ?, descripcion = ?, logo = ?, email = ?, telefono = ?,
+                    SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, email = ?, telefono = ?,
                         direccion = ?, ciudad = ?, provincia = ?, pais = ?,
                         horario_atencion = ?, about_us = ?, terminos_condiciones = ?,
                         politica_privacidad = ?, redes_sociales = ?, cuit = ?,
@@ -78,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     WHERE id = ?
                 ");
                 $stmt->execute([
-                    $nombre, $descripcion, $logo, $email, $telefono,
+                    $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $email, $telefono,
                     $direccion, $ciudad, $provincia, $pais,
                     $horario_atencion, $about_us, $terminos, $privacidad,
                     $redes_sociales, $cuit, $responsabilidad_fiscal, $iibb, $regimen_iva,
@@ -131,6 +152,29 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     <div class="mb-3">
                         <label for="descripcion" class="form-label">Descripción Corta</label>
                         <textarea class="form-control" id="descripcion" name="descripcion" rows="2"><?= htmlspecialchars($empresa['descripcion'] ?? '') ?></textarea>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">SEO (buscadores y redes)</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="seo_title" class="form-label">Título SEO</label>
+                                <input type="text" class="form-control" id="seo_title" name="seo_title" value="<?= htmlspecialchars($empresa['seo_title'] ?? '') ?>" placeholder="Ej: Tucu Roller | Cortinas y Toldos">
+                                <small class="text-muted">Si está vacío, se usa el nombre y la página.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="seo_description" class="form-label">Descripción SEO</label>
+                                <textarea class="form-control" id="seo_description" name="seo_description" rows="2" maxlength="255"><?= htmlspecialchars($empresa['seo_description'] ?? '') ?></textarea>
+                                <small class="text-muted">Recomendado 140-160 caracteres.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="seo_image" class="form-label">Imagen SEO (URL)</label>
+                                <input type="url" class="form-control" id="seo_image" name="seo_image" value="<?= htmlspecialchars($empresa['seo_image'] ?? '') ?>" placeholder="https://.../imagen.jpg">
+                                <small class="text-muted">Si está vacío, se usa el logo.</small>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mb-3">
