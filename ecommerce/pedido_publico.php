@@ -11,6 +11,7 @@ $saldo = null;
 $metodos_pago = [];
 $empresa_email = '';
 $whatsapp_url = '';
+$mp_disponible = false;
 
 if ($token !== '') {
     $stmt = $pdo->prepare("SELECT * FROM ecommerce_pedidos WHERE public_token = ? LIMIT 1");
@@ -42,6 +43,13 @@ if ($token !== '') {
             $metodos_pago = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             $metodos_pago = [];
+        }
+
+        foreach ($metodos_pago as $metodo) {
+            if (($metodo['tipo'] ?? '') === 'mercadopago') {
+                $mp_disponible = true;
+                break;
+            }
         }
 
         $empresa_email = trim((string)($empresa_menu['email'] ?? ''));
@@ -103,6 +111,15 @@ if ($token !== '') {
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($mp_disponible && (float)$saldo > 0): ?>
+                    <div class="mb-4">
+                        <form method="post" action="pedido_publico_mp.php" class="d-inline">
+                            <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
+                            <button type="submit" class="btn btn-primary">Pagar con Mercado Pago</button>
+                        </form>
                     </div>
                 <?php endif; ?>
 
