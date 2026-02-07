@@ -154,6 +154,42 @@ body {
     color: #ffffff;
 }
 
+.marquesina {
+    width: 100%;
+    overflow: hidden;
+    padding: 10px 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.marquesina__track {
+    display: flex;
+    gap: 3rem;
+    white-space: nowrap;
+    animation: marquee 18s linear infinite;
+}
+
+.marquesina__content {
+    display: inline-flex;
+    align-items: center;
+    gap: 3rem;
+}
+
+.marquesina__link {
+    text-decoration: none;
+}
+
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .marquesina__track {
+        animation: none;
+    }
+}
+
 .btn-primary:hover {
     background-color: #0f2a47;
     border-color: #0f2a47;

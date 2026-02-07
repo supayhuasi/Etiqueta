@@ -19,6 +19,26 @@ try {
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN favicon VARCHAR(255) NULL AFTER logo");
     }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'marquesina_activa'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_activa TINYINT DEFAULT 0 AFTER favicon");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'marquesina_texto'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_texto VARCHAR(255) NULL AFTER marquesina_activa");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'marquesina_link'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_link VARCHAR(255) NULL AFTER marquesina_texto");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'marquesina_bg'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_bg VARCHAR(20) NULL AFTER marquesina_link");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'marquesina_text_color'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_text_color VARCHAR(20) NULL AFTER marquesina_bg");
+    }
 } catch (Exception $e) {
     // Ignorar errores de migración
 }
@@ -47,6 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $seo_title = $_POST['seo_title'] ?? '';
     $seo_description = $_POST['seo_description'] ?? '';
     $seo_image = $_POST['seo_image'] ?? '';
+    $marquesina_activa = !empty($_POST['marquesina_activa']) ? 1 : 0;
+    $marquesina_texto = $_POST['marquesina_texto'] ?? '';
+    $marquesina_link = $_POST['marquesina_link'] ?? '';
+    $marquesina_bg = $_POST['marquesina_bg'] ?? '';
+    $marquesina_text_color = $_POST['marquesina_text_color'] ?? '';
     $terminos = $_POST['terminos'] ?? '';
     $privacidad = $_POST['privacidad'] ?? '';
     $facebook = $_POST['facebook'] ?? '';
@@ -132,7 +157,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_empresa 
-                    SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, favicon = ?, email = ?, telefono = ?,
+                    SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, favicon = ?,
+                        marquesina_activa = ?, marquesina_texto = ?, marquesina_link = ?, marquesina_bg = ?, marquesina_text_color = ?,
+                        email = ?, telefono = ?,
                         direccion = ?, ciudad = ?, provincia = ?, pais = ?,
                         horario_atencion = ?, about_us = ?, terminos_condiciones = ?,
                         politica_privacidad = ?, redes_sociales = ?, cuit = ?,
@@ -140,7 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     WHERE id = ?
                 ");
                 $stmt->execute([
-                    $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $favicon, $email, $telefono,
+                    $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $favicon,
+                    $marquesina_activa, $marquesina_texto, $marquesina_link, $marquesina_bg, $marquesina_text_color,
+                    $email, $telefono,
                     $direccion, $ciudad, $provincia, $pais,
                     $horario_atencion, $about_us, $terminos, $privacidad,
                     $redes_sociales, $cuit, $responsabilidad_fiscal, $iibb, $regimen_iva,
@@ -221,6 +250,36 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     <div class="mb-3">
                         <label for="about_us" class="form-label">Acerca de Nosotros</label>
                         <textarea class="form-control" id="about_us" name="about_us" rows="4"><?= htmlspecialchars($empresa['about_us'] ?? '') ?></textarea>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Marquesina (inicio)</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="marquesina_activa" name="marquesina_activa" value="1" <?= !empty($empresa['marquesina_activa']) ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="marquesina_activa">Activar marquesina</label>
+                            </div>
+                            <div class="mb-3">
+                                <label for="marquesina_texto" class="form-label">Texto</label>
+                                <input type="text" class="form-control" id="marquesina_texto" name="marquesina_texto" maxlength="255" value="<?= htmlspecialchars($empresa['marquesina_texto'] ?? '') ?>" placeholder="Ej: Envío gratis a partir de $50.000">
+                            </div>
+                            <div class="mb-3">
+                                <label for="marquesina_link" class="form-label">Link (opcional)</label>
+                                <input type="url" class="form-control" id="marquesina_link" name="marquesina_link" value="<?= htmlspecialchars($empresa['marquesina_link'] ?? '') ?>" placeholder="https://...">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="marquesina_bg" class="form-label">Color de fondo</label>
+                                    <input type="text" class="form-control" id="marquesina_bg" name="marquesina_bg" value="<?= htmlspecialchars($empresa['marquesina_bg'] ?? '#111827') ?>" placeholder="#111827">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="marquesina_text_color" class="form-label">Color de texto</label>
+                                    <input type="text" class="form-control" id="marquesina_text_color" name="marquesina_text_color" value="<?= htmlspecialchars($empresa['marquesina_text_color'] ?? '#ffffff') ?>" placeholder="#ffffff">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

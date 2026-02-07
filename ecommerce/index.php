@@ -50,6 +50,33 @@ if (is_dir($trabajos_dir)) {
 }
 ?>
 
+<?php if (!empty($empresa['marquesina_activa']) && !empty($empresa['marquesina_texto'])): ?>
+    <div class="marquesina" style="background: <?= htmlspecialchars($empresa['marquesina_bg'] ?? '#111827') ?>; color: <?= htmlspecialchars($empresa['marquesina_text_color'] ?? '#ffffff') ?>;">
+        <div class="container">
+            <div class="marquesina__track">
+                <div class="marquesina__content">
+                    <?php if (!empty($empresa['marquesina_link'])): ?>
+                        <a href="<?= htmlspecialchars($empresa['marquesina_link']) ?>" class="marquesina__link" style="color: inherit;">
+                            <?= htmlspecialchars($empresa['marquesina_texto']) ?>
+                        </a>
+                    <?php else: ?>
+                        <?= htmlspecialchars($empresa['marquesina_texto']) ?>
+                    <?php endif; ?>
+                </div>
+                <div class="marquesina__content" aria-hidden="true">
+                    <?php if (!empty($empresa['marquesina_link'])): ?>
+                        <a href="<?= htmlspecialchars($empresa['marquesina_link']) ?>" class="marquesina__link" style="color: inherit;">
+                            <?= htmlspecialchars($empresa['marquesina_texto']) ?>
+                        </a>
+                    <?php else: ?>
+                        <?= htmlspecialchars($empresa['marquesina_texto']) ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- Slideshow/Carrusel -->
 <?php if (!empty($slideshows)): ?>
 <div id="carouselSlideshow" class="carousel slide mb-4" data-bs-ride="carousel">
