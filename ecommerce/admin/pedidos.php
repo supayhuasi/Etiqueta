@@ -216,6 +216,15 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$request_scheme = 'http';
+if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+    $request_scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'https' : 'http';
+} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    $request_scheme = 'https';
+}
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_url = $request_scheme . '://' . $host . $public_base;
+
 // Marcar pedidos como pagados si corresponde
 foreach ($pedidos as &$pedido) {
     $total_pagado = (float)($pedido['total_pagado'] ?? 0);
@@ -224,6 +233,17 @@ foreach ($pedidos as &$pedido) {
         $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?");
         $stmt->execute([$pedido['id']]);
         $pedido['estado'] = 'pagado';
+    }
+
+    if (empty($pedido['public_token'])) {
+        $nuevo_token = bin2hex(random_bytes(16));
+        try {
+            $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?");
+            $stmt->execute([$nuevo_token, $pedido['id']]);
+            $pedido['public_token'] = $nuevo_token;
+        } catch (Exception $e) {
+            // Si falla, continuar sin token
+        }
     }
 }
 unset($pedido);
@@ -307,6 +327,9 @@ unset($pedido);
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
                             <a class="btn btn-sm btn-outline-secondary" href="pedido_remito.php?id=<?= $pedido['id'] ?>" target="_blank">Remito</a>
+                            <?php if (!empty($pedido['public_token'])): ?>
+                                <a class="btn btn-sm btn-outline-info" href="<?= htmlspecialchars($base_url . '/pedido_publico.php?token=' . urlencode($pedido['public_token'])) ?>" target="_blank" rel="noopener">Link público</a>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
