@@ -84,6 +84,27 @@ $error = '';
 $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
 $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Obtener métodos de pago activos
+$metodos_pago = [];
+try {
+    $stmt = $pdo->query("SELECT * FROM ecommerce_metodos_pago WHERE activo = 1 ORDER BY orden ASC, nombre ASC");
+    $metodos_pago = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+}
+
+if (empty($metodos_pago)) {
+    $metodos_pago = [
+        ['codigo' => 'transferencia_bancaria', 'nombre' => 'Transferencia Bancaria', 'tipo' => 'manual', 'instrucciones_html' => ''],
+        ['codigo' => 'mercadopago_tarjeta', 'nombre' => 'Tarjeta de Crédito (Mercado Pago)', 'tipo' => 'mercadopago', 'instrucciones_html' => ''],
+        ['codigo' => 'efectivo_entrega', 'nombre' => 'Efectivo contra Entrega', 'tipo' => 'manual', 'instrucciones_html' => '']
+    ];
+}
+
+$metodos_pago_map = [];
+foreach ($metodos_pago as $m) {
+    $metodos_pago_map[strtolower($m['codigo'])] = $m;
+}
+
 function enviar_correos_pedido(PDO $pdo, string $numero_pedido, string $email_cliente, string $nombre_cliente, float $total, string $metodo_pago): void {
     $email_cliente = trim($email_cliente);
     $empresa_email = '';
@@ -134,13 +155,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $documento_tipo = $_POST['documento_tipo'] ?? '';
     $documento_numero = $_POST['documento_numero'] ?? '';
-    $metodo_pago = $_POST['metodo_pago'] ?? '';
+    $metodo_codigo = $_POST['metodo_pago'] ?? '';
+    $metodo_codigo = trim($metodo_codigo);
+    $metodo_codigo_key = strtolower($metodo_codigo);
+    $metodo_pago = '';
+    $metodo_tipo = '';
+    $metodo_instrucciones = '';
+
+    if ($metodo_codigo_key !== '' && isset($metodos_pago_map[$metodo_codigo_key])) {
+        $metodo_pago = $metodos_pago_map[$metodo_codigo_key]['nombre'] ?? '';
+        $metodo_tipo = $metodos_pago_map[$metodo_codigo_key]['tipo'] ?? 'manual';
+        $metodo_instrucciones = $metodos_pago_map[$metodo_codigo_key]['instrucciones_html'] ?? '';
+    }
     
     // Validar datos
     if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
         $error = "Por favor completa todos los campos obligatorios (incluyendo datos fiscales)";
+    } elseif ($metodo_codigo === '' || empty($metodo_pago)) {
+        $error = "Seleccioná un método de pago";
     } else if (empty($carrito)) {
         $error = "El carrito está vacío";
+    } elseif ($metodo_tipo === 'mercadopago' && !$config_mp) {
+        $error = "Mercado Pago no está disponible";
     } else {
         try {
             if ($ciudad === '' && $localidad !== '') {
@@ -189,9 +225,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
             
             // Determinar estado inicial del pedido
             $estado_pedido = 'pendiente_pago';
-            if ($metodo_pago === 'Transferencia Bancaria') {
+            if ($metodo_codigo_key === 'transferencia_bancaria') {
                 $estado_pedido = 'esperando_transferencia';
-            } elseif ($metodo_pago === 'Efectivo contra Entrega') {
+            } elseif ($metodo_codigo_key === 'efectivo_entrega') {
                 $estado_pedido = 'esperando_envio';
             }
 
@@ -270,18 +306,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
             enviar_correos_pedido($pdo, $numero_pedido, $email, $nombre, (float)$total, $metodo_pago);
             
             // Si es tarjeta de crédito y Mercado Pago está disponible
-            if ($metodo_pago === 'Tarjeta de Crédito' && $config_mp) {
+            if ($metodo_tipo === 'mercadopago' && $config_mp) {
                 // Redirigir a página de pago con Mercado Pago
                 $_SESSION['pedido_id'] = $pedido_id;
                 $_SESSION['pedido_numero'] = $numero_pedido;
                 header("Location: mp_checkout.php?pedido_id=" . $pedido_id);
                 exit;
             }
-            
-            // Para otros métodos de pago, limpiar carrito y mostrar confirmación
+
+            // Para métodos manuales, mostrar pantalla dedicada con instrucciones
             unset($_SESSION['carrito']);
-            
-            $mensaje = "¡Pedido creado exitosamente! Número de pedido: <strong>$numero_pedido</strong>";
+            $_SESSION['pedido_numero'] = $numero_pedido;
+            $_SESSION['pedido_metodo_nombre'] = $metodo_pago;
+            $_SESSION['pedido_metodo_instrucciones'] = $metodo_instrucciones;
+            $_SESSION['pedido_total'] = $total;
+            header("Location: checkout_confirmacion.php");
+            exit;
         } catch (Exception $e) {
             $error = "Error al procesar el pedido: " . $e->getMessage();
         }
@@ -397,24 +437,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <h5>Método de Pago</h5>
                         </div>
                         <div class="card-body">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="metodo_pago" id="transferencia" value="Transferencia Bancaria" checked>
-                                <label class="form-check-label" for="transferencia">
-                                    Transferencia Bancaria
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="metodo_pago" id="tarjeta" value="Tarjeta de Crédito">
-                                <label class="form-check-label" for="tarjeta">
-                                    Tarjeta de Crédito
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="metodo_pago" id="efectivo" value="Efectivo contra Entrega">
-                                <label class="form-check-label" for="efectivo">
-                                    Efectivo contra Entrega
-                                </label>
-                            </div>
+                            <?php foreach ($metodos_pago as $index => $metodo):
+                                $codigo = $metodo['codigo'] ?? '';
+                                $nombre = $metodo['nombre'] ?? '';
+                                $instrucciones = $metodo['instrucciones_html'] ?? '';
+                                $instrucciones_b64 = base64_encode($instrucciones);
+                                $id = 'metodo_' . $codigo;
+                            ?>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input metodo-pago-input" type="radio" name="metodo_pago" id="<?= htmlspecialchars($id) ?>" value="<?= htmlspecialchars($codigo) ?>" data-instrucciones="<?= htmlspecialchars($instrucciones_b64) ?>" <?= $index === 0 ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="<?= htmlspecialchars($id) ?>">
+                                        <?= htmlspecialchars($nombre) ?>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+
+                            <div id="metodo-instrucciones" class="alert alert-light border mt-3" style="display:none;"></div>
                         </div>
                     </div>
 
@@ -423,6 +461,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                         <button type="submit" class="btn btn-success btn-lg flex-grow-1">Confirmar Compra</button>
                     </div>
                 </form>
+                <script>
+                    (function() {
+                        const container = document.getElementById('metodo-instrucciones');
+                        const inputs = document.querySelectorAll('.metodo-pago-input');
+                        if (!container || inputs.length === 0) return;
+
+                        const update = () => {
+                            const selected = document.querySelector('.metodo-pago-input:checked');
+                            const data = selected?.getAttribute('data-instrucciones') || '';
+                            const html = data ? decodeURIComponent(escape(atob(data))) : '';
+                            if (html.trim() !== '') {
+                                container.innerHTML = html;
+                                container.style.display = 'block';
+                            } else {
+                                container.innerHTML = '';
+                                container.style.display = 'none';
+                            }
+                        };
+
+                        inputs.forEach(i => i.addEventListener('change', update));
+                        update();
+                    })();
+                </script>
             <?php endif; ?>
         </div>
 

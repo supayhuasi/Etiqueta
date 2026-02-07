@@ -282,6 +282,41 @@ try {
     ");
     $pdo->exec("INSERT INTO ecommerce_envio_config (id, costo_base, activo) VALUES (1, 500.00, 1) ON DUPLICATE KEY UPDATE id = id");
 
+    // Configuración de métodos de pago
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_metodos_pago (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            codigo VARCHAR(50) NOT NULL UNIQUE,
+            nombre VARCHAR(100) NOT NULL,
+            tipo ENUM('manual','mercadopago') NOT NULL DEFAULT 'manual',
+            instrucciones_html TEXT NULL,
+            activo TINYINT DEFAULT 1,
+            orden INT DEFAULT 0,
+            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_activo (activo)
+        )
+    ");
+
+    // Métodos de pago iniciales
+    $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+        SELECT 'transferencia_bancaria', 'Transferencia Bancaria', 'manual',
+        '<p><strong>Datos para transferencia:</strong></p><ul><li>Banco: Banco Ejemplo</li><li>CBU: 0000000000000000000000</li><li>Alias: TUCU.ROLLER</li><li>Titular: Tucu Roller</li></ul><p>Luego de transferir, envíanos el comprobante.</p>',
+        1, 1
+        WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'transferencia_bancaria')
+    ");
+    $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+        SELECT 'mercadopago_tarjeta', 'Tarjeta de Crédito (Mercado Pago)', 'mercadopago',
+        '<p>Serás redirigido a Mercado Pago para completar el pago con tarjeta.</p>',
+        1, 2
+        WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'mercadopago_tarjeta')
+    ");
+    $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
+        SELECT 'efectivo_entrega', 'Efectivo contra Entrega', 'manual',
+        '<p>Pagás en efectivo al recibir tu pedido.</p>',
+        1, 3
+        WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'efectivo_entrega')
+    ");
+
     // Configuración de códigos de descuento
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_descuentos (
