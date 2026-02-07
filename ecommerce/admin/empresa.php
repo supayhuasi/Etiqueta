@@ -15,6 +15,10 @@ try {
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN seo_image VARCHAR(255) NULL AFTER seo_description");
     }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'favicon'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN favicon VARCHAR(255) NULL AFTER logo");
+    }
 } catch (Exception $e) {
     // Ignorar errores de migración
 }
@@ -58,8 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Nombre y email son obligatorios";
     } else {
         try {
-            // Procesar logo
+            // Procesar logo y favicon
             $logo = $empresa['logo'] ?? null;
+            $favicon = $empresa['favicon'] ?? null;
             if (isset($_FILES['logo']) && $_FILES['logo']['error'] == 0) {
                 $tipos_permitidos = ['jpg', 'jpeg', 'png', 'gif'];
                 $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
@@ -80,6 +85,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+
+            if (isset($_FILES['favicon']) && $_FILES['favicon']['error'] == 0) {
+                $tipos_permitidos = ['png', 'jpg', 'jpeg', 'ico', 'svg'];
+                $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
+
+                if (!in_array($ext, $tipos_permitidos)) {
+                    $error = "Tipo de favicon no permitido";
+                } else if ($_FILES['favicon']['size'] > 2097152) {
+                    $error = "El favicon es muy grande (máx 2MB)";
+                } else {
+                    $favicon = "favicon_" . time() . "." . $ext;
+                    $dir_logo = "../../uploads/";
+                    if (!is_dir($dir_logo)) {
+                        mkdir($dir_logo, 0755, true);
+                    }
+                    if (!move_uploaded_file($_FILES['favicon']['tmp_name'], $dir_logo . $favicon)) {
+                        $error = "Error al subir el favicon";
+                        $favicon = $empresa['favicon'] ?? null;
+                    }
+                }
+            }
             
             if (!isset($error)) {
                 $redes_sociales = json_encode([
@@ -91,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_empresa 
-                    SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, email = ?, telefono = ?,
+                    SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, favicon = ?, email = ?, telefono = ?,
                         direccion = ?, ciudad = ?, provincia = ?, pais = ?,
                         horario_atencion = ?, about_us = ?, terminos_condiciones = ?,
                         politica_privacidad = ?, redes_sociales = ?, cuit = ?,
@@ -99,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     WHERE id = ?
                 ");
                 $stmt->execute([
-                    $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $email, $telefono,
+                    $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $favicon, $email, $telefono,
                     $direccion, $ciudad, $provincia, $pais,
                     $horario_atencion, $about_us, $terminos, $privacidad,
                     $redes_sociales, $cuit, $responsabilidad_fiscal, $iibb, $regimen_iva,
@@ -323,6 +349,27 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     <div class="mb-3">
                         <input type="file" class="form-control" id="logo" name="logo" accept="image/*">
                         <small class="text-muted">PNG, JPG o GIF (máx 5MB)</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>Favicon</h5>
+                </div>
+                <div class="card-body">
+                    <?php if (!empty($empresa['favicon'])): ?>
+                        <div class="mb-3">
+                            <img src="../uploads/<?= htmlspecialchars($empresa['favicon']) ?>" class="img-fluid rounded" style="max-height: 64px;">
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-info text-center mb-3">
+                            Sin favicon
+                        </div>
+                    <?php endif; ?>
+                    <div class="mb-3">
+                        <input type="file" class="form-control" id="favicon" name="favicon" accept="image/png,image/jpeg,image/x-icon,image/svg+xml">
+                        <small class="text-muted">PNG, JPG, ICO o SVG (máx 2MB)</small>
                     </div>
                 </div>
             </div>

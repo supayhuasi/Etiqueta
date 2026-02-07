@@ -50,6 +50,19 @@ if (!empty($empresa_menu['logo'])) {
   }
 }
 
+$favicon_src = null;
+if (!empty($empresa_menu['favicon'])) {
+  $favicon_filename = $empresa_menu['favicon'];
+  $favicon_local_path = __DIR__ . '/../uploads/' . $favicon_filename;
+  $favicon_root_path = __DIR__ . '/../../uploads/' . $favicon_filename;
+
+  if (file_exists($favicon_local_path)) {
+    $favicon_src = $public_base . '/uploads/' . $favicon_filename;
+  } elseif (file_exists($favicon_root_path)) {
+    $favicon_src = '/uploads/' . $favicon_filename;
+  }
+}
+
 $redes_menu = json_decode($empresa_menu['redes_sociales'] ?? '{}', true) ?? [];
 $whatsapp_num = $redes_menu['whatsapp'] ?? '';
 $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
@@ -111,6 +124,9 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
     <meta name="description" content="<?= htmlspecialchars($seo_description) ?>">
     <meta name="robots" content="<?= htmlspecialchars($seo_robots) ?>">
     <link rel="canonical" href="<?= htmlspecialchars($seo_canonical) ?>">
+    <?php if (!empty($favicon_src)): ?>
+      <link rel="icon" href="<?= htmlspecialchars($favicon_src) ?>">
+    <?php endif; ?>
     <meta property="og:title" content="<?= htmlspecialchars($seo_title) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($seo_description) ?>">
     <meta property="og:type" content="<?= htmlspecialchars($seo_type) ?>">
