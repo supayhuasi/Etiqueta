@@ -1,6 +1,7 @@
 <?php
 require 'config.php';
 require 'includes/cliente_auth.php';
+require 'includes/google_oauth.php';
 
 $empresa = null;
 try {
@@ -29,6 +30,10 @@ if (!empty($_SESSION['cliente_id'])) {
 }
 
 $error = '';
+if (!empty($_SESSION['cliente_login_error'])) {
+    $error = $_SESSION['cliente_login_error'];
+    unset($_SESSION['cliente_login_error']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -95,6 +100,12 @@ require 'includes/header.php';
                             <button type="submit" class="btn btn-primary">Ingresar</button>
                         </div>
                     </form>
+                    <?php if (google_oauth_enabled()): ?>
+                        <hr class="my-4">
+                        <a href="cliente_google_login.php" class="btn btn-outline-danger w-100">
+                            Ingresar con Google
+                        </a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

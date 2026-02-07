@@ -59,6 +59,8 @@ try {
         CREATE TABLE IF NOT EXISTS ecommerce_clientes (
             id INT PRIMARY KEY AUTO_INCREMENT,
             email VARCHAR(255) NOT NULL UNIQUE,
+            google_id VARCHAR(255),
+            auth_provider VARCHAR(50),
             password_hash VARCHAR(255),
             nombre VARCHAR(255) NOT NULL,
             telefono VARCHAR(20),
@@ -78,7 +80,8 @@ try {
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_email (email),
-            INDEX idx_verificacion_token (email_verificacion_token)
+            INDEX idx_verificacion_token (email_verificacion_token),
+            INDEX idx_google_id (google_id)
         )
     ");
 
@@ -115,9 +118,21 @@ try {
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificacion_expira DATETIME AFTER email_verificacion_token");
     }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'google_id'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN google_id VARCHAR(255) AFTER email");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'auth_provider'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN auth_provider VARCHAR(50) AFTER google_id");
+    }
     $idx = $pdo->query("SHOW INDEX FROM ecommerce_clientes WHERE Key_name = 'idx_verificacion_token'");
     if ($idx->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_clientes ADD INDEX idx_verificacion_token (email_verificacion_token)");
+    }
+    $idx = $pdo->query("SHOW INDEX FROM ecommerce_clientes WHERE Key_name = 'idx_google_id'");
+    if ($idx->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD INDEX idx_google_id (google_id)");
     }
 
     // Marcar como verificados a clientes existentes sin token
