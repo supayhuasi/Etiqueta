@@ -25,9 +25,22 @@ try {
     $stmt = null;
 }
 
-if ($stmt && $stmt->execute([$cliente['id']])) {
-    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} else {
+try {
+    if ($stmt && $stmt->execute([$cliente['id']])) {
+        $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT id, numero_pedido, total, estado, fecha_creacion
+            FROM ecommerce_pedidos
+            WHERE cliente_id = ?
+            ORDER BY fecha_creacion DESC
+        ");
+        if ($stmt) {
+            $stmt->execute([$cliente['id']]);
+            $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (Exception $e) {
     $stmt = $pdo->prepare("
         SELECT id, numero_pedido, total, estado, fecha_creacion
         FROM ecommerce_pedidos
