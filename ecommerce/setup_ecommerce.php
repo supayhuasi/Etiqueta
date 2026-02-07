@@ -63,9 +63,13 @@ try {
             nombre VARCHAR(255) NOT NULL,
             telefono VARCHAR(20),
             provincia VARCHAR(100),
+            localidad VARCHAR(100),
             ciudad VARCHAR(100),
             direccion VARCHAR(255),
             codigo_postal VARCHAR(10),
+            responsabilidad_fiscal VARCHAR(100),
+            documento_tipo VARCHAR(10),
+            documento_numero VARCHAR(20),
             email_verificado TINYINT DEFAULT 0,
             email_verificado_en DATETIME,
             email_verificacion_token VARCHAR(64),
@@ -78,7 +82,23 @@ try {
         )
     ");
 
-    // Agregar columnas de verificación de email si la tabla ya existía
+    // Agregar columnas nuevas y de verificación de email si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'localidad'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN localidad VARCHAR(100) AFTER provincia");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'responsabilidad_fiscal'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN responsabilidad_fiscal VARCHAR(100) AFTER codigo_postal");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'documento_tipo'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN documento_tipo VARCHAR(10) AFTER responsabilidad_fiscal");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'documento_numero'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN documento_numero VARCHAR(20) AFTER documento_tipo");
+    }
     $col = $pdo->query("SHOW COLUMNS FROM ecommerce_clientes LIKE 'email_verificado'");
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_clientes ADD COLUMN email_verificado TINYINT DEFAULT 0 AFTER codigo_postal");
@@ -226,6 +246,19 @@ try {
     ");
 
     $pdo->exec("INSERT INTO ecommerce_email_config (id, activo) VALUES (1, 1) ON DUPLICATE KEY UPDATE id = id");
+
+    // Configuración de envío
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_envio_config (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            costo_base DECIMAL(10, 2) NOT NULL DEFAULT 500.00,
+            gratis_desde_importe DECIMAL(10, 2) NULL,
+            gratis_desde_cantidad INT NULL,
+            activo TINYINT DEFAULT 1,
+            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ");
+    $pdo->exec("INSERT INTO ecommerce_envio_config (id, costo_base, activo) VALUES (1, 500.00, 1) ON DUPLICATE KEY UPDATE id = id");
 
     // Tabla de proveedores
     $pdo->exec("

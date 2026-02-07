@@ -3,6 +3,7 @@ require 'config.php';
 require 'includes/header.php';
 require 'includes/cliente_auth.php';
 require 'includes/mailer.php';
+require 'includes/envio.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -19,6 +20,7 @@ if (empty($carrito)) {
 
 // Calcular totales
 $subtotal = 0;
+$cantidad_total = 0;
 foreach ($carrito as $item) {
     $precio_item = $item['precio'];
     
@@ -32,8 +34,11 @@ foreach ($carrito as $item) {
     }
     
     $subtotal += $precio_item * $item['cantidad'];
+    $cantidad_total += (int)$item['cantidad'];
 }
-$envio = $subtotal > 0 ? 500 : 0;
+$envio_data = calcular_envio($pdo, $subtotal, $cantidad_total);
+$envio = $envio_data['costo'];
+$envio_mensaje = $envio_data['mensaje'] ?? '';
 $total = $subtotal + $envio;
 
 // Procesar compra
@@ -87,27 +92,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nombre'] ?? '';
     $telefono = $_POST['telefono'] ?? '';
     $provincia = $_POST['provincia'] ?? '';
+    $localidad = $_POST['localidad'] ?? '';
     $ciudad = $_POST['ciudad'] ?? '';
     $direccion = $_POST['direccion'] ?? '';
     $codigo_postal = $_POST['codigo_postal'] ?? '';
+    $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
+    $documento_tipo = $_POST['documento_tipo'] ?? '';
+    $documento_numero = $_POST['documento_numero'] ?? '';
     $metodo_pago = $_POST['metodo_pago'] ?? '';
     
     // Validar datos
-    if (empty($nombre) || empty($direccion)) {
-        $error = "Por favor completa todos los campos obligatorios";
+    if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
+        $error = "Por favor completa todos los campos obligatorios (incluyendo datos fiscales)";
     } else if (empty($carrito)) {
         $error = "El carrito está vacío";
     } else {
         try {
+            if ($ciudad === '' && $localidad !== '') {
+                $ciudad = $localidad;
+            }
             if ($cliente_actual) {
                 $cliente_id = $cliente_actual['id'];
                 $email = $cliente_actual['email'];
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_clientes 
-                    SET nombre = ?, telefono = ?, provincia = ?, ciudad = ?, direccion = ?, codigo_postal = ?
+                    SET nombre = ?, telefono = ?, provincia = ?, localidad = ?, ciudad = ?, direccion = ?, codigo_postal = ?, responsabilidad_fiscal = ?, documento_tipo = ?, documento_numero = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal, $cliente_id]);
+                $stmt->execute([$nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero, $cliente_id]);
             } else {
                 // Verificar o crear cliente
                 if (empty($email)) {
@@ -120,20 +132,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (!$cliente) {
                     $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_clientes (email, nombre, telefono, provincia, ciudad, direccion, codigo_postal)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO ecommerce_clientes (email, nombre, telefono, provincia, localidad, ciudad, direccion, codigo_postal, responsabilidad_fiscal, documento_tipo, documento_numero)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
-                    $stmt->execute([$email, $nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal]);
+                    $stmt->execute([$email, $nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero]);
                     $cliente_id = $pdo->lastInsertId();
                 } else {
                     $cliente_id = $cliente['id'];
                     // Actualizar datos del cliente
                     $stmt = $pdo->prepare("
                         UPDATE ecommerce_clientes 
-                        SET nombre = ?, telefono = ?, provincia = ?, ciudad = ?, direccion = ?, codigo_postal = ?
+                        SET nombre = ?, telefono = ?, provincia = ?, localidad = ?, ciudad = ?, direccion = ?, codigo_postal = ?, responsabilidad_fiscal = ?, documento_tipo = ?, documento_numero = ?
                         WHERE id = ?
                     ");
-                    $stmt->execute([$nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal, $cliente_id]);
+                    $stmt->execute([$nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero, $cliente_id]);
                 }
             }
             
@@ -247,7 +259,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="alert alert-danger"><?= $error ?></div>
                 <?php endif; ?>
 
-                <form method="POST" class="mt-4">
+                <?php if (!$cliente_actual): ?>
+                    <div class="alert alert-info d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                        <div>
+                            <strong>¿Cómo querés continuar?</strong>
+                            <div class="text-muted">Podés comprar como invitado o ingresar a tu cuenta.</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="#form-checkout" class="btn btn-outline-primary">Comprar como invitado</a>
+                            <a href="cliente_login.php" class="btn btn-primary">Ingresar a mi cuenta</a>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" class="mt-4" id="form-checkout">
                     <div class="card mb-4">
                         <div class="card-header bg-primary text-white">
                             <h5>Datos de Facturación</h5>
@@ -275,6 +300,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             </div>
 
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="responsabilidad_fiscal" class="form-label">Responsabilidad Fiscal *</label>
+                                    <select class="form-select" id="responsabilidad_fiscal" name="responsabilidad_fiscal" required>
+                                        <option value="">Seleccionar</option>
+                                        <option value="Consumidor Final" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'Consumidor Final') ? 'selected' : '' ?>>Consumidor Final</option>
+                                        <option value="Monotributista" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'Monotributista') ? 'selected' : '' ?>>Monotributista</option>
+                                        <option value="Responsable Inscripto" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'Responsable Inscripto') ? 'selected' : '' ?>>Responsable Inscripto</option>
+                                        <option value="Exento" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'Exento') ? 'selected' : '' ?>>Exento</option>
+                                        <option value="No Responsable" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'No Responsable') ? 'selected' : '' ?>>No Responsable</option>
+                                        <option value="Sujeto No Categorizado" <?= (($cliente_actual['responsabilidad_fiscal'] ?? '') === 'Sujeto No Categorizado') ? 'selected' : '' ?>>Sujeto No Categorizado</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="documento_tipo" class="form-label">Tipo Documento *</label>
+                                    <select class="form-select" id="documento_tipo" name="documento_tipo" required>
+                                        <option value="">Seleccionar</option>
+                                        <option value="DNI" <?= (($cliente_actual['documento_tipo'] ?? '') === 'DNI') ? 'selected' : '' ?>>DNI</option>
+                                        <option value="CUIT" <?= (($cliente_actual['documento_tipo'] ?? '') === 'CUIT') ? 'selected' : '' ?>>CUIT</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="documento_numero" class="form-label">Número *</label>
+                                    <input type="text" class="form-control" id="documento_numero" name="documento_numero" value="<?= htmlspecialchars($cliente_actual['documento_numero'] ?? '') ?>" required>
+                                </div>
+                            </div>
+
                             <div class="mb-3">
                                 <label for="direccion" class="form-label">Dirección *</label>
                                 <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cliente_actual['direccion'] ?? '') ?>" required>
@@ -282,12 +334,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label for="ciudad" class="form-label">Ciudad</label>
-                                    <input type="text" class="form-control" id="ciudad" name="ciudad" value="<?= htmlspecialchars($cliente_actual['ciudad'] ?? '') ?>">
+                                    <label for="localidad" class="form-label">Localidad *</label>
+                                    <input type="text" class="form-control" id="localidad" name="localidad" value="<?= htmlspecialchars($cliente_actual['localidad'] ?? $cliente_actual['ciudad'] ?? '') ?>" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label for="provincia" class="form-label">Provincia</label>
-                                    <input type="text" class="form-control" id="provincia" name="provincia" value="<?= htmlspecialchars($cliente_actual['provincia'] ?? '') ?>">
+                                    <label for="provincia" class="form-label">Provincia *</label>
+                                    <input type="text" class="form-control" id="provincia" name="provincia" value="<?= htmlspecialchars($cliente_actual['provincia'] ?? '') ?>" required>
                                 </div>
                             </div>
                         </div>
@@ -380,10 +432,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <span>Subtotal:</span>
                             <strong>$<?= number_format($subtotal, 2, ',', '.') ?></strong>
                         </div>
-                        <div class="d-flex justify-content-between mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;">
+                        <div class="d-flex justify-content-between mb-1">
                             <span>Envío:</span>
                             <strong>$<?= number_format($envio, 2, ',', '.') ?></strong>
                         </div>
+                        <?php if (!empty($envio_mensaje)): ?>
+                            <div class="mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;">
+                                <small class="text-muted"><?= htmlspecialchars($envio_mensaje) ?></small>
+                            </div>
+                        <?php else: ?>
+                            <div class="mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;"></div>
+                        <?php endif; ?>
                         <div class="d-flex justify-content-between">
                             <span style="font-size: 1.1rem;">Total:</span>
                             <h4 class="text-success">$<?= number_format($total, 2, ',', '.') ?></h4>

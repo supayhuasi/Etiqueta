@@ -361,7 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php if ($tipo_precio === 'variable'): ?>
                         <div class="alert alert-info mb-4">
                             <h6 class="mb-2">📏 Precio según medidas</h6>
-                            <p class="mb-0 small">Ingresa el ancho y alto deseado en centímetros. El sistema buscará el precio más cercano a esas medidas.</p>
+                            <p class="mb-0 small">Ingresa el ancho y alto deseado en centímetros.</p>
                         </div>
 
                         <div class="row mb-4">

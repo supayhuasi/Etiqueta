@@ -17,14 +17,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $telefono = trim($_POST['telefono'] ?? '');
     $provincia = trim($_POST['provincia'] ?? '');
+    $localidad = trim($_POST['localidad'] ?? '');
     $ciudad = trim($_POST['ciudad'] ?? '');
     $direccion = trim($_POST['direccion'] ?? '');
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
+    $responsabilidad_fiscal = trim($_POST['responsabilidad_fiscal'] ?? '');
+    $documento_tipo = trim($_POST['documento_tipo'] ?? '');
+    $documento_numero = trim($_POST['documento_numero'] ?? '');
     $password = $_POST['password'] ?? '';
     $password2 = $_POST['password2'] ?? '';
 
-    if (empty($nombre) || empty($email) || empty($password)) {
-        $error = 'Nombre, email y contraseña son obligatorios.';
+    if (empty($nombre) || empty($email) || empty($password) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
+        $error = 'Completá los campos obligatorios (incluyendo provincia, localidad y datos fiscales).';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Email no válido.';
     } elseif ($password !== $password2) {
@@ -39,11 +43,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Ya existe una cuenta con ese email.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
+                if ($ciudad === '' && $localidad !== '') {
+                    $ciudad = $localidad;
+                }
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_clientes (email, password_hash, nombre, telefono, provincia, ciudad, direccion, codigo_postal)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_clientes (email, password_hash, nombre, telefono, provincia, localidad, ciudad, direccion, codigo_postal, responsabilidad_fiscal, documento_tipo, documento_numero)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$email, $hash, $nombre, $telefono, $provincia, $ciudad, $direccion, $codigo_postal]);
+                $stmt->execute([$email, $hash, $nombre, $telefono, $provincia, $localidad, $ciudad, $direccion, $codigo_postal, $responsabilidad_fiscal, $documento_tipo, $documento_numero]);
 
                 $cliente_id = $pdo->lastInsertId();
                 $token = bin2hex(random_bytes(32));

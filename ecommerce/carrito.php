@@ -1,6 +1,7 @@
 <?php
 require 'config.php';
 require 'includes/header.php';
+require 'includes/envio.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -29,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_cantidad']
 
 // Calcular totales
 $subtotal = 0;
+$cantidad_total = 0;
 foreach ($carrito as $item) {
     $precio_item = $item['precio'];
     
@@ -42,8 +44,11 @@ foreach ($carrito as $item) {
     }
     
     $subtotal += $precio_item * $item['cantidad'];
+    $cantidad_total += (int)$item['cantidad'];
 }
-$envio = $subtotal > 0 ? 500 : 0; // Envío fijo
+$envio_data = calcular_envio($pdo, $subtotal, $cantidad_total);
+$envio = $envio_data['costo'];
+$envio_mensaje = $envio_data['mensaje'] ?? '';
 $total = $subtotal + $envio;
 ?>
 
@@ -152,10 +157,17 @@ $total = $subtotal + $envio;
                             <span>Subtotal:</span>
                             <strong>$<?= number_format($subtotal, 2, ',', '.') ?></strong>
                         </div>
-                        <div class="d-flex justify-content-between mb-3 pb-3 border-bottom">
+                        <div class="d-flex justify-content-between mb-1">
                             <span>Envío:</span>
                             <strong>$<?= number_format($envio, 2, ',', '.') ?></strong>
                         </div>
+                        <?php if (!empty($envio_mensaje)): ?>
+                            <div class="mb-3 pb-3 border-bottom">
+                                <small class="text-muted"><?= htmlspecialchars($envio_mensaje) ?></small>
+                            </div>
+                        <?php else: ?>
+                            <div class="mb-3 pb-3 border-bottom"></div>
+                        <?php endif; ?>
                         <div class="d-flex justify-content-between mb-4">
                             <span style="font-size: 1.2rem;">Total:</span>
                             <h4 class="text-primary">$<?= number_format($total, 2, ',', '.') ?></h4>
