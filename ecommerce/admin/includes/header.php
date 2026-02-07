@@ -120,6 +120,7 @@ $page_permissions = [
     'cotizaciones.php' => 'cotizaciones',
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
+    'descuentos.php' => 'descuentos',
     'cotizacion_clientes.php' => 'cotizacion_clientes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
@@ -375,7 +376,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'cotizaciones', 'cotizacion_clientes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'cotizaciones', 'cotizacion_clientes', 'descuentos'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -396,6 +397,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('cotizacion_clientes')): ?>
                         <a href="<?= $admin_url ?>cotizacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'cotizacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Clientes Cotización</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('descuentos')): ?>
+                        <a href="<?= $admin_url ?>descuentos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'descuentos.php' ? 'active' : '' ?>"><i class="bi bi-percent"></i> Descuentos</a>
                         <?php endif; ?>
                     </div>
                 </div>

@@ -129,6 +129,10 @@ try {
             id INT PRIMARY KEY AUTO_INCREMENT,
             numero_pedido VARCHAR(50) NOT NULL UNIQUE,
             cliente_id INT NOT NULL,
+            subtotal DECIMAL(10, 2) NULL,
+            envio DECIMAL(10, 2) NULL,
+            descuento_monto DECIMAL(10, 2) NULL,
+            codigo_descuento VARCHAR(50) NULL,
             total DECIMAL(10, 2) NOT NULL,
             estado ENUM('pendiente_pago', 'esperando_transferencia', 'esperando_envio', 'pagado', 'pago_pendiente', 'pago_autorizado', 'pago_en_proceso', 'pago_rechazado', 'pago_reembolsado', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente_pago',
             metodo_pago VARCHAR(100),
@@ -163,6 +167,24 @@ try {
     $idx = $pdo->query("SHOW INDEX FROM ecommerce_pedidos WHERE Key_name = 'idx_mp_payment'");
     if ($idx->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD INDEX idx_mp_payment (mercadopago_payment_id)");
+    }
+
+    // Asegurar columnas de descuento/envío si la tabla ya existía
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'subtotal'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN subtotal DECIMAL(10,2) NULL AFTER cliente_id");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'envio'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio DECIMAL(10,2) NULL AFTER subtotal");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'descuento_monto'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN descuento_monto DECIMAL(10,2) NULL AFTER envio");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'codigo_descuento'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN codigo_descuento VARCHAR(50) NULL AFTER descuento_monto");
     }
 
     // Tabla de items del pedido
@@ -259,6 +281,25 @@ try {
         )
     ");
     $pdo->exec("INSERT INTO ecommerce_envio_config (id, costo_base, activo) VALUES (1, 500.00, 1) ON DUPLICATE KEY UPDATE id = id");
+
+    // Configuración de códigos de descuento
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ecommerce_descuentos (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            codigo VARCHAR(50) NOT NULL UNIQUE,
+            tipo ENUM('porcentaje','monto') NOT NULL,
+            valor DECIMAL(10,2) NOT NULL,
+            minimo_subtotal DECIMAL(10,2) NULL,
+            fecha_inicio DATE NULL,
+            fecha_fin DATE NULL,
+            usos_max INT NULL,
+            usos_usados INT DEFAULT 0,
+            activo TINYINT DEFAULT 1,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_activo (activo),
+            INDEX idx_codigo (codigo)
+        )
+    ");
 
     // Tabla de proveedores
     $pdo->exec("

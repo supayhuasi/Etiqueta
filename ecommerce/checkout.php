@@ -4,6 +4,7 @@ require 'includes/header.php';
 require 'includes/cliente_auth.php';
 require 'includes/mailer.php';
 require 'includes/envio.php';
+require 'includes/descuentos.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -12,6 +13,9 @@ if (session_status() === PHP_SESSION_NONE) {
 $cliente_actual = cliente_actual($pdo);
 
 $carrito = $_SESSION['carrito'] ?? [];
+$mensaje_descuento = '';
+$error_descuento = '';
+$skip_checkout = false;
 
 if (empty($carrito)) {
     header("Location: tienda.php");
@@ -39,7 +43,38 @@ foreach ($carrito as $item) {
 $envio_data = calcular_envio($pdo, $subtotal, $cantidad_total);
 $envio = $envio_data['costo'];
 $envio_mensaje = $envio_data['mensaje'] ?? '';
-$total = $subtotal + $envio;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aplicar_codigo'])) {
+    $codigo = normalizar_codigo_descuento((string)($_POST['codigo_descuento'] ?? ''));
+    if ($codigo === '') {
+        $error_descuento = 'Ingresá un código válido.';
+    } else {
+        $descuento = obtener_descuento_por_codigo($pdo, $codigo);
+        if (!$descuento) {
+            $error_descuento = 'El código no existe.';
+        } else {
+            $validacion = validar_descuento($descuento, $subtotal);
+            if ($validacion['valido']) {
+                $_SESSION['descuento_codigo'] = $codigo;
+                $mensaje_descuento = 'Código aplicado correctamente.';
+            } else {
+                $error_descuento = $validacion['mensaje'];
+            }
+        }
+    }
+    $skip_checkout = true;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quitar_codigo'])) {
+    unset($_SESSION['descuento_codigo']);
+    $mensaje_descuento = 'Código removido.';
+    $skip_checkout = true;
+}
+
+$descuento_info = aplicar_descuento_actual($pdo, $subtotal);
+$descuento_monto = $descuento_info['monto'] ?? 0.0;
+$codigo_descuento = $descuento_info['codigo'] ?? '';
+
+$total = max(0, $subtotal + $envio - $descuento_monto);
 
 // Procesar compra
 $mensaje = '';
@@ -87,7 +122,7 @@ function enviar_correos_pedido(PDO $pdo, string $numero_pedido, string $email_cl
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     $email = $_POST['email'] ?? '';
     $nombre = $_POST['nombre'] ?? '';
     $telefono = $_POST['telefono'] ?? '';
@@ -180,12 +215,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $estado_pedido = 'pendiente_pago';
             }
             
+            $descuento_aplicado = aplicar_descuento_actual($pdo, $subtotal);
+            $descuento_monto = $descuento_aplicado['monto'] ?? 0.0;
+            $codigo_descuento = $descuento_aplicado['codigo'] ?? null;
+            $total = max(0, $subtotal + $envio - $descuento_monto);
+
             // Crear pedido
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, metodo_pago, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$numero_pedido, $cliente_id, $total, $metodo_pago, $estado_pedido]);
+            $stmt->execute([$numero_pedido, $cliente_id, $subtotal, $envio, $descuento_monto, $codigo_descuento, $total, $metodo_pago, $estado_pedido]);
             $pedido_id = $pdo->lastInsertId();
             
             // Agregar items al pedido
@@ -219,6 +259,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $atributos_json
                 ]);
             }
+
+            if (!empty($descuento_aplicado['valido']) && !empty($descuento_aplicado['descuento']['id'])) {
+                $stmt = $pdo->prepare("UPDATE ecommerce_descuentos SET usos_usados = usos_usados + 1 WHERE id = ?");
+                $stmt->execute([(int)$descuento_aplicado['descuento']['id']]);
+            }
+
+            unset($_SESSION['descuento_codigo']);
 
             enviar_correos_pedido($pdo, $numero_pedido, $email, $nombre, (float)$total, $metodo_pago);
             
@@ -442,6 +489,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         <?php else: ?>
                             <div class="mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;"></div>
+                        <?php endif; ?>
+                        <?php if (!empty($mensaje_descuento)): ?>
+                            <div class="alert alert-success py-2 mb-2"><?= htmlspecialchars($mensaje_descuento) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($error_descuento)): ?>
+                            <div class="alert alert-danger py-2 mb-2"><?= htmlspecialchars($error_descuento) ?></div>
+                        <?php endif; ?>
+                        <form method="POST" class="mb-3">
+                            <label class="form-label">Código de descuento</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="codigo_descuento" placeholder="PROMO10" value="<?= htmlspecialchars($codigo_descuento) ?>" <?= $codigo_descuento ? 'readonly' : '' ?>>
+                                <?php if ($codigo_descuento): ?>
+                                    <button class="btn btn-outline-danger" type="submit" name="quitar_codigo">Quitar</button>
+                                <?php else: ?>
+                                    <button class="btn btn-outline-primary" type="submit" name="aplicar_codigo">Aplicar</button>
+                                <?php endif; ?>
+                            </div>
+                        </form>
+                        <?php if ($descuento_monto > 0): ?>
+                            <div class="d-flex justify-content-between mb-3">
+                                <span>Descuento:</span>
+                                <strong class="text-success">- $<?= number_format($descuento_monto, 2, ',', '.') ?></strong>
+                            </div>
                         <?php endif; ?>
                         <div class="d-flex justify-content-between">
                             <span style="font-size: 1.1rem;">Total:</span>

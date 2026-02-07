@@ -1,6 +1,7 @@
 <?php
 require 'config.php';
 require 'includes/header.php';
+require 'includes/descuentos.php';
 require 'includes/envio.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -8,6 +9,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 $carrito = $_SESSION['carrito'] ?? [];
+$mensaje_descuento = '';
+$error_descuento = '';
 
 // Procesar eliminación de item
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminar'])) {
@@ -46,10 +49,41 @@ foreach ($carrito as $item) {
     $subtotal += $precio_item * $item['cantidad'];
     $cantidad_total += (int)$item['cantidad'];
 }
+
+// Aplicar código de descuento
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aplicar_codigo'])) {
+    $codigo = normalizar_codigo_descuento((string)($_POST['codigo_descuento'] ?? ''));
+    if ($codigo === '') {
+        $error_descuento = 'Ingresá un código válido.';
+    } else {
+        $descuento = obtener_descuento_por_codigo($pdo, $codigo);
+        if (!$descuento) {
+            $error_descuento = 'El código no existe.';
+        } else {
+            $validacion = validar_descuento($descuento, $subtotal);
+            if ($validacion['valido']) {
+                $_SESSION['descuento_codigo'] = $codigo;
+                $mensaje_descuento = 'Código aplicado correctamente.';
+            } else {
+                $error_descuento = $validacion['mensaje'];
+            }
+        }
+    }
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quitar_codigo'])) {
+    unset($_SESSION['descuento_codigo']);
+    $mensaje_descuento = 'Código removido.';
+}
+
 $envio_data = calcular_envio($pdo, $subtotal, $cantidad_total);
 $envio = $envio_data['costo'];
 $envio_mensaje = $envio_data['mensaje'] ?? '';
-$total = $subtotal + $envio;
+
+$descuento_info = aplicar_descuento_actual($pdo, $subtotal);
+$descuento_monto = $descuento_info['monto'] ?? 0.0;
+$codigo_descuento = $descuento_info['codigo'] ?? '';
+
+$total = max(0, $subtotal + $envio - $descuento_monto);
 ?>
 
 <div class="container py-5">
@@ -167,6 +201,29 @@ $total = $subtotal + $envio;
                             </div>
                         <?php else: ?>
                             <div class="mb-3 pb-3 border-bottom"></div>
+                        <?php endif; ?>
+                        <?php if (!empty($mensaje_descuento)): ?>
+                            <div class="alert alert-success py-2 mb-2"><?= htmlspecialchars($mensaje_descuento) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($error_descuento)): ?>
+                            <div class="alert alert-danger py-2 mb-2"><?= htmlspecialchars($error_descuento) ?></div>
+                        <?php endif; ?>
+                        <form method="POST" class="mb-3">
+                            <label class="form-label">Código de descuento</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="codigo_descuento" placeholder="PROMO10" value="<?= htmlspecialchars($codigo_descuento) ?>" <?= $codigo_descuento ? 'readonly' : '' ?>>
+                                <?php if ($codigo_descuento): ?>
+                                    <button class="btn btn-outline-danger" type="submit" name="quitar_codigo">Quitar</button>
+                                <?php else: ?>
+                                    <button class="btn btn-outline-primary" type="submit" name="aplicar_codigo">Aplicar</button>
+                                <?php endif; ?>
+                            </div>
+                        </form>
+                        <?php if ($descuento_monto > 0): ?>
+                            <div class="d-flex justify-content-between mb-3">
+                                <span>Descuento:</span>
+                                <strong class="text-success">- $<?= number_format($descuento_monto, 2, ',', '.') ?></strong>
+                            </div>
                         <?php endif; ?>
                         <div class="d-flex justify-content-between mb-4">
                             <span style="font-size: 1.2rem;">Total:</span>
