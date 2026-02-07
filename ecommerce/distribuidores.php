@@ -141,6 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <?= htmlspecialchars($empresa['direccion'] ?? '') ?><br>
                                     <?= htmlspecialchars($empresa['ciudad'] ?? '') ?><?= !empty($empresa['provincia']) ? ', ' . htmlspecialchars($empresa['provincia']) : '' ?>
                                 </p>
+                                <?php if (!empty($empresa['provincia'])): ?>
+                                    <small class="text-muted d-block">Provincia: <?= htmlspecialchars($empresa['provincia']) ?></small>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
