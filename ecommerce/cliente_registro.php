@@ -124,12 +124,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Ciudad</label>
-                                <input type="text" name="ciudad" class="form-control" value="<?= htmlspecialchars($ciudad ?? '') ?>">
+                                <label class="form-label">Localidad *</label>
+                                <input type="text" name="localidad" class="form-control" value="<?= htmlspecialchars($localidad ?? '') ?>" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Provincia</label>
-                                <input type="text" name="provincia" class="form-control" value="<?= htmlspecialchars($provincia ?? '') ?>">
+                                <label class="form-label">Provincia *</label>
+                                <select name="provincia" class="form-select" required>
+                                    <option value="">Seleccionar</option>
+                                    <?php foreach (['Buenos Aires','Catamarca','Chaco','Chubut','Córdoba','Corrientes','Entre Ríos','Formosa','Jujuy','La Pampa','La Rioja','Mendoza','Misiones','Neuquén','Río Negro','Salta','San Juan','San Luis','Santa Cruz','Santa Fe','Santiago del Estero','Tierra del Fuego','Tucumán'] as $prov): ?>
+                                        <option value="<?= htmlspecialchars($prov) ?>" <?= ($provincia ?? '') === $prov ? 'selected' : '' ?>><?= htmlspecialchars($prov) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Responsabilidad Fiscal *</label>
+                                <select class="form-select" name="responsabilidad_fiscal" required>
+                                    <option value="">Seleccionar</option>
+                                    <?php foreach (['Consumidor Final','Monotributista','Responsable Inscripto','Exento','No Responsable','Sujeto No Categorizado'] as $rf): ?>
+                                        <option value="<?= htmlspecialchars($rf) ?>" <?= ($responsabilidad_fiscal ?? '') === $rf ? 'selected' : '' ?>><?= htmlspecialchars($rf) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Tipo Documento *</label>
+                                <select class="form-select" name="documento_tipo" required>
+                                    <option value="">Seleccionar</option>
+                                    <option value="DNI" <?= ($documento_tipo ?? '') === 'DNI' ? 'selected' : '' ?>>DNI</option>
+                                    <option value="CUIT" <?= ($documento_tipo ?? '') === 'CUIT' ? 'selected' : '' ?>>CUIT</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Número *</label>
+                                <input type="text" name="documento_numero" class="form-control" value="<?= htmlspecialchars($documento_numero ?? '') ?>" required>
                             </div>
                         </div>
 

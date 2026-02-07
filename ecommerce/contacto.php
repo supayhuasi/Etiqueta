@@ -41,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $asunto = trim($_POST['asunto'] ?? '');
+    $provincia_contacto = trim($_POST['provincia_contacto'] ?? '');
     $mensaje_contenido = trim($_POST['mensaje'] ?? '');
 
     if ($nombre === '' || $email === '' || $asunto === '' || $mensaje_contenido === '') {
@@ -55,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             . "<p><strong>Nombre:</strong> " . htmlspecialchars($nombre) . "</p>"
             . "<p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>"
             . "<p><strong>Asunto:</strong> " . htmlspecialchars($asunto) . "</p>"
+            . "<p><strong>Provincia:</strong> " . htmlspecialchars($provincia_contacto) . "</p>"
             . "<p><strong>Mensaje:</strong><br>" . nl2br(htmlspecialchars($mensaje_contenido)) . "</p>"
             . "<hr><small>Enviado desde el sitio web</small>";
 
@@ -62,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             . "Nombre: $nombre\n"
             . "Email: $email\n"
             . "Asunto: $asunto\n"
+            . "Provincia: $provincia_contacto\n"
             . "Mensaje: $mensaje_contenido\n";
 
         $enviado = enviar_email($empresa['email'], $asunto_final, $html, $text);
@@ -154,6 +157,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="mb-3">
                             <label for="asunto" class="form-label">Asunto *</label>
                             <input type="text" class="form-control" id="asunto" name="asunto" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="provincia_contacto" class="form-label">Provincia</label>
+                            <select class="form-select" id="provincia_contacto" name="provincia_contacto">
+                                <option value="">Seleccionar</option>
+                                <?php foreach (['Buenos Aires','Catamarca','Chaco','Chubut','Córdoba','Corrientes','Entre Ríos','Formosa','Jujuy','La Pampa','La Rioja','Mendoza','Misiones','Neuquén','Río Negro','Salta','San Juan','San Luis','Santa Cruz','Santa Fe','Santiago del Estero','Tierra del Fuego','Tucumán'] as $prov): ?>
+                                    <option value="<?= htmlspecialchars($prov) ?>"><?= htmlspecialchars($prov) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="mb-3">
