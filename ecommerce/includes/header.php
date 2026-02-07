@@ -117,6 +117,9 @@ $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
           <a class="nav-link" href="contacto.php">Contacto</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" href="distribuidores.php">Distribuidores</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" href="/admin/" target="_blank" rel="noopener">Admin</a>
         </li>
         <?php if (!empty($_SESSION['cliente_id'])): ?>

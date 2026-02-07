@@ -28,33 +28,45 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $asunto = trim($_POST['asunto'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $provincia = trim($_POST['provincia'] ?? '');
+    $localidad = trim($_POST['localidad'] ?? '');
+    $empresa_solicitante = trim($_POST['empresa'] ?? '');
+    $rubro = trim($_POST['rubro'] ?? '');
     $mensaje_contenido = trim($_POST['mensaje'] ?? '');
 
-    if ($nombre === '' || $email === '' || $asunto === '' || $mensaje_contenido === '') {
-        $error = "Por favor completa todos los campos";
+    if ($nombre === '' || $email === '' || $telefono === '' || $provincia === '' || $localidad === '') {
+        $error = "Por favor completa los campos obligatorios";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Email inválido";
     } elseif (empty($empresa['email'])) {
         $error = "No está configurado el email de la empresa";
     } else {
-        $asunto_final = "Contacto: " . $asunto;
-        $html = "<h2>Nuevo mensaje desde el formulario de contacto</h2>"
+        $asunto_final = "Solicitud de distribuidor";
+        $html = "<h2>Nueva solicitud de distribuidor</h2>"
             . "<p><strong>Nombre:</strong> " . htmlspecialchars($nombre) . "</p>"
             . "<p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>"
-            . "<p><strong>Asunto:</strong> " . htmlspecialchars($asunto) . "</p>"
+            . "<p><strong>Teléfono:</strong> " . htmlspecialchars($telefono) . "</p>"
+            . "<p><strong>Provincia:</strong> " . htmlspecialchars($provincia) . "</p>"
+            . "<p><strong>Localidad:</strong> " . htmlspecialchars($localidad) . "</p>"
+            . "<p><strong>Empresa:</strong> " . htmlspecialchars($empresa_solicitante) . "</p>"
+            . "<p><strong>Rubro:</strong> " . htmlspecialchars($rubro) . "</p>"
             . "<p><strong>Mensaje:</strong><br>" . nl2br(htmlspecialchars($mensaje_contenido)) . "</p>"
             . "<hr><small>Enviado desde el sitio web</small>";
 
-        $text = "Nuevo mensaje desde el formulario de contacto\n"
+        $text = "Nueva solicitud de distribuidor\n"
             . "Nombre: $nombre\n"
             . "Email: $email\n"
-            . "Asunto: $asunto\n"
+            . "Teléfono: $telefono\n"
+            . "Provincia: $provincia\n"
+            . "Localidad: $localidad\n"
+            . "Empresa: $empresa_solicitante\n"
+            . "Rubro: $rubro\n"
             . "Mensaje: $mensaje_contenido\n";
 
         $enviado = enviar_email($empresa['email'], $asunto_final, $html, $text);
         if ($enviado) {
-            $mensaje = "¡Gracias por tu mensaje! Nos pondremos en contacto pronto.";
+            $mensaje = "¡Gracias por tu interés! Nos pondremos en contacto pronto.";
         } else {
             $error = "No pudimos enviar el correo. Intentá nuevamente.";
         }
@@ -65,8 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="container py-5">
     <div class="row">
         <div class="col-md-8 offset-md-2">
-            <h1>Contacto</h1>
-            <p class="text-muted">¿Tienes preguntas? Estamos aquí para ayudarte</p>
+            <h1>Distribuidores</h1>
+            <p class="text-muted">Sumate como distribuidor y llevá nuestros productos a tu zona</p>
 
             <?php if (!empty($mensaje)): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -118,8 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="col-md-6">
                     <form method="POST" class="card p-4">
-                        <h5 class="mb-4">Formulario de Contacto</h5>
-                        
+                        <h5 class="mb-4">Formulario para Distribuidores</h5>
+
                         <div class="mb-3">
                             <label for="nombre" class="form-label">Nombre *</label>
                             <input type="text" class="form-control" id="nombre" name="nombre" required>
@@ -131,16 +143,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="mb-3">
-                            <label for="asunto" class="form-label">Asunto *</label>
-                            <input type="text" class="form-control" id="asunto" name="asunto" required>
+                            <label for="telefono" class="form-label">Teléfono *</label>
+                            <input type="text" class="form-control" id="telefono" name="telefono" required>
                         </div>
 
                         <div class="mb-3">
-                            <label for="mensaje" class="form-label">Mensaje *</label>
-                            <textarea class="form-control" id="mensaje" name="mensaje" rows="5" required></textarea>
+                            <label for="provincia" class="form-label">Provincia *</label>
+                            <input type="text" class="form-control" id="provincia" name="provincia" required>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100">Enviar Mensaje</button>
+                        <div class="mb-3">
+                            <label for="localidad" class="form-label">Localidad *</label>
+                            <input type="text" class="form-control" id="localidad" name="localidad" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="empresa" class="form-label">Empresa</label>
+                            <input type="text" class="form-control" id="empresa" name="empresa">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="rubro" class="form-label">Rubro</label>
+                            <input type="text" class="form-control" id="rubro" name="rubro">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="mensaje" class="form-label">Mensaje</label>
+                            <textarea class="form-control" id="mensaje" name="mensaje" rows="4"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Enviar Solicitud</button>
                     </form>
                 </div>
             </div>
