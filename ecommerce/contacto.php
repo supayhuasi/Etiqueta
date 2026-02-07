@@ -13,16 +13,28 @@ $empresa = [
     'direccion' => '',
     'ciudad' => '',
     'provincia' => '',
-    'horario_atencion' => 'Lunes a Viernes: 9:00 - 18:00<br>Sábados: 10:00 - 14:00'
+    'horario_atencion' => 'Lunes a Viernes: 9:00 - 18:00<br>Sábados: 10:00 - 14:00',
+    'redes_sociales' => '{}'
 ];
 
 try {
-    $stmt = $pdo->query("SELECT nombre, email, telefono, direccion, ciudad, provincia, horario_atencion FROM ecommerce_empresa LIMIT 1");
+    $stmt = $pdo->query("SELECT nombre, email, telefono, direccion, ciudad, provincia, horario_atencion, redes_sociales FROM ecommerce_empresa LIMIT 1");
     $empresa_db = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($empresa_db) {
         $empresa = array_merge($empresa, array_filter($empresa_db, static fn($v) => $v !== null && $v !== ''));
     }
 } catch (Exception $e) {
+}
+
+$redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
+$whatsapp_num = preg_replace('/\D+/', '', (string)($redes['whatsapp'] ?? ''));
+$whatsapp_msg = trim((string)($redes['whatsapp_mensaje'] ?? ''));
+$whatsapp_link = '';
+if ($whatsapp_num !== '') {
+    $whatsapp_link = 'https://wa.me/' . $whatsapp_num;
+    if ($whatsapp_msg !== '') {
+        $whatsapp_link .= '?text=' . urlencode($whatsapp_msg);
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -94,7 +106,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="card mb-4">
                         <div class="card-body">
                             <h5>📞 Teléfono</h5>
-                            <?php if (!empty($empresa['telefono'])): ?>
+                            <?php if ($whatsapp_link): ?>
+                                <p>
+                                    <a href="<?= htmlspecialchars($whatsapp_link) ?>" target="_blank" rel="noopener" class="text-decoration-none">
+                                        <span style="font-size: 1.1rem;">🟢 WhatsApp</span>
+                                    </a>
+                                </p>
+                            <?php elseif (!empty($empresa['telefono'])): ?>
                                 <p><a href="tel:<?= htmlspecialchars(preg_replace('/\s+/', '', $empresa['telefono'])) ?>"><?= htmlspecialchars($empresa['telefono']) ?></a></p>
                             <?php else: ?>
                                 <p class="text-muted">No disponible</p>
