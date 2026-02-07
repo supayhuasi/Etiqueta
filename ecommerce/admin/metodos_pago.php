@@ -22,6 +22,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($accion === 'guardar') {
         $id = (int)($_POST['id'] ?? 0);
+        $metodo_existente = null;
+        if ($id > 0) {
+            try {
+                $stmt = $pdo->prepare("SELECT * FROM ecommerce_metodos_pago WHERE id = ?");
+                $stmt->execute([$id]);
+                $metodo_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                $metodo_existente = null;
+            }
+        }
         $codigo = strtoupper(trim($_POST['codigo'] ?? ''));
         $nombre = trim($_POST['nombre'] ?? '');
         $tipo = $_POST['tipo'] ?? 'manual';
@@ -29,12 +39,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orden = (int)($_POST['orden'] ?? 0);
         $activo = isset($_POST['activo']) ? 1 : 0;
 
-        if ($codigo === '' || !preg_match('/^[A-Z0-9_\-]+$/', $codigo)) {
+        if ($metodo_existente && ($metodo_existente['tipo'] ?? '') === 'mercadopago') {
+            $error = 'El método de Mercado Pago no se puede editar. Solo podés activarlo o desactivarlo.';
+        } elseif ($codigo === '' || !preg_match('/^[A-Z0-9_\-]+$/', $codigo)) {
             $error = 'El código es obligatorio y solo puede contener letras, números, guiones o guión bajo.';
         } elseif ($nombre === '') {
             $error = 'El nombre es obligatorio.';
         } elseif (!in_array($tipo, ['manual', 'mercadopago'], true)) {
             $error = 'Tipo inválido.';
+        } elseif ($id === 0 && $tipo === 'mercadopago') {
+            $error = 'No se pueden crear métodos de Mercado Pago desde aquí.';
         } else {
             try {
                 if ($id > 0) {
@@ -90,6 +104,10 @@ try {
         <strong><?= $metodo_editar ? 'Editar método' : 'Nuevo método' ?></strong>
     </div>
     <div class="card-body">
+        <?php $is_mp = !empty($metodo_editar) && ($metodo_editar['tipo'] ?? '') === 'mercadopago'; ?>
+        <?php if ($is_mp): ?>
+            <div class="alert alert-warning">Este método pertenece a Mercado Pago y no se puede editar. Podés activarlo o desactivarlo desde el listado.</div>
+        <?php endif; ?>
         <form method="POST">
             <input type="hidden" name="accion" value="guardar">
             <input type="hidden" name="id" value="<?= htmlspecialchars($metodo_editar['id'] ?? 0) ?>">
@@ -97,23 +115,23 @@ try {
             <div class="row">
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Código *</label>
-                    <input type="text" name="codigo" class="form-control" value="<?= htmlspecialchars($metodo_editar['codigo'] ?? '') ?>" placeholder="TRANSFERENCIA_BANCARIA" required>
+                    <input type="text" name="codigo" class="form-control" value="<?= htmlspecialchars($metodo_editar['codigo'] ?? '') ?>" placeholder="TRANSFERENCIA_BANCARIA" required <?= $is_mp ? 'readonly' : '' ?>>
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Nombre *</label>
-                    <input type="text" name="nombre" class="form-control" value="<?= htmlspecialchars($metodo_editar['nombre'] ?? '') ?>" placeholder="Transferencia Bancaria" required>
+                    <input type="text" name="nombre" class="form-control" value="<?= htmlspecialchars($metodo_editar['nombre'] ?? '') ?>" placeholder="Transferencia Bancaria" required <?= $is_mp ? 'readonly' : '' ?>>
                 </div>
                 <div class="col-md-2 mb-3">
                     <label class="form-label">Tipo *</label>
                     <?php $tipo_sel = $metodo_editar['tipo'] ?? 'manual'; ?>
-                    <select name="tipo" class="form-select" required>
+                    <select name="tipo" class="form-select" required <?= $is_mp ? 'disabled' : '' ?>>
                         <option value="manual" <?= $tipo_sel === 'manual' ? 'selected' : '' ?>>Manual</option>
                         <option value="mercadopago" <?= $tipo_sel === 'mercadopago' ? 'selected' : '' ?>>Mercado Pago</option>
                     </select>
                 </div>
                 <div class="col-md-2 mb-3">
                     <label class="form-label">Orden</label>
-                    <input type="number" name="orden" class="form-control" value="<?= htmlspecialchars($metodo_editar['orden'] ?? 0) ?>">
+                    <input type="number" name="orden" class="form-control" value="<?= htmlspecialchars($metodo_editar['orden'] ?? 0) ?>" <?= $is_mp ? 'readonly' : '' ?>>
                 </div>
                 <div class="col-md-1 mb-3 d-flex align-items-end">
                     <div class="form-check">
@@ -125,11 +143,11 @@ try {
 
             <div class="mb-3">
                 <label class="form-label">Instrucciones (HTML)</label>
-                <textarea name="instrucciones_html" rows="4" class="form-control" placeholder="Datos bancarios, pasos de pago, etc."><?= htmlspecialchars($metodo_editar['instrucciones_html'] ?? '') ?></textarea>
+                <textarea name="instrucciones_html" rows="4" class="form-control" placeholder="Datos bancarios, pasos de pago, etc." <?= $is_mp ? 'readonly' : '' ?>><?= htmlspecialchars($metodo_editar['instrucciones_html'] ?? '') ?></textarea>
                 <small class="text-muted">Se muestra en checkout y en la pantalla de confirmación.</small>
             </div>
 
-            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="submit" class="btn btn-primary" <?= $is_mp ? 'disabled' : '' ?>>Guardar</button>
             <?php if ($metodo_editar): ?>
                 <a href="metodos_pago.php" class="btn btn-outline-secondary">Cancelar</a>
             <?php endif; ?>
@@ -172,7 +190,11 @@ try {
                                     <?php endif; ?>
                                 </td>
                                 <td class="d-flex gap-2">
-                                    <a class="btn btn-sm btn-outline-primary" href="metodos_pago.php?editar=<?= (int)$m['id'] ?>">Editar</a>
+                                    <?php if ($m['tipo'] !== 'mercadopago'): ?>
+                                        <a class="btn btn-sm btn-outline-primary" href="metodos_pago.php?editar=<?= (int)$m['id'] ?>">Editar</a>
+                                    <?php else: ?>
+                                        <button class="btn btn-sm btn-outline-secondary" disabled>Editar</button>
+                                    <?php endif; ?>
                                     <form method="POST">
                                         <input type="hidden" name="accion" value="toggle">
                                         <input type="hidden" name="id" value="<?= (int)$m['id'] ?>">
