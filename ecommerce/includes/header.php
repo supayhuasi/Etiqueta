@@ -25,7 +25,7 @@ $ga_config = [
   'measurement_id' => ''
 ];
 try {
-  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id FROM ecommerce_empresa LIMIT 1");
+  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id, descripcion, about_us, direccion, ciudad, provincia, telefono, email FROM ecommerce_empresa LIMIT 1");
   $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
   $ga_config['enabled'] = !empty($empresa_menu['ga_enabled']);
   $ga_config['measurement_id'] = $empresa_menu['ga_measurement_id'] ?? '';
@@ -49,6 +49,45 @@ if (!empty($empresa_menu['logo'])) {
 $redes_menu = json_decode($empresa_menu['redes_sociales'] ?? '{}', true) ?? [];
 $whatsapp_num = $redes_menu['whatsapp'] ?? '';
 $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
+
+$request_scheme = 'http';
+if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+  $request_scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'https' : 'http';
+} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+  $request_scheme = 'https';
+}
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_url = $request_scheme . '://' . $host . $public_base;
+$current_url = $request_scheme . '://' . $host . ($_SERVER['REQUEST_URI'] ?? '/');
+
+$page_key = basename($_SERVER['PHP_SELF']);
+$page_titles = [
+  'index.php' => 'Inicio',
+  'tienda.php' => 'Tienda',
+  'producto.php' => 'Producto',
+  'carrito.php' => 'Carrito',
+  'checkout.php' => 'Checkout',
+  'contacto.php' => 'Contacto',
+  'nosotros.php' => 'Nosotros',
+  'distribuidores.php' => 'Distribuidores',
+  'mis_pedidos.php' => 'Mis pedidos'
+];
+
+$site_name = $empresa_menu['nombre'] ?? 'Tucu Roller';
+$default_title = ($page_titles[$page_key] ?? 'Tienda') . ' | ' . $site_name;
+
+$raw_description = $empresa_menu['descripcion'] ?? $empresa_menu['about_us'] ?? 'Tienda online de ' . $site_name;
+$raw_description = trim(preg_replace('/\s+/', ' ', strip_tags($raw_description)));
+if (strlen($raw_description) > 160) {
+  $raw_description = substr($raw_description, 0, 157) . '...';
+}
+
+$seo_title = isset($seo_title) && $seo_title ? $seo_title : $default_title;
+$seo_description = isset($seo_description) && $seo_description ? $seo_description : $raw_description;
+$seo_type = isset($seo_type) && $seo_type ? $seo_type : 'website';
+$seo_image = isset($seo_image) && $seo_image ? $seo_image : ($logo_menu_src ? $request_scheme . '://' . $host . $logo_menu_src : '');
+$seo_canonical = isset($seo_canonical) && $seo_canonical ? $seo_canonical : $current_url;
+$seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -64,9 +103,57 @@ $whatsapp_msg = $redes_menu['whatsapp_mensaje'] ?? '';
         gtag('config', <?= json_encode($ga_config['measurement_id']) ?>);
       </script>
     <?php endif; ?>
-    <title>Tucu Roller - Tienda Online</title>
+    <title><?= htmlspecialchars($seo_title) ?></title>
+    <meta name="description" content="<?= htmlspecialchars($seo_description) ?>">
+    <meta name="robots" content="<?= htmlspecialchars($seo_robots) ?>">
+    <link rel="canonical" href="<?= htmlspecialchars($seo_canonical) ?>">
+    <meta property="og:title" content="<?= htmlspecialchars($seo_title) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($seo_description) ?>">
+    <meta property="og:type" content="<?= htmlspecialchars($seo_type) ?>">
+    <meta property="og:url" content="<?= htmlspecialchars($seo_canonical) ?>">
+    <?php if (!empty($seo_image)): ?>
+      <meta property="og:image" content="<?= htmlspecialchars($seo_image) ?>">
+    <?php endif; ?>
+    <meta property="og:site_name" content="<?= htmlspecialchars($site_name) ?>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?= htmlspecialchars($seo_title) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($seo_description) ?>">
+    <?php if (!empty($seo_image)): ?>
+      <meta name="twitter:image" content="<?= htmlspecialchars($seo_image) ?>">
+    <?php endif; ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
+    <script type="application/ld+json">
+      <?= json_encode([
+        '@context' => 'https://schema.org',
+        '@graph' => [
+          [
+            '@type' => 'Organization',
+            'name' => $site_name,
+            'url' => $base_url ?: ($request_scheme . '://' . $host),
+            'logo' => $seo_image ?: null,
+            'contactPoint' => !empty($empresa_menu['telefono']) ? [[
+              '@type' => 'ContactPoint',
+              'telephone' => $empresa_menu['telefono'],
+              'contactType' => 'customer service',
+              'areaServed' => 'AR'
+            ]] : null,
+            'address' => (!empty($empresa_menu['direccion']) || !empty($empresa_menu['ciudad']) || !empty($empresa_menu['provincia'])) ? [
+              '@type' => 'PostalAddress',
+              'streetAddress' => $empresa_menu['direccion'] ?? '',
+              'addressLocality' => $empresa_menu['ciudad'] ?? '',
+              'addressRegion' => $empresa_menu['provincia'] ?? '',
+              'addressCountry' => 'AR'
+            ] : null
+          ],
+          [
+            '@type' => 'WebSite',
+            'name' => $site_name,
+            'url' => $base_url ?: ($request_scheme . '://' . $host)
+          ]
+        ]
+      ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
+    </script>
     <style>
       .whatsapp-float {
         position: fixed;
