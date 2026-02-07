@@ -1,4 +1,7 @@
 <?php
+if (!headers_sent()) {
+    ob_start();
+}
 // Usar el auth del sistema principal
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
