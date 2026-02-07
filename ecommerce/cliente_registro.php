@@ -59,8 +59,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("UPDATE ecommerce_clientes SET email_verificacion_token = ?, email_verificacion_expira = ? WHERE id = ?");
                 $stmt->execute([$token, $expira, $cliente_id]);
 
-                $baseUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-                $verifyUrl = $baseUrl . '/ecommerce/cliente_verificar.php?token=' . urlencode($token);
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $script_path = $_SERVER['SCRIPT_NAME'] ?? '';
+                $public_base = '';
+                if ($script_path) {
+                    if (strpos($script_path, '/ecommerce/') !== false) {
+                        $public_base = preg_replace('#/ecommerce/.*$#', '/ecommerce', $script_path);
+                    } else {
+                        $public_base = rtrim(dirname($script_path), '/\\');
+                    }
+                }
+                $public_base = rtrim($public_base, '/');
+                $verifyUrl = $scheme . '://' . $host . $public_base . '/cliente_verificar.php?token=' . urlencode($token);
 
                 $asunto = 'Verificá tu cuenta';
                 $html = "<p>Hola " . htmlspecialchars($nombre) . ",</p>"

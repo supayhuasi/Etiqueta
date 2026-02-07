@@ -25,7 +25,7 @@ if (!empty($empresa['logo'])) {
 }
 
 if (!empty($_SESSION['cliente_id'])) {
-    header('Location: mis_pedidos.php');
+    header('Location: index.php');
     exit;
 }
 
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['cliente_id'] = $cliente['id'];
             $_SESSION['cliente_nombre'] = $cliente['nombre'];
-            header('Location: mis_pedidos.php');
+            header('Location: index.php');
             exit;
         }
     }
