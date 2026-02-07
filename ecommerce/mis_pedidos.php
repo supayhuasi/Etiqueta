@@ -11,6 +11,7 @@ if (($_GET['mensaje'] ?? '') === 'registro') {
 }
 
 $pedidos = [];
+$stmt = null;
 try {
     $stmt = $pdo->prepare("
         SELECT p.id, p.numero_pedido, p.total, p.estado, p.fecha_creacion, op.estado AS estado_produccion
@@ -19,17 +20,23 @@ try {
         WHERE p.cliente_id = ?
         ORDER BY p.fecha_creacion DESC
     ");
-    $stmt->execute([$cliente['id']]);
-    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
+    $stmt = null;
+}
+
+if ($stmt && $stmt->execute([$cliente['id']])) {
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} else {
     $stmt = $pdo->prepare("
         SELECT id, numero_pedido, total, estado, fecha_creacion
         FROM ecommerce_pedidos
         WHERE cliente_id = ?
         ORDER BY fecha_creacion DESC
     ");
-    $stmt->execute([$cliente['id']]);
-    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($stmt) {
+        $stmt->execute([$cliente['id']]);
+        $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 ?>
 
