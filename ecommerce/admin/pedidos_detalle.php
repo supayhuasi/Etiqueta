@@ -17,6 +17,17 @@ if (!$pedido) {
     die("Pedido no encontrado");
 }
 
+if (empty($pedido['public_token'])) {
+    $nuevo_token = bin2hex(random_bytes(16));
+    try {
+        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?");
+        $stmt->execute([$nuevo_token, $pedido_id]);
+        $pedido['public_token'] = $nuevo_token;
+    } catch (Exception $e) {
+        // Si falla, continuar sin token
+    }
+}
+
 // Si no hay dirección del cliente, usar la del pedido
 if (empty($pedido['dir_cliente'])) {
     $pedido['dir_cliente'] = $pedido['direccion'] ?? 'N/A';
@@ -291,6 +302,13 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Fecha:</strong> <?= date('d/m/Y H:i:s', strtotime($pedido['fecha_creacion'])) ?></p>
                 <p><strong>Método de Pago:</strong> <span class="badge bg-info"><?= htmlspecialchars($pedido['metodo_pago']) ?></span></p>
                 <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                <?php if (!empty($pedido['public_token'])): ?>
+                    <p><strong>Link público:</strong>
+                        <a href="../pedido_publico.php?token=<?= urlencode($pedido['public_token']) ?>" target="_blank" rel="noopener">
+                            Ver estado del pedido
+                        </a>
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
     </div>

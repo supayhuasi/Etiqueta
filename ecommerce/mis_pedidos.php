@@ -12,6 +12,7 @@ if (($_GET['mensaje'] ?? '') === 'registro') {
 }
 
 $pedidos = [];
+$error_msg = '';
 $stmt = null;
 try {
     $stmt = $pdo->prepare("
@@ -41,15 +42,19 @@ try {
         }
     }
 } catch (Exception $e) {
-    $stmt = $pdo->prepare("
-        SELECT id, numero_pedido, total, estado, fecha_creacion
-        FROM ecommerce_pedidos
-        WHERE cliente_id = ?
-        ORDER BY fecha_creacion DESC
-    ");
-    if ($stmt) {
-        $stmt->execute([$cliente['id']]);
-        $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id, numero_pedido, total, estado, fecha_creacion
+            FROM ecommerce_pedidos
+            WHERE cliente_id = ?
+            ORDER BY fecha_creacion DESC
+        ");
+        if ($stmt) {
+            $stmt->execute([$cliente['id']]);
+            $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e2) {
+        $error_msg = 'No pudimos cargar tus pedidos en este momento.';
     }
 }
 ?>
@@ -65,6 +70,10 @@ try {
 
     <?php if (!empty($mensaje)): ?>
         <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+    <?php endif; ?>
+
+    <?php if (!empty($error_msg)): ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
     <?php endif; ?>
 
     <?php if (empty($pedidos)): ?>

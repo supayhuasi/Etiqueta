@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/cliente_auth.php';
 
 $empresa = null;
@@ -58,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+require 'includes/header.php';
 ?>
 
 <div class="container py-5">

@@ -222,6 +222,15 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN envio_codigo_postal VARCHAR(10) AFTER envio_provincia");
     }
 
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'public_token'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN public_token VARCHAR(64) NULL AFTER mercadopago_status");
+    }
+    $idx = $pdo->query("SHOW INDEX FROM ecommerce_pedidos WHERE Key_name = 'idx_public_token'");
+    if ($idx->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD UNIQUE INDEX idx_public_token (public_token)");
+    }
+
     // Tabla de items del pedido
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS ecommerce_pedido_items (

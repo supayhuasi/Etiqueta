@@ -117,16 +117,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $metodo_pago = 'Cotización';
                 $estado_pedido = 'pendiente_pago';
 
+                $public_token = bin2hex(random_bytes(16));
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado, public_token)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
                     $numero_pedido,
                     $cliente_id,
                     (float)$cotizacion['total'],
                     $metodo_pago,
-                    $estado_pedido
+                    $estado_pedido,
+                    $public_token
                 ]);
                 $pedido_id = (int)$pdo->lastInsertId();
 

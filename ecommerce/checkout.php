@@ -275,10 +275,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
             $codigo_descuento = $descuento_aplicado['codigo'] ?? null;
             $total = max(0, $subtotal + $envio - $descuento_monto);
 
+            $public_token = bin2hex(random_bytes(16));
+
             // Crear pedido
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, factura_a, envio_nombre, envio_telefono, envio_direccion, envio_localidad, envio_provincia, envio_codigo_postal, metodo_pago, estado)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, factura_a, envio_nombre, envio_telefono, envio_direccion, envio_localidad, envio_provincia, envio_codigo_postal, metodo_pago, estado, public_token)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $numero_pedido,
@@ -296,7 +298,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                 $envio_provincia,
                 $envio_codigo_postal ?: null,
                 $metodo_pago,
-                $estado_pedido
+                $estado_pedido,
+                $public_token
             ]);
             $pedido_id = $pdo->lastInsertId();
             
