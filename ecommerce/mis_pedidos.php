@@ -10,15 +10,27 @@ if (($_GET['mensaje'] ?? '') === 'registro') {
     $mensaje = 'Cuenta creada. Ya podés ver tus pedidos.';
 }
 
-$stmt = $pdo->prepare("
-    SELECT p.id, p.numero_pedido, p.total, p.estado, p.fecha_creacion, op.estado AS estado_produccion
-    FROM ecommerce_pedidos p
-    LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p.id
-    WHERE p.cliente_id = ?
-    ORDER BY p.fecha_creacion DESC
-");
-$stmt->execute([$cliente['id']]);
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$pedidos = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.numero_pedido, p.total, p.estado, p.fecha_creacion, op.estado AS estado_produccion
+        FROM ecommerce_pedidos p
+        LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p.id
+        WHERE p.cliente_id = ?
+        ORDER BY p.fecha_creacion DESC
+    ");
+    $stmt->execute([$cliente['id']]);
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $stmt = $pdo->prepare("
+        SELECT id, numero_pedido, total, estado, fecha_creacion
+        FROM ecommerce_pedidos
+        WHERE cliente_id = ?
+        ORDER BY fecha_creacion DESC
+    ");
+    $stmt->execute([$cliente['id']]);
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
 ?>
 
 <div class="container py-5">
