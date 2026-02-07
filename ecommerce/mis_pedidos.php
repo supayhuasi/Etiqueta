@@ -1,9 +1,10 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/cliente_auth.php';
 
 $cliente = require_cliente_login($pdo);
+
+require 'includes/header.php';
 
 $mensaje = '';
 if (($_GET['mensaje'] ?? '') === 'registro') {
