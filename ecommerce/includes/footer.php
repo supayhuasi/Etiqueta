@@ -68,6 +68,36 @@ $wa_url = $wa_num_clean ? 'https://wa.me/' . $wa_num_clean . '?text=' . urlencod
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<?php
+$carrito_activo = !empty($_SESSION['carrito']) && count($_SESSION['carrito']) > 0 && !empty($_SESSION['cliente_id']);
+?>
+<?php if ($carrito_activo): ?>
+<script>
+  (function () {
+    var sent = false;
+    function sendAbandonedCart() {
+      if (sent) return;
+      sent = true;
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('carrito_abandonado.php', '1');
+      } else {
+        fetch('carrito_abandonado.php', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'text/plain' },
+          body: '1'
+        });
+      }
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') {
+        sendAbandonedCart();
+      }
+    });
+    window.addEventListener('pagehide', sendAbandonedCart);
+  })();
+</script>
+<?php endif; ?>
 </body>
 </html>
 

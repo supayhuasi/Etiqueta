@@ -1,0 +1,15 @@
+Hola {{cliente_nombre}},
+
+Vimos que dejaste productos en tu carrito. Podés continuar tu compra cuando quieras.
+
+Tu carrito:
+{{carrito_items}}
+
+Total estimado: {{carrito_total}}
+
+Ir a pagar: {{checkout_link}}
+Ver carrito: {{carrito_link}}
+
+Enviado el {{fecha}}.
+
+Si ya finalizaste la compra, podés ignorar este mensaje.
