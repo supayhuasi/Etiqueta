@@ -10,6 +10,7 @@ if (!ob_get_level()) {
 if (!isset($pdo)) {
   require __DIR__ . '/../config.php';
 }
+require_once __DIR__ . '/cache.php';
 
 $script_path_public = $_SERVER['SCRIPT_NAME'] ?? '';
 $public_base = '';
@@ -28,13 +29,21 @@ $ga_config = [
   'enabled' => false,
   'measurement_id' => ''
 ];
-try {
-  $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id, descripcion, about_us, direccion, ciudad, provincia, telefono, email FROM ecommerce_empresa LIMIT 1");
-  $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
+$empresa_menu = cache_get('ecommerce_empresa_menu', 300);
+if (!$empresa_menu) {
+  try {
+    $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id, descripcion, about_us, direccion, ciudad, provincia, telefono, email, favicon, seo_title, seo_description, seo_image FROM ecommerce_empresa LIMIT 1");
+    $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($empresa_menu) {
+      cache_set('ecommerce_empresa_menu', $empresa_menu);
+    }
+  } catch (Exception $e) {
+    $empresa_menu = null;
+  }
+}
+if ($empresa_menu) {
   $ga_config['enabled'] = !empty($empresa_menu['ga_enabled']);
   $ga_config['measurement_id'] = $empresa_menu['ga_measurement_id'] ?? '';
-} catch (Exception $e) {
-  $empresa_menu = null;
 }
 
 $logo_menu_src = null;

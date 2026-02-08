@@ -141,7 +141,7 @@ if ($token !== '') {
                                 <tbody>
                                     <?php foreach ($pagos as $pago): ?>
                                         <?php
-                                            $recibo_url = 'pedido_pago_recibo_publico.php?token=' . urlencode($token) . '&pago_id=' . (int)$pago['id'];
+                                            $recibo_url = 'pedido_pago_recibo_pdf.php?token=' . urlencode($token) . '&pago_id=' . (int)$pago['id'];
                                             $recibo_abs = $recibo_url;
                                             if (!empty($current_url)) {
                                                 $recibo_abs = preg_replace('#/pedido_publico\.php.*$#', '/' . $recibo_url, $current_url);

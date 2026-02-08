@@ -42,7 +42,7 @@ if ($wa_num !== '') {
         <h1>🧾 Recibo de Pago</h1>
         <?php if ($pago): ?>
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary" onclick="window.print()">Descargar / Imprimir</button>
+                <a class="btn btn-outline-secondary" href="pedido_pago_recibo_pdf.php?token=<?= urlencode($token) ?>&pago_id=<?= (int)$pago['id'] ?>" target="_blank" rel="noopener">Descargar PDF</a>
                 <?php
                     $mensaje = 'Hola, adjunto comprobante de pago del pedido ' . ($pago['numero_pedido'] ?? '') . '. Recibo: ' . ($current_url ?? '');
                     $wa_link = $whatsapp_url ? ($whatsapp_url . '?text=' . urlencode($mensaje)) : '';

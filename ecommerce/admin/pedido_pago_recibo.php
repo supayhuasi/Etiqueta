@@ -29,7 +29,7 @@ $saldo = (float)$pago['total'] - $total_pagado;
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1>🧾 Recibo de Pago</h1>
-        <button class="btn btn-outline-secondary" onclick="window.print()">Imprimir</button>
+        <a class="btn btn-outline-secondary" href="pedido_pago_recibo_pdf.php?pago_id=<?= (int)$pago_id ?>" target="_blank" rel="noopener">Descargar PDF</a>
     </div>
 
     <div class="card">

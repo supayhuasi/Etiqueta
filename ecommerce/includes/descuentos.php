@@ -6,9 +6,19 @@ function normalizar_codigo_descuento(string $codigo): string {
 
 function obtener_descuento_por_codigo(PDO $pdo, string $codigo): ?array {
     try {
+        require_once __DIR__ . '/cache.php';
+        $cache_key = 'ecommerce_descuento_' . $codigo;
+        $cached = cache_get($cache_key, 60);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         $stmt = $pdo->prepare("SELECT * FROM ecommerce_descuentos WHERE codigo = ? LIMIT 1");
         $stmt->execute([$codigo]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            cache_set($cache_key, $row);
+        }
         return $row ?: null;
     } catch (Exception $e) {
         return null;

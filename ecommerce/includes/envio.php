@@ -9,15 +9,23 @@ function obtener_config_envio(PDO $pdo): array {
     ];
 
     try {
+        require_once __DIR__ . '/cache.php';
+        $cached = cache_get('ecommerce_envio_config', 300);
+        if (is_array($cached)) {
+            return array_merge($default, $cached);
+        }
+
         $stmt = $pdo->query("SELECT * FROM ecommerce_envio_config WHERE id = 1 LIMIT 1");
         $config = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($config) {
-            return array_merge($default, [
+            $normalized = array_merge($default, [
                 'costo_base' => isset($config['costo_base']) ? (float)$config['costo_base'] : $default['costo_base'],
                 'gratis_desde_importe' => $config['gratis_desde_importe'] !== null ? (float)$config['gratis_desde_importe'] : null,
                 'gratis_desde_cantidad' => $config['gratis_desde_cantidad'] !== null ? (int)$config['gratis_desde_cantidad'] : null,
                 'activo' => isset($config['activo']) ? (int)$config['activo'] : $default['activo']
             ]);
+            cache_set('ecommerce_envio_config', $normalized);
+            return $normalized;
         }
     } catch (Exception $e) {
     }

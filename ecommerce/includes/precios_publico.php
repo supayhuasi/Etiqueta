@@ -5,9 +5,17 @@ if (!isset($pdo)) {
 
 function obtener_lista_precio_publica(PDO $pdo): int {
     try {
+        require_once __DIR__ . '/cache.php';
+        $cached = cache_get('ecommerce_lista_precio_id', 300);
+        if ($cached !== null) {
+            return (int)$cached;
+        }
+
         $stmt = $pdo->query("SELECT lista_precio_id FROM ecommerce_config LIMIT 1");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return !empty($row['lista_precio_id']) ? (int)$row['lista_precio_id'] : 0;
+        $lista_id = !empty($row['lista_precio_id']) ? (int)$row['lista_precio_id'] : 0;
+        cache_set('ecommerce_lista_precio_id', $lista_id);
+        return $lista_id;
     } catch (Exception $e) {
         return 0;
     }
@@ -16,6 +24,13 @@ function obtener_lista_precio_publica(PDO $pdo): int {
 function cargar_mapas_lista_publica(PDO $pdo, int $listaId): array {
     if ($listaId <= 0) {
         return ['items' => [], 'categorias' => []];
+    }
+
+    require_once __DIR__ . '/cache.php';
+    $cache_key = 'ecommerce_lista_publica_mapas_' . $listaId;
+    $cached = cache_get($cache_key, 300);
+    if (is_array($cached) && isset($cached['items'], $cached['categorias'])) {
+        return $cached;
     }
 
     $stmt = $pdo->prepare("SELECT producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1 AND lista_precio_id = ?");
@@ -37,7 +52,9 @@ function cargar_mapas_lista_publica(PDO $pdo, int $listaId): array {
         $cat_map[$row['categoria_id']] = (float)$row['descuento_porcentaje'];
     }
 
-    return ['items' => $items_map, 'categorias' => $cat_map];
+    $result = ['items' => $items_map, 'categorias' => $cat_map];
+    cache_set($cache_key, $result);
+    return $result;
 }
 
 function calcular_precio_publico(int $productoId, ?int $categoriaId, float $precioBase, int $listaId, array $itemsMap, array $catMap): array {
