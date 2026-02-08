@@ -60,6 +60,7 @@ $role_permissions = [
         'dashboard',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
         'pedidos', 'ordenes_produccion',
+        'clientes_web',
         'inventario',
         'flujo_caja',
         'cheques',
@@ -77,6 +78,7 @@ $role_permissions = [
         'pedidos',
         'cotizaciones',
         'cotizacion_clientes',
+        'clientes_web',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -130,6 +132,7 @@ $page_permissions = [
     'pedidos.php' => 'pedidos',
     'ordenes_produccion.php' => 'ordenes_produccion',
     'facturacion_clientes.php' => 'facturacion_clientes',
+    'clientes_web.php' => 'clientes_web',
     'cotizaciones.php' => 'cotizaciones',
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
@@ -395,7 +398,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'cotizaciones', 'cotizacion_clientes', 'descuentos'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -410,6 +413,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('facturacion_clientes')): ?>
                         <a href="<?= $admin_url ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark-text"></i> Facturación</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('clientes_web')): ?>
+                        <a href="<?= $admin_url ?>clientes_web.php" class="<?= basename($_SERVER['PHP_SELF']) === 'clientes_web.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Clientes Web</a>
                         <?php endif; ?>
                         <?php if ($can_access('cotizaciones')): ?>
                         <a href="<?= $admin_url ?>cotizaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cotizaciones.php', 'cotizacion_crear.php', 'cotizacion_detalle.php']) ? 'active' : '' ?>"><i class="bi bi-file-earmark-richtext"></i> Cotizaciones</a>
