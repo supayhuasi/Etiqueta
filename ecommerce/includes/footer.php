@@ -2,6 +2,15 @@
 
 <footer class="bg-dark text-white mt-5 py-5">
   <div class="container">
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="d-flex flex-column flex-md-row gap-2 gap-md-4 align-items-start align-items-md-center">
+          <span class="badge bg-success">✅ Fabricación propia</span>
+          <span class="badge bg-success">✅ Garantía escrita</span>
+          <span class="badge bg-success">✅ Más de 10000 cortinas fabricas e instaladas</span>
+        </div>
+      </div>
+    </div>
     <div class="row">
       <div class="col-md-4">
         <h5>🏢 Tucu Roller</h5>
