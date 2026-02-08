@@ -65,6 +65,9 @@ if (!empty($empresa['logo'])) {
             <button class="btn btn-primary w-100">Ingresar</button>
           </form>
 
+          <div class="text-center mt-3">
+            <a href="/ecommerce/politica_privacidad.php" class="text-muted" style="font-size: 0.9rem;">Política de privacidad</a>
+          </div>
         </div>
       </div>
     </div>
