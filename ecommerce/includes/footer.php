@@ -63,7 +63,7 @@ $wa_url = $wa_num_clean ? 'https://wa.me/' . $wa_num_clean . '?text=' . urlencod
 
 <?php if (!empty($wa_url)): ?>
   <a href="<?= htmlspecialchars($wa_url) ?>" class="whatsapp-float" target="_blank" rel="noopener" aria-label="WhatsApp">
-    💬 WhatsApp
+    💬 ¿Necesitas ayuda?
   </a>
 <?php endif; ?>
 
