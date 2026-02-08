@@ -19,8 +19,9 @@ if (!isset($_SESSION['user'])) {
                     <a href="/ecommerce/" class="btn btn-primary">Ir a la tienda</a>
                     <a href="/ecommerce/admin/auth/login.php" class="btn btn-outline-secondary">Ingreso admin</a>
                 </div>
-                <div class="mt-4">
+                <div class="mt-4 d-flex justify-content-center gap-3 flex-wrap">
                     <a href="/ecommerce/politica_privacidad.php" class="text-muted">Política de privacidad</a>
+                    <a href="/ecommerce/terminos_servicio.php" class="text-muted">Términos del servicio</a>
                 </div>
             </div>
         </div>

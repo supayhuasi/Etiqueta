@@ -15,6 +15,7 @@
           <li><a href="nosotros.php" class="text-white-50">Nosotros</a></li>
           <li><a href="contacto.php" class="text-white-50">Contacto</a></li>
           <li><a href="politica_privacidad.php" class="text-white-50">Política de privacidad</a></li>
+          <li><a href="terminos_servicio.php" class="text-white-50">Términos del servicio</a></li>
         </ul>
       </div>
       <div class="col-md-4">
