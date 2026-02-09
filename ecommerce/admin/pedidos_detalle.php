@@ -1,6 +1,78 @@
 <?php
 require 'includes/header.php';
 
+function registrarMovimientoInventario(PDO $pdo, array $payload): void
+{
+    static $columnas = null;
+    if ($columnas === null) {
+        $columnas = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    }
+
+    $cols = array_flip($columnas);
+    $campos = [];
+    $valores = [];
+
+    if (isset($cols['producto_id'])) {
+        $campos = ['producto_id', 'tipo', 'cantidad', 'referencia', 'usuario_id'];
+        $valores = [
+            $payload['producto_id'] ?? null,
+            $payload['tipo'] ?? null,
+            $payload['cantidad'] ?? 0,
+            $payload['referencia'] ?? null,
+            $payload['usuario_id'] ?? null,
+        ];
+
+        if (isset($cols['stock_anterior'])) {
+            $campos[] = 'stock_anterior';
+            $valores[] = $payload['stock_anterior'] ?? null;
+        }
+        if (isset($cols['stock_nuevo'])) {
+            $campos[] = 'stock_nuevo';
+            $valores[] = $payload['stock_nuevo'] ?? null;
+        }
+        if (isset($cols['pedido_id'])) {
+            $campos[] = 'pedido_id';
+            $valores[] = $payload['pedido_id'] ?? null;
+        }
+        if (isset($cols['orden_produccion_id'])) {
+            $campos[] = 'orden_produccion_id';
+            $valores[] = $payload['orden_produccion_id'] ?? null;
+        }
+    } else {
+        $campos = ['tipo_item', 'item_id', 'tipo_movimiento', 'cantidad', 'referencia', 'usuario_id'];
+        $valores = [
+            $payload['tipo_item'] ?? 'producto',
+            $payload['item_id'] ?? null,
+            $payload['tipo_movimiento'] ?? null,
+            $payload['cantidad'] ?? 0,
+            $payload['referencia'] ?? null,
+            $payload['usuario_id'] ?? null,
+        ];
+
+        if (isset($cols['stock_anterior'])) {
+            $campos[] = 'stock_anterior';
+            $valores[] = $payload['stock_anterior'] ?? null;
+        }
+        if (isset($cols['stock_nuevo'])) {
+            $campos[] = 'stock_nuevo';
+            $valores[] = $payload['stock_nuevo'] ?? null;
+        }
+        if (isset($cols['pedido_id'])) {
+            $campos[] = 'pedido_id';
+            $valores[] = $payload['pedido_id'] ?? null;
+        }
+        if (isset($cols['orden_produccion_id'])) {
+            $campos[] = 'orden_produccion_id';
+            $valores[] = $payload['orden_produccion_id'] ?? null;
+        }
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($campos), '?'));
+    $sql = "INSERT INTO ecommerce_inventario_movimientos (" . implode(', ', $campos) . ") VALUES ($placeholders)";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($valores);
+}
+
 $pedido_id = $_GET['id'] ?? 0;
 
 // Obtener pedido
@@ -124,19 +196,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt_update = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
                     $stmt_update->execute([$cantidad_total, $mat_id]);
                     
-                    // Registrar movimiento (usando producto_id según schema actual)
-                    $stmt_mov = $pdo->prepare("
-                        INSERT INTO ecommerce_inventario_movimientos 
-                        (producto_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia, usuario_id)
-                        VALUES (?, 'produccion', ?, ?, ?, ?, ?)
-                    ");
-                    $stmt_mov->execute([
-                        $mat_id,
-                        $cantidad_total,
-                        $stock_anterior,
-                        $stock_nuevo,
-                        'Orden-' . $orden_id,
-                        $_SESSION['user']['id'] ?? null
+                    // Registrar movimiento (compatible con distintos esquemas)
+                    registrarMovimientoInventario($pdo, [
+                        'producto_id' => $mat_id,
+                        'tipo' => 'produccion',
+                        'tipo_item' => 'producto',
+                        'item_id' => $mat_id,
+                        'tipo_movimiento' => 'produccion',
+                        'cantidad' => $cantidad_total,
+                        'stock_anterior' => $stock_anterior,
+                        'stock_nuevo' => $stock_nuevo,
+                        'referencia' => 'Orden-' . $orden_id,
+                        'usuario_id' => $_SESSION['user']['id'] ?? null,
+                        'pedido_id' => $pedido_id,
+                        'orden_produccion_id' => $orden_id
                     ]);
                 }
             }
