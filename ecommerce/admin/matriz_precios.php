@@ -21,11 +21,14 @@ $matriz = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 function aumentarPreciosMatriz(PDO $pdo, int $producto_id, float $porcentaje): int
 {
-    if ($porcentaje <= 0) {
-        throw new Exception("El porcentaje debe ser mayor que 0");
+    if ($porcentaje == 0) {
+        throw new Exception("El porcentaje no puede ser 0");
     }
 
     $factor = 1 + ($porcentaje / 100);
+    if ($factor <= 0) {
+        throw new Exception("El porcentaje es inválido");
+    }
     $stmt = $pdo->prepare("
         UPDATE ecommerce_matriz_precios
         SET precio = ROUND(precio * ?, 2)
@@ -316,7 +319,8 @@ if ($_POST['accion'] === 'aumentar' && isset($_POST['porcentaje_ajuste'])) {
         ");
         $stmt->execute([$producto_id]);
         $matriz = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $mensaje = "Precios aumentados en {$porcentaje}% ({$total_actualizados} registros actualizados)";
+        $accion_texto = $porcentaje > 0 ? 'aumentados' : 'descontados';
+        $mensaje = "Precios {$accion_texto} en {$porcentaje}% ({$total_actualizados} registros actualizados)";
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
     }
@@ -392,14 +396,14 @@ if ($_POST['accion'] === 'aumentar' && isset($_POST['porcentaje_ajuste'])) {
                 <form method="POST">
                     <input type="hidden" name="accion" value="aumentar">
                     <div class="mb-3">
-                        <label for="porcentaje_ajuste" class="form-label">Porcentaje de Aumento (%)</label>
+                        <label for="porcentaje_ajuste" class="form-label">Porcentaje de Ajuste (%)</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="porcentaje_ajuste" name="porcentaje_ajuste" step="0.01" min="0.01" required>
+                            <input type="number" class="form-control" id="porcentaje_ajuste" name="porcentaje_ajuste" step="0.01" min="-99.99" max="9999" required>
                             <span class="input-group-text">%</span>
                         </div>
-                        <small class="text-muted">Ejemplo: 10 = aumenta 10% cada precio.</small>
+                        <small class="text-muted">Ejemplos: 10 = aumenta 10% cada precio, -10 = descuenta 10% cada precio.</small>
                     </div>
-                    <button type="submit" class="btn btn-dark w-100" onclick="return confirm('¿Aumentar precios de toda la matriz?')">Aumentar Precios</button>
+                    <button type="submit" class="btn btn-dark w-100" onclick="return confirm('¿Aplicar ajuste a toda la matriz?')">Aplicar Ajuste</button>
                 </form>
             </div>
         </div>
