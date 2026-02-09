@@ -311,10 +311,7 @@ const colorOptionsByProduct = <?= json_encode($colorOptionsByProduct) ?>;
 function agregarItem() {
     itemIndex++;
 
-    let productosOptions = '<option value="">-- Seleccionar producto --</option>';
-    productos.forEach(p => {
-        productosOptions += `<option value="${p.id}" data-tipo="${p.tipo_precio}">${p.nombre}</option>`;
-    });
+    asegurarDatalistProductos();
 
     let categoriasOptions = '<option value="">-- Seleccionar categoría --</option>';
     categorias.forEach(c => {
@@ -327,9 +324,8 @@ function agregarItem() {
                 <div class="row">
                     <div class="col-md-4">
                         <label class="form-label">Producto *</label>
-                        <select class="form-select item-producto" data-index="${itemIndex}" onchange="toggleMedidas(${itemIndex});" name="items[${itemIndex}][producto_id]" required>
-                            ${productosOptions}
-                        </select>
+                        <input type="text" class="form-control item-producto" list="productos-datalist" id="producto_input_${itemIndex}" data-index="${itemIndex}" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeInput(${itemIndex})" required>
+                        <input type="hidden" id="producto_id_${itemIndex}" name="items[${itemIndex}][producto_id]">
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" id="nuevo_${itemIndex}" name="items[${itemIndex}][nuevo]" value="1" onchange="toggleNuevoProducto(${itemIndex})">
                             <label class="form-check-label" for="nuevo_${itemIndex}">Nuevo producto</label>
@@ -407,10 +403,46 @@ function agregarItem() {
     calcularTotales();
 }
 
+function asegurarDatalistProductos() {
+    let datalist = document.getElementById('productos-datalist');
+    if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'productos-datalist';
+        productos.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.nombre;
+            datalist.appendChild(option);
+        });
+        document.body.appendChild(datalist);
+    }
+}
+
+function obtenerProductoPorTexto(texto) {
+    const textoNormalizado = String(texto || '').toLowerCase().trim();
+    if (!textoNormalizado) return null;
+    return productos.find(p => String(p.nombre).toLowerCase() === textoNormalizado) || null;
+}
+
+function cargarProductoDesdeInput(index) {
+    const input = document.getElementById(`producto_input_${index}`);
+    const hidden = document.getElementById(`producto_id_${index}`);
+    if (!input || !hidden) return;
+
+    const producto = obtenerProductoPorTexto(input.value);
+    if (!producto) {
+        hidden.value = '';
+        toggleMedidas(index);
+        return;
+    }
+
+    hidden.value = producto.id;
+    toggleMedidas(index);
+}
+
 function toggleMedidas(index) {
-    const select = document.querySelector(`#item_${index} .item-producto`);
-    const option = select.selectedOptions[0];
-    const tipo = option?.dataset?.tipo || 'fijo';
+    const productoId = document.getElementById(`producto_id_${index}`)?.value;
+    const producto = productos.find(p => String(p.id) === String(productoId));
+    const tipo = producto?.tipo_precio || 'fijo';
     const alto = document.querySelector(`#item_${index} .item-alto`);
     const ancho = document.querySelector(`#item_${index} .item-ancho`);
 
@@ -446,35 +478,39 @@ function toggleMedidasNuevo(index) {
 
 function toggleNuevoProducto(index) {
     const nuevo = document.getElementById(`nuevo_${index}`).checked;
-    const select = document.querySelector(`#item_${index} .item-producto`);
+    const input = document.getElementById(`producto_input_${index}`);
+    const hidden = document.getElementById(`producto_id_${index}`);
     const fields = document.getElementById(`nuevo_fields_${index}`);
 
     if (nuevo) {
-        select.value = '';
-        select.disabled = true;
+        if (input) {
+            input.value = '';
+            input.disabled = true;
+        }
+        if (hidden) hidden.value = '';
         fields.style.display = 'flex';
         toggleMedidasNuevo(index);
         actualizarColores(index, true);
     } else {
-        select.disabled = false;
+        if (input) input.disabled = false;
         fields.style.display = 'none';
         toggleMedidas(index);
     }
 }
 
 function actualizarColores(index, forzarVacio = false) {
-    const selectProducto = document.querySelector(`#item_${index} .item-producto`);
+    const productoId = document.getElementById(`producto_id_${index}`)?.value;
     const selectColor = document.querySelector(`#item_${index} .item-color`);
     if (!selectColor) return;
 
-    if (forzarVacio || !selectProducto || !selectProducto.value) {
+    if (forzarVacio || !productoId) {
         selectColor.innerHTML = '<option value="">-- Sin color --</option>';
         selectColor.disabled = true;
         return;
     }
 
-    const productoId = parseInt(selectProducto.value, 10);
-    const opciones = colorOptionsByProduct?.[productoId] || [];
+    const productoIdNum = parseInt(productoId, 10);
+    const opciones = colorOptionsByProduct?.[productoIdNum] || [];
     if (opciones.length === 0) {
         selectColor.innerHTML = '<option value="">-- Sin color --</option>';
         selectColor.disabled = true;
