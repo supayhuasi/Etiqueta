@@ -14,14 +14,18 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
     $valores = [];
 
     if (isset($cols['producto_id'])) {
-        $campos = ['producto_id', 'tipo', 'cantidad', 'referencia', 'usuario_id'];
+        $campos = ['producto_id', 'tipo', 'cantidad', 'referencia'];
         $valores = [
             $payload['producto_id'] ?? null,
             $payload['tipo'] ?? null,
             $payload['cantidad'] ?? 0,
             $payload['referencia'] ?? null,
-            $payload['usuario_id'] ?? null,
         ];
+
+        if (isset($cols['usuario_id'])) {
+            $campos[] = 'usuario_id';
+            $valores[] = $payload['usuario_id'] ?? null;
+        }
 
         if (isset($cols['stock_anterior'])) {
             $campos[] = 'stock_anterior';
@@ -40,15 +44,19 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
             $valores[] = $payload['orden_produccion_id'] ?? null;
         }
     } else {
-        $campos = ['tipo_item', 'item_id', 'tipo_movimiento', 'cantidad', 'referencia', 'usuario_id'];
+        $campos = ['tipo_item', 'item_id', 'tipo_movimiento', 'cantidad', 'referencia'];
         $valores = [
             $payload['tipo_item'] ?? 'producto',
             $payload['item_id'] ?? null,
             $payload['tipo_movimiento'] ?? null,
             $payload['cantidad'] ?? 0,
             $payload['referencia'] ?? null,
-            $payload['usuario_id'] ?? null,
         ];
+
+        if (isset($cols['usuario_id'])) {
+            $campos[] = 'usuario_id';
+            $valores[] = $payload['usuario_id'] ?? null;
+        }
 
         if (isset($cols['stock_anterior'])) {
             $campos[] = 'stock_anterior';
