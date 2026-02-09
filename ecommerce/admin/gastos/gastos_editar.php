@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errores[] = "El archivo es muy grande";
         } else {
             // Eliminar archivo anterior si existe
-            $upload_dir = __DIR__ . '/../../uploads/gastos/';
+            $upload_dir = __DIR__ . '/uploads/';
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0775, true);
             }
