@@ -4,8 +4,20 @@ require 'includes/header.php';
 function registrarMovimientoInventario(PDO $pdo, array $payload): void
 {
     static $columnas = null;
+    static $tipoEnum = null;
     if ($columnas === null) {
         $columnas = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos")->fetchAll(PDO::FETCH_COLUMN, 0);
+        if (in_array('tipo', $columnas, true)) {
+            $stmtTipo = $pdo->query("SHOW COLUMNS FROM ecommerce_inventario_movimientos LIKE 'tipo'");
+            $col = $stmtTipo->fetch(PDO::FETCH_ASSOC);
+            if (!empty($col['Type']) && stripos($col['Type'], 'enum(') === 0) {
+                $raw = substr($col['Type'], 5, -1);
+                $vals = array_map(function ($v) {
+                    return trim($v, "' ");
+                }, explode(',', $raw));
+                $tipoEnum = array_filter($vals, fn($v) => $v !== '');
+            }
+        }
     }
 
     $cols = array_flip($columnas);
@@ -23,6 +35,16 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
                 $tipo = 'entrada';
             } else {
                 $tipo = $tipoRaw;
+            }
+        }
+
+        if (is_array($tipoEnum) && $tipoEnum) {
+            if (!in_array($tipo, $tipoEnum, true)) {
+                if (in_array('ajuste', $tipoEnum, true)) {
+                    $tipo = 'ajuste';
+                } else {
+                    $tipo = $tipoEnum[0];
+                }
             }
         }
 
