@@ -13,10 +13,23 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
     $valores = [];
 
     if (isset($cols['producto_id'])) {
+        $tipoRaw = $payload['tipo'] ?? null;
+        $tipo = $tipoRaw;
+        if ($tipoRaw) {
+            $tipoRaw = strtolower((string)$tipoRaw);
+            if ($tipoRaw === 'produccion' || $tipoRaw === 'venta') {
+                $tipo = 'salida';
+            } elseif ($tipoRaw === 'compra') {
+                $tipo = 'entrada';
+            } else {
+                $tipo = $tipoRaw;
+            }
+        }
+
         $campos = ['producto_id', 'tipo', 'cantidad', 'referencia'];
         $valores = [
             $payload['producto_id'] ?? null,
-            $payload['tipo'] ?? null,
+            $tipo,
             $payload['cantidad'] ?? 0,
             $payload['referencia'] ?? null,
         ];
