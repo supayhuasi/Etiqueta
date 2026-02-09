@@ -249,7 +249,10 @@ foreach ($lista_cat_rows as $row) {
     <div class="card mb-4">
         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0">📦 Items de la Cotización</h5>
-            <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light btn-sm" onclick="actualizarPreciosCotizacion()">🔄 Actualizar precios</button>
+                <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
+            </div>
         </div>
         <div class="card-body">
             <div id="itemsContainer">
@@ -447,11 +450,19 @@ function agregarItem(itemData = null) {
     `;
     
     document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
-    if (item.nombre) {
+    if (item.producto_id) {
+        const producto = productos.find(p => String(p.id) === String(item.producto_id));
+        if (producto) {
+            document.getElementById(`producto_input_${itemIndex}`).value = productoLabel(producto);
+            document.getElementById(`producto_id_${itemIndex}`).value = producto.id;
+            cargarAtributosProducto(producto.id, itemIndex, item.atributos || []);
+        }
+    } else if (item.nombre) {
         const producto = productos.find(p => p.nombre.toLowerCase() === String(item.nombre).toLowerCase());
         if (producto) {
             document.getElementById(`producto_input_${itemIndex}`).value = productoLabel(producto);
             document.getElementById(`producto_id_${itemIndex}`).value = producto.id;
+            cargarAtributosProducto(producto.id, itemIndex, item.atributos || []);
         }
     }
 
@@ -530,7 +541,16 @@ function aplicarProducto(index, producto) {
     }
 }
 
-function cargarAtributosProducto(productoId, index) {
+function cargarAtributosProducto(productoId, index, atributosExistentes = []) {
+    const atributosMap = {};
+    if (Array.isArray(atributosExistentes)) {
+        atributosExistentes.forEach(attr => {
+            if (attr && attr.nombre) {
+                atributosMap[String(attr.nombre).toLowerCase()] = attr;
+            }
+        });
+    }
+
     fetch(`../../ecommerce/admin/productos_atributos.php?accion=obtener&producto_id=${productoId}`)
         .then(response => response.json())
         .then(data => {
@@ -611,6 +631,33 @@ function cargarAtributosProducto(productoId, index) {
                         </div>
                     `;
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
+
+                    const existente = atributosMap[String(attr.nombre).toLowerCase()];
+                    if (existente && existente.valor !== undefined && existente.valor !== null) {
+                        const valorExistente = String(existente.valor);
+                        if (attr.tipo === 'text' || attr.tipo === 'number') {
+                            const input = atributosContainer.querySelector(`input[name="${fieldName}[valor]"]`);
+                            if (input) {
+                                input.value = valorExistente;
+                                actualizarCostoAtributo(index, attr.id, attr.costo_adicional, 0, valorExistente);
+                            }
+                        } else if (attr.tipo === 'color') {
+                            const input = document.getElementById(`attr_${attr.id}_${index}`);
+                            if (input) {
+                                input.value = valorExistente || '#000000';
+                                actualizarCostoAtributo(index, attr.id, attr.costo_adicional, 0, input.value);
+                                const preview = document.getElementById(`color_preview_${attr.id}_${index}`);
+                                if (preview) preview.style.backgroundColor = input.value;
+                            }
+                        } else if (attr.tipo === 'select') {
+                            const radio = atributosContainer.querySelector(`input[type="radio"][name="${fieldName}[valor]"][value="${valorExistente}"]`);
+                            if (radio) {
+                                radio.checked = true;
+                                actualizarCostoAtributo(index, attr.id, attr.costo_adicional, radio.dataset.costo, valorExistente);
+                                marcarOpcionAtributo(radio);
+                            }
+                        }
+                    }
 
                     if (attr.tipo === 'color') {
                         const inputId = `attr_${attr.id}_${index}`;
@@ -776,6 +823,80 @@ function marcarOpcionAtributo(radio) {
 
 function aplicarListaPrecios() {
     calcularTotales();
+}
+
+function obtenerIndexDesdeRow(row) {
+    const id = row?.id || '';
+    const match = id.match(/item_(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+function actualizarPreciosCotizacion() {
+    const filas = Array.from(document.querySelectorAll('.item-row'));
+    if (filas.length === 0) {
+        return;
+    }
+
+    const tareas = filas.map(row => {
+        const index = obtenerIndexDesdeRow(row);
+        if (!index) return Promise.resolve();
+
+        const productoId = document.getElementById(`producto_id_${index}`)?.value;
+        if (!productoId) return Promise.resolve();
+
+        const producto = productos.find(p => String(p.id) === String(productoId));
+        if (!producto) return Promise.resolve();
+
+        if (producto.tipo_precio === 'fijo') {
+            const precioBase = parseFloat(producto.precio_base || 0);
+            const precioInput = document.getElementById(`precio_${index}`);
+            if (precioInput) {
+                precioInput.dataset.base = precioBase.toFixed(2);
+                precioInput.value = precioBase.toFixed(2);
+            }
+            const info = document.getElementById(`precio-info-${index}`);
+            if (info) {
+                info.innerHTML = '✓ Precio fijo actualizado';
+                info.style.display = 'block';
+            }
+            return Promise.resolve();
+        }
+
+        const ancho = parseFloat(document.getElementById(`ancho_${index}`)?.value || 0);
+        const alto = parseFloat(document.getElementById(`alto_${index}`)?.value || 0);
+        if (ancho <= 0 || alto <= 0) {
+            const info = document.getElementById(`precio-info-${index}`);
+            if (info) {
+                info.innerHTML = '⚠️ Ingrese ancho y alto para actualizar precio';
+                info.style.display = 'block';
+            }
+            return Promise.resolve();
+        }
+
+        return fetch(`cotizacion_producto_precio.php?producto_id=${productoId}&ancho=${ancho}&alto=${alto}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    return;
+                }
+                const precioBase = parseFloat(data.precio || 0);
+                const precioInput = document.getElementById(`precio_${index}`);
+                if (precioInput) {
+                    precioInput.dataset.base = precioBase.toFixed(2);
+                    precioInput.value = precioBase.toFixed(2);
+                }
+                const info = document.getElementById(`precio-info-${index}`);
+                if (info) {
+                    info.innerHTML = '✓ ' + data.precio_info + ' (actualizado)';
+                    info.style.display = 'block';
+                }
+            })
+            .catch(() => {});
+    });
+
+    Promise.all(tareas).then(() => {
+        calcularTotales();
+    });
 }
 
 document.addEventListener('change', function(e) {
