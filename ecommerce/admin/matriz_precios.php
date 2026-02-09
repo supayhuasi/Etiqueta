@@ -19,6 +19,22 @@ $stmt = $pdo->prepare("
 $stmt->execute([$producto_id]);
 $matriz = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+function aumentarPreciosMatriz(PDO $pdo, int $producto_id, float $porcentaje): int
+{
+    if ($porcentaje <= 0) {
+        throw new Exception("El porcentaje debe ser mayor que 0");
+    }
+
+    $factor = 1 + ($porcentaje / 100);
+    $stmt = $pdo->prepare("
+        UPDATE ecommerce_matriz_precios
+        SET precio = ROUND(precio * ?, 2)
+        WHERE producto_id = ?
+    ");
+    $stmt->execute([$factor, $producto_id]);
+    return $stmt->rowCount();
+}
+
 // Procesar generación automática
 if ($_POST['accion'] === 'generar' && isset($_POST['precio_base_matriz'])) {
     try {
@@ -285,6 +301,26 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
         $error = "Error: " . $e->getMessage();
     }
 }
+
+// Procesar aumento masivo de precios
+if ($_POST['accion'] === 'aumentar' && isset($_POST['porcentaje_ajuste'])) {
+    try {
+        $porcentaje = floatval($_POST['porcentaje_ajuste']);
+        $total_actualizados = aumentarPreciosMatriz($pdo, $producto_id, $porcentaje);
+
+        // Recargar matriz
+        $stmt = $pdo->prepare("
+            SELECT * FROM ecommerce_matriz_precios
+            WHERE producto_id = ?
+            ORDER BY alto_cm, ancho_cm
+        ");
+        $stmt->execute([$producto_id]);
+        $matriz = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mensaje = "Precios aumentados en {$porcentaje}% ({$total_actualizados} registros actualizados)";
+    } catch (Exception $e) {
+        $error = "Error: " . $e->getMessage();
+    }
+}
 ?>
 
 <h1>Matriz de Precios - <?= htmlspecialchars($producto['nombre']) ?></h1>
@@ -345,6 +381,26 @@ if ($_POST['accion'] === 'eliminar' && isset($_POST['id'])) {
                 <a href="copiar_matriz.php?producto_id=<?= $producto_id ?>" class="btn btn-info w-100">
                     <i class="bi bi-files"></i> Copiar Matriz
                 </a>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Aumentar Precios de la Matriz</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="accion" value="aumentar">
+                    <div class="mb-3">
+                        <label for="porcentaje_ajuste" class="form-label">Porcentaje de Aumento (%)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="porcentaje_ajuste" name="porcentaje_ajuste" step="0.01" min="0.01" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">Ejemplo: 10 = aumenta 10% cada precio.</small>
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100" onclick="return confirm('¿Aumentar precios de toda la matriz?')">Aumentar Precios</button>
+                </form>
             </div>
         </div>
 
