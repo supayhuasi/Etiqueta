@@ -40,11 +40,12 @@ if ($whatsapp_num !== '') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $email = trim($_POST['email'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
     $asunto = trim($_POST['asunto'] ?? '');
     $provincia_contacto = trim($_POST['provincia_contacto'] ?? '');
     $mensaje_contenido = trim($_POST['mensaje'] ?? '');
 
-    if ($nombre === '' || $email === '' || $asunto === '' || $mensaje_contenido === '') {
+    if ($nombre === '' || $email === '' || $telefono === '' || $asunto === '' || $mensaje_contenido === '') {
         $error = "Por favor completa todos los campos";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Email inválido";
@@ -55,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $html = "<h2>Nuevo mensaje desde el formulario de contacto</h2>"
             . "<p><strong>Nombre:</strong> " . htmlspecialchars($nombre) . "</p>"
             . "<p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>"
+            . "<p><strong>Teléfono:</strong> " . htmlspecialchars($telefono) . "</p>"
             . "<p><strong>Asunto:</strong> " . htmlspecialchars($asunto) . "</p>"
             . "<p><strong>Provincia:</strong> " . htmlspecialchars($provincia_contacto) . "</p>"
             . "<p><strong>Mensaje:</strong><br>" . nl2br(htmlspecialchars($mensaje_contenido)) . "</p>"
@@ -63,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $text = "Nuevo mensaje desde el formulario de contacto\n"
             . "Nombre: $nombre\n"
             . "Email: $email\n"
+            . "Teléfono: $telefono\n"
             . "Asunto: $asunto\n"
             . "Provincia: $provincia_contacto\n"
             . "Mensaje: $mensaje_contenido\n";
@@ -152,6 +155,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="mb-3">
                             <label for="email" class="form-label">Email *</label>
                             <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono *</label>
+                            <input type="text" class="form-control" id="telefono" name="telefono" required>
                         </div>
 
                         <div class="mb-3">
