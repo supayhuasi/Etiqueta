@@ -39,12 +39,24 @@ $sql = "
         AND hd.activo = 1
     LEFT JOIN usuarios u ON a.creado_por = u.id
     WHERE " . implode(" AND ", $where) . "
-    ORDER BY a.fecha DESC, e.nombre ASC
+    ORDER BY e.nombre ASC, a.fecha DESC
 ";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $asistencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$asistencias_por_empleado = [];
+foreach ($asistencias as $asistencia) {
+    $emp_id = (int)($asistencia['empleado_id'] ?? 0);
+    if (!isset($asistencias_por_empleado[$emp_id])) {
+        $asistencias_por_empleado[$emp_id] = [
+            'nombre' => $asistencia['empleado_nombre'] ?? 'Empleado',
+            'items' => []
+        ];
+    }
+    $asistencias_por_empleado[$emp_id]['items'][] = $asistencia;
+}
 
 // Calcular estadísticas del mes
 $stmt = $pdo->prepare("
@@ -153,82 +165,84 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
     <!-- Lista de Asistencias -->
     <div class="card">
         <div class="card-body">
-            <?php if (empty($asistencias)): ?>
+            <?php if (empty($asistencias_por_empleado)): ?>
                 <div class="alert alert-info">
                     No hay asistencias registradas con los filtros seleccionados.
                 </div>
             <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Empleado</th>
-                                <th>Horario</th>
-                                <th>Entrada</th>
-                                <th>Salida</th>
-                                <th>Estado</th>
-                                <th>Observaciones</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($asistencias as $asistencia): ?>
-                                <?php
-                                // Calcular si llegó tarde
-                                $llego_tarde = false;
-                                if ($asistencia['horario_entrada'] && $asistencia['hora_entrada']) {
-                                    $horario = new DateTime($asistencia['horario_entrada']);
-                                    $entrada = new DateTime($asistencia['hora_entrada']);
-                                    $tolerancia = $asistencia['tolerancia_minutos'] ?? 10;
-                                    $horario->modify("+{$tolerancia} minutes");
-                                    $llego_tarde = $entrada > $horario;
-                                }
-                                ?>
-                                <tr>
-                                    <td><?= date('d/m/Y', strtotime($asistencia['fecha'])) ?></td>
-                                    <td><strong><?= htmlspecialchars($asistencia['empleado_nombre']) ?></strong></td>
-                                    <td>
-                                        <?php if ($asistencia['horario_entrada']): ?>
-                                            <small class="text-muted">
-                                                <?= date('H:i', strtotime($asistencia['horario_entrada'])) ?> - 
-                                                <?= date('H:i', strtotime($asistencia['horario_salida'])) ?>
-                                            </small>
-                                        <?php else: ?>
-                                            <small class="text-muted">Sin horario</small>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?= $asistencia['hora_entrada'] ? date('H:i', strtotime($asistencia['hora_entrada'])) : '-' ?>
-                                        <?php if ($llego_tarde): ?>
-                                            <span class="badge bg-warning text-dark ms-1">Tarde</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?= $asistencia['hora_salida'] ? date('H:i', strtotime($asistencia['hora_salida'])) : '-' ?></td>
-                                    <td>
+                <?php foreach ($asistencias_por_empleado as $grupo): ?>
+                    <div class="mb-4">
+                        <h5 class="mb-3">👤 <?= htmlspecialchars($grupo['nombre']) ?></h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Horario</th>
+                                        <th>Entrada</th>
+                                        <th>Salida</th>
+                                        <th>Estado</th>
+                                        <th>Observaciones</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($grupo['items'] as $asistencia): ?>
                                         <?php
-                                        $badges = [
-                                            'presente' => 'success',
-                                            'tarde' => 'warning',
-                                            'ausente' => 'danger',
-                                            'justificado' => 'info'
-                                        ];
-                                        $badge = $badges[$asistencia['estado']] ?? 'secondary';
+                                        $llego_tarde = false;
+                                        if ($asistencia['horario_entrada'] && $asistencia['hora_entrada']) {
+                                            $horario = new DateTime($asistencia['horario_entrada']);
+                                            $entrada = new DateTime($asistencia['hora_entrada']);
+                                            $tolerancia = $asistencia['tolerancia_minutos'] ?? 10;
+                                            $horario->modify("+{$tolerancia} minutes");
+                                            $llego_tarde = $entrada > $horario;
+                                        }
                                         ?>
-                                        <span class="badge bg-<?= $badge ?>"><?= ucfirst($asistencia['estado']) ?></span>
-                                    </td>
-                                    <td>
-                                        <small><?= htmlspecialchars(substr($asistencia['observaciones'] ?? '', 0, 50)) ?></small>
-                                    </td>
-                                    <td>
-                                        <a href="asistencias_editar.php?id=<?= $asistencia['id'] ?>" class="btn btn-sm btn-primary">✏️</a>
-                                        <a href="asistencias_eliminar.php?id=<?= $asistencia['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar esta asistencia?')">🗑️</a>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                                        <tr>
+                                            <td><?= date('d/m/Y', strtotime($asistencia['fecha'])) ?></td>
+                                            <td>
+                                                <?php if ($asistencia['horario_entrada']): ?>
+                                                    <small class="text-muted">
+                                                        <?= date('H:i', strtotime($asistencia['horario_entrada'])) ?> - 
+                                                        <?= date('H:i', strtotime($asistencia['horario_salida'])) ?>
+                                                    </small>
+                                                <?php else: ?>
+                                                    <small class="text-muted">Sin horario</small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?= $asistencia['hora_entrada'] ? date('H:i', strtotime($asistencia['hora_entrada'])) : '-' ?>
+                                                <?php if ($llego_tarde): ?>
+                                                    <span class="badge bg-warning text-dark ms-1">Tarde</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= $asistencia['hora_salida'] ? date('H:i', strtotime($asistencia['hora_salida'])) : '-' ?></td>
+                                            <td>
+                                                <?php
+                                                $badges = [
+                                                    'presente' => 'success',
+                                                    'tarde' => 'warning',
+                                                    'ausente' => 'danger',
+                                                    'justificado' => 'info'
+                                                ];
+                                                $badge = $badges[$asistencia['estado']] ?? 'secondary';
+                                                ?>
+                                                <span class="badge bg-<?= $badge ?>"><?= ucfirst($asistencia['estado']) ?></span>
+                                            </td>
+                                            <td>
+                                                <small><?= htmlspecialchars(substr($asistencia['observaciones'] ?? '', 0, 50)) ?></small>
+                                            </td>
+                                            <td>
+                                                <a href="asistencias_editar.php?id=<?= $asistencia['id'] ?>" class="btn btn-sm btn-primary">✏️</a>
+                                                <a href="asistencias_eliminar.php?id=<?= $asistencia['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar esta asistencia?')">🗑️</a>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             <?php endif; ?>
         </div>
     </div>
