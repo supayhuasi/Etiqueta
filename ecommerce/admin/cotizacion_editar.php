@@ -16,6 +16,27 @@ $items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = '';
 $error = '';
 
+// Tabla de cupones
+$pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    codigo VARCHAR(50) NOT NULL UNIQUE,
+    tipo ENUM('porcentaje','monto') NOT NULL,
+    valor DECIMAL(10,2) NOT NULL,
+    activo TINYINT(1) DEFAULT 1,
+    fecha_inicio DATE NULL,
+    fecha_fin DATE NULL,
+    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+// Columnas de cupón en cotizaciones
+$cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('cupon_codigo', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
+}
+if (!in_array('cupon_descuento', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
+}
+
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -93,13 +114,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         $descuento = floatval($_POST['descuento'] ?? 0);
-        $total = $subtotal - $descuento;
+        $cupon_codigo = trim($_POST['cupon_codigo'] ?? '');
+        $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
+        if ($cupon_codigo !== '') {
+            $hoy = date('Y-m-d');
+            $stmt = $pdo->prepare("
+                SELECT * FROM ecommerce_cupones
+                WHERE codigo = ? AND activo = 1
+                AND (fecha_inicio IS NULL OR fecha_inicio <= ?)
+                AND (fecha_fin IS NULL OR fecha_fin >= ?)
+                LIMIT 1
+            ");
+            $stmt->execute([$cupon_codigo, $hoy, $hoy]);
+            $cupon = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$cupon) {
+                throw new Exception('Cupón inválido');
+            }
+            if ($cupon['tipo'] === 'porcentaje') {
+                $cupon_descuento = $subtotal * ((float)$cupon['valor'] / 100);
+            } else {
+                $cupon_descuento = (float)$cupon['valor'];
+            }
+            $cupon_descuento = max(0, min($cupon_descuento, $subtotal));
+        } else {
+            $cupon_descuento = 0;
+        }
+
+        $total = $subtotal - $descuento - $cupon_descuento;
         
         // Actualizar cotización
         $stmt = $pdo->prepare("
             UPDATE ecommerce_cotizaciones 
             SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?, 
-                subtotal = ?, descuento = ?, total = ?, observaciones = ?, validez_dias = ?
+                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
             WHERE id = ?
         ");
         
@@ -112,6 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             json_encode($items_nuevos),
             $subtotal,
             $descuento,
+            $cupon_codigo ?: null,
+            $cupon_descuento,
             $total,
             $observaciones,
             $validez_dias,
@@ -274,6 +323,19 @@ foreach ($lista_cat_rows as $row) {
                             <td class="text-end">
                                 <input type="number" class="form-control form-control-sm text-end" id="descuento" name="descuento" value="<?= $cotizacion['descuento'] ?>" step="0.01" min="0" onchange="calcularTotales()">
                                 <small id="descuento_lista_info" class="text-muted d-block"></small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>
+                                <label for="cupon_codigo">Cupón:</label>
+                            </th>
+                            <td class="text-end">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control text-end" id="cupon_codigo" name="cupon_codigo" value="<?= htmlspecialchars($cotizacion['cupon_codigo'] ?? '') ?>" placeholder="Código">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="aplicarCupon()">Aplicar</button>
+                                </div>
+                                <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="<?= (float)($cotizacion['cupon_descuento'] ?? 0) ?>">
+                                <small id="cupon_info" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr class="table-primary">
@@ -779,10 +841,42 @@ function calcularTotales() {
     }
 
     const descuento = parseFloat(descuentoInput?.value || 0);
-    const total = subtotal - descuento;
+    const descuentoCupon = parseFloat(document.getElementById('cupon_descuento')?.value || 0);
+    const total = subtotal - descuento - descuentoCupon;
     
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('total').textContent = '$' + total.toFixed(2);
+}
+
+function aplicarCupon() {
+    const codigo = document.getElementById('cupon_codigo')?.value?.trim() || '';
+    const info = document.getElementById('cupon_info');
+    const descuentoInput = document.getElementById('cupon_descuento');
+    const subtotalText = document.getElementById('subtotal')?.textContent || '$0';
+    const subtotal = parseFloat(subtotalText.replace(/[^0-9.]/g, '')) || 0;
+
+    if (!codigo) {
+        if (info) info.textContent = 'Ingresá un cupón.';
+        if (descuentoInput) descuentoInput.value = '0';
+        calcularTotales();
+        return;
+    }
+
+    fetch(`cupones_validar.php?codigo=${encodeURIComponent(codigo)}&subtotal=${subtotal}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.valido) {
+                if (info) info.textContent = 'Cupón inválido.';
+                if (descuentoInput) descuentoInput.value = '0';
+            } else {
+                if (descuentoInput) descuentoInput.value = data.descuento || 0;
+                if (info) info.textContent = `Descuento aplicado: $${Number(data.descuento || 0).toFixed(2)}`;
+            }
+            calcularTotales();
+        })
+        .catch(() => {
+            if (info) info.textContent = 'No se pudo validar el cupón.';
+        });
 }
 
 function marcarOpcionAtributo(radio) {
