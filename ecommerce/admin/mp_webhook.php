@@ -137,6 +137,64 @@ try {
         $status_mp,
         $pedido_id
     ]);
+
+    // Registrar pago si está aprobado
+    if ($status_mp === 'approved') {
+        $cols_pago = $pdo->query("SHOW COLUMNS FROM ecommerce_pedido_pagos")->fetchAll(PDO::FETCH_COLUMN, 0);
+        $cols_pago_map = array_flip($cols_pago);
+
+        $existe_pago = false;
+        if (isset($cols_pago_map['referencia'])) {
+            $stmt_check = $pdo->prepare("SELECT id FROM ecommerce_pedido_pagos WHERE referencia = ? LIMIT 1");
+            $stmt_check->execute([(string)$payment_id]);
+            $existe_pago = (bool)$stmt_check->fetch(PDO::FETCH_ASSOC);
+        } elseif (isset($cols_pago_map['notas'])) {
+            $stmt_check = $pdo->prepare("SELECT id FROM ecommerce_pedido_pagos WHERE notas LIKE ? LIMIT 1");
+            $stmt_check->execute(['%MP:' . $payment_id . '%']);
+            $existe_pago = (bool)$stmt_check->fetch(PDO::FETCH_ASSOC);
+        }
+
+        if (!$existe_pago) {
+            $campos = [];
+            $valores = [];
+
+            if (isset($cols_pago_map['pedido_id'])) {
+                $campos[] = 'pedido_id';
+                $valores[] = $pedido_id;
+            }
+            if (isset($cols_pago_map['monto'])) {
+                $campos[] = 'monto';
+                $valores[] = (float)($payment['transaction_amount'] ?? 0);
+            }
+            if (isset($cols_pago_map['metodo'])) {
+                $campos[] = 'metodo';
+                $valores[] = 'Mercado Pago';
+            }
+            if (isset($cols_pago_map['referencia'])) {
+                $campos[] = 'referencia';
+                $valores[] = (string)$payment_id;
+            }
+            if (isset($cols_pago_map['notas'])) {
+                $campos[] = 'notas';
+                $valores[] = 'MP:' . $payment_id;
+            }
+            if (isset($cols_pago_map['creado_por'])) {
+                $campos[] = 'creado_por';
+                $valores[] = null;
+            }
+            if (isset($cols_pago_map['fecha_pago'])) {
+                $campos[] = 'fecha_pago';
+                $valores[] = date('Y-m-d H:i:s');
+            }
+
+            if (!empty($campos)) {
+                $placeholders = implode(', ', array_fill(0, count($campos), '?'));
+                $sql = "INSERT INTO ecommerce_pedido_pagos (" . implode(', ', $campos) . ") VALUES ($placeholders)";
+                $stmt_pago = $pdo->prepare($sql);
+                $stmt_pago->execute($valores);
+            }
+        }
+    }
     
     // Log de éxito
     file_put_contents($log_dir . 'mp_webhook_' . date('Y-m-d') . '.log', 
