@@ -12,6 +12,23 @@ foreach ($productos as $p) {
     $productosById[$p['id']] = $p;
 }
 
+// Opciones de color por producto
+$colorOptionsByProduct = [];
+$tiene_opciones = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+if ($tiene_opciones) {
+    $stmt = $pdo->query("
+        SELECT p.id AS producto_id, o.id AS opcion_id, o.nombre AS opcion_nombre, o.color
+        FROM ecommerce_atributo_opciones o
+        JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+        JOIN ecommerce_productos p ON p.id = a.producto_id
+        WHERE a.tipo = 'select' AND LOWER(a.nombre) LIKE '%color%'
+        ORDER BY p.nombre, o.nombre
+    ");
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $colorOptionsByProduct[(int)$row['producto_id']][] = $row;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $producto_id = intval($_POST['producto_id'] ?? 0);
@@ -20,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $alto = !empty($_POST['alto']) ? intval($_POST['alto']) : null;
         $ancho = !empty($_POST['ancho']) ? intval($_POST['ancho']) : null;
         $nota = trim($_POST['nota'] ?? '');
+        $color_opcion_id = intval($_POST['color_opcion_id'] ?? 0);
 
         if ($producto_id <= 0) {
             throw new Exception('Seleccione un producto');
@@ -52,8 +70,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtIns->execute([$producto_id, $alto, $ancho, $cantidad]);
             }
         } else {
-            $stmtUpd = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock + ? WHERE id = ?");
-            $stmtUpd->execute([$cantidad, $producto_id]);
+            if (!empty($color_opcion_id)) {
+                $stmtUpd = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock + ? WHERE id = ?");
+                $stmtUpd->execute([$cantidad, $color_opcion_id]);
+            } else {
+                $stmtUpd = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock + ? WHERE id = ?");
+                $stmtUpd->execute([$cantidad, $producto_id]);
+            }
         }
 
         $stmtMov = $pdo->prepare("
@@ -129,6 +152,12 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <input type="number" class="form-control" name="ancho" id="ancho" disabled>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Color (opcional)</label>
+                <select class="form-select" name="color_opcion_id" id="color_opcion_id" disabled>
+                    <option value="">-- Sin color --</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Nota</label>
                 <input type="text" class="form-control" name="nota" placeholder="Motivo">
             </div>
@@ -180,10 +209,13 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <script>
+const colorOptionsByProduct = <?= json_encode($colorOptionsByProduct) ?>;
+
 function toggleMedidas() {
     const tipo = document.getElementById('producto_id').dataset.tipo || 'fijo';
     const alto = document.getElementById('alto');
     const ancho = document.getElementById('ancho');
+    const color = document.getElementById('color_opcion_id');
 
     if (tipo === 'variable') {
         alto.disabled = false;
@@ -194,6 +226,35 @@ function toggleMedidas() {
         alto.disabled = true;
         ancho.disabled = true;
     }
+
+    actualizarColores();
+}
+
+function actualizarColores() {
+    const productoId = document.getElementById('producto_id').value;
+    const selectColor = document.getElementById('color_opcion_id');
+    if (!selectColor) return;
+
+    if (!productoId) {
+        selectColor.innerHTML = '<option value="">-- Sin color --</option>';
+        selectColor.disabled = true;
+        return;
+    }
+
+    const opciones = colorOptionsByProduct?.[parseInt(productoId, 10)] || [];
+    if (opciones.length === 0) {
+        selectColor.innerHTML = '<option value="">-- Sin color --</option>';
+        selectColor.disabled = true;
+        return;
+    }
+
+    let optionsHtml = '<option value="">-- Sin color --</option>';
+    opciones.forEach(op => {
+        const label = op.opcion_nombre || 'Color';
+        optionsHtml += `<option value="${op.opcion_id}">${label}</option>`;
+    });
+    selectColor.innerHTML = optionsHtml;
+    selectColor.disabled = false;
 }
 
 function normalizarTexto(texto) {
