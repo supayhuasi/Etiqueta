@@ -65,6 +65,7 @@ $role_permissions = [
         'flujo_caja',
         'cheques',
         'gastos',
+        'encuestas',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ],
     'operario' => [
@@ -79,6 +80,7 @@ $role_permissions = [
         'cotizaciones',
         'cotizacion_clientes',
         'clientes_web',
+        'encuestas',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -138,6 +140,9 @@ $page_permissions = [
     'cotizacion_detalle.php' => 'cotizaciones',
     'descuentos.php' => 'descuentos',
     'cotizacion_clientes.php' => 'cotizacion_clientes',
+    'encuestas.php' => 'encuestas',
+    'encuestas_crear.php' => 'encuestas',
+    'encuestas_editar.php' => 'encuestas',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
@@ -398,7 +403,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -425,6 +430,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('descuentos')): ?>
                         <a href="<?= $admin_url ?>descuentos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'descuentos.php' ? 'active' : '' ?>"><i class="bi bi-percent"></i> Descuentos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('encuestas')): ?>
+                        <a href="<?= $admin_url ?>encuestas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['encuestas.php', 'encuestas_crear.php', 'encuestas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-clipboard-check"></i> Encuestas</a>
                         <?php endif; ?>
                     </div>
                 </div>
