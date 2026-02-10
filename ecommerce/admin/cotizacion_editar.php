@@ -28,11 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
         
         // Validaciones
-        if (empty($nombre_cliente) || empty($email)) {
-            throw new Exception("Nombre y email son obligatorios");
+        if (empty($nombre_cliente)) {
+            throw new Exception("Nombre es obligatorio");
         }
         
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Email no válido");
         }
         
@@ -197,8 +197,8 @@ foreach ($lista_cat_rows as $row) {
                         <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" value="<?= htmlspecialchars($cotizacion['nombre_cliente']) ?>" required>
                     </div>
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email *</label>
-                        <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cotizacion['email']) ?>" required>
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cotizacion['email']) ?>">
                     </div>
                     <div class="mb-3">
                         <label for="telefono" class="form-label">Teléfono</label>
@@ -551,7 +551,7 @@ function cargarAtributosProducto(productoId, index, atributosExistentes = []) {
         });
     }
 
-    fetch(`../../ecommerce/admin/productos_atributos.php?accion=obtener&producto_id=${productoId}`)
+    fetch(`productos_atributos.php?accion=obtener&producto_id=${productoId}`)
         .then(response => response.json())
         .then(data => {
             const atributosContainer = document.getElementById(`atributos-list-${index}`);
