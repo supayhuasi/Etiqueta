@@ -81,6 +81,7 @@ $role_permissions = [
         'cotizacion_clientes',
         'clientes_web',
         'encuestas',
+        'ventas_reportes',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -143,6 +144,7 @@ $page_permissions = [
     'encuestas.php' => 'encuestas',
     'encuestas_crear.php' => 'encuestas',
     'encuestas_editar.php' => 'encuestas',
+    'ventas_reportes.php' => 'ventas_reportes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
@@ -403,7 +405,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -433,6 +435,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('encuestas')): ?>
                         <a href="<?= $admin_url ?>encuestas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['encuestas.php', 'encuestas_crear.php', 'encuestas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-clipboard-check"></i> Encuestas</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('ventas_reportes')): ?>
+                        <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
                         <?php endif; ?>
                     </div>
                 </div>
