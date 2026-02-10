@@ -37,6 +37,19 @@ if ($tiene_opciones) {
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
 $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Asegurar columna atributos_json en compra_items
+$tiene_atributos_col = false;
+try {
+    $cols_compra_items = $pdo->query("SHOW COLUMNS FROM ecommerce_compra_items")->fetchAll(PDO::FETCH_COLUMN, 0);
+    $tiene_atributos_col = in_array('atributos_json', $cols_compra_items, true);
+    if (!$tiene_atributos_col) {
+        $pdo->exec("ALTER TABLE ecommerce_compra_items ADD COLUMN atributos_json TEXT NULL");
+        $tiene_atributos_col = true;
+    }
+} catch (Exception $e) {
+    $tiene_atributos_col = false;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
@@ -65,6 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $alto = !empty($item['alto']) ? intval($item['alto']) : null;
                 $ancho = !empty($item['ancho']) ? intval($item['ancho']) : null;
                 $color_opcion_id = intval($item['color_opcion_id'] ?? 0);
+                $atributos_sel = [];
+                if (!empty($item['atributos']) && is_array($item['atributos'])) {
+                    foreach ($item['atributos'] as $attr) {
+                        if (!empty($attr['nombre'])) {
+                            $atributos_sel[] = [
+                                'nombre' => $attr['nombre'],
+                                'valor' => $attr['valor'] ?? ''
+                            ];
+                        }
+                    }
+                }
                 $categoria_id_nuevo = intval($item['categoria_id'] ?? 0);
                 $tipo_precio_nuevo = $item['tipo_precio_nuevo'] ?? 'fijo';
                 $precio_base_nuevo = floatval($item['precio_base_nuevo'] ?? 0);
@@ -120,7 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'alto_cm' => $alto,
                     'ancho_cm' => $ancho,
                     'subtotal' => $subtotal_item,
-                    'color_opcion_id' => $color_opcion_id
+                    'color_opcion_id' => $color_opcion_id,
+                    'atributos' => $atributos_sel
                 ];
 
                 $subtotal += $subtotal_item;
@@ -155,10 +180,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $compra_id = $pdo->lastInsertId();
 
-        $stmtItem = $pdo->prepare("
-            INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
+        if ($tiene_atributos_col) {
+            $stmtItem = $pdo->prepare("
+                INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal, atributos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+        } else {
+            $stmtItem = $pdo->prepare("
+                INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ");
+        }
 
         $stmtMov = $pdo->prepare("
             INSERT INTO ecommerce_inventario_movimientos (producto_id, tipo, cantidad, alto_cm, ancho_cm, referencia)
@@ -166,15 +198,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
 
         foreach ($items as $item) {
-            $stmtItem->execute([
-                $compra_id,
-                $item['producto_id'],
-                $item['cantidad'],
-                $item['costo_unitario'],
-                $item['alto_cm'],
-                $item['ancho_cm'],
-                $item['subtotal']
-            ]);
+            if ($tiene_atributos_col) {
+                $stmtItem->execute([
+                    $compra_id,
+                    $item['producto_id'],
+                    $item['cantidad'],
+                    $item['costo_unitario'],
+                    $item['alto_cm'],
+                    $item['ancho_cm'],
+                    $item['subtotal'],
+                    !empty($item['atributos']) ? json_encode($item['atributos']) : null
+                ]);
+            } else {
+                $stmtItem->execute([
+                    $compra_id,
+                    $item['producto_id'],
+                    $item['cantidad'],
+                    $item['costo_unitario'],
+                    $item['alto_cm'],
+                    $item['ancho_cm'],
+                    $item['subtotal']
+                ]);
+            }
 
             $producto = $productosById[$item['producto_id']] ?? null;
             if ($producto && $producto['tipo_precio'] === 'variable' && $item['alto_cm'] && $item['ancho_cm']) {
@@ -357,6 +402,14 @@ function agregarItem() {
                         <small class="text-muted">Solo para materiales con stock por color</small>
                     </div>
                 </div>
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <div id="atributos-container-${itemIndex}" style="display:none; padding: 10px; border: 1px dashed #ddd; border-radius: 6px;">
+                            <h6 class="mb-2">Atributos</h6>
+                            <div id="atributos-list-${itemIndex}" class="row g-2"></div>
+                        </div>
+                    </div>
+                </div>
                 <div class="row mt-3 nuevo-producto-fields" id="nuevo_fields_${itemIndex}" style="display:none;">
                     <div class="col-md-4">
                         <label class="form-label">Nombre nuevo *</label>
@@ -437,6 +490,7 @@ function cargarProductoDesdeInput(index) {
 
     hidden.value = producto.id;
     toggleMedidas(index);
+    cargarAtributosProducto(index);
 }
 
 function toggleMedidas(index) {
@@ -457,6 +511,7 @@ function toggleMedidas(index) {
     }
 
     actualizarColores(index);
+    cargarAtributosProducto(index);
 }
 
 function toggleMedidasNuevo(index) {
@@ -491,11 +546,81 @@ function toggleNuevoProducto(index) {
         fields.style.display = 'flex';
         toggleMedidasNuevo(index);
         actualizarColores(index, true);
+        limpiarAtributos(index);
     } else {
         if (input) input.disabled = false;
         fields.style.display = 'none';
         toggleMedidas(index);
     }
+}
+
+function limpiarAtributos(index) {
+    const contenedor = document.getElementById(`atributos-container-${index}`);
+    const lista = document.getElementById(`atributos-list-${index}`);
+    if (contenedor) contenedor.style.display = 'none';
+    if (lista) lista.innerHTML = '';
+}
+
+function cargarAtributosProducto(index) {
+    const productoId = document.getElementById(`producto_id_${index}`)?.value;
+    const contenedor = document.getElementById(`atributos-container-${index}`);
+    const lista = document.getElementById(`atributos-list-${index}`);
+    if (!contenedor || !lista) return;
+
+    if (!productoId) {
+        limpiarAtributos(index);
+        return;
+    }
+
+    fetch(`productos_atributos.php?accion=obtener&producto_id=${productoId}`)
+        .then(response => response.json())
+        .then(data => {
+            const atributos = data?.atributos || [];
+            lista.innerHTML = '';
+            if (!atributos.length) {
+                contenedor.style.display = 'none';
+                return;
+            }
+
+            atributos.forEach(attr => {
+                const fieldName = `items[${index}][atributos][${attr.id}]`;
+                let inputHTML = '';
+
+                if (attr.tipo === 'text') {
+                    inputHTML = `<input type="text" class="form-control" name="${fieldName}[valor]">`;
+                } else if (attr.tipo === 'number') {
+                    inputHTML = `<input type="number" class="form-control" name="${fieldName}[valor]" step="0.01">`;
+                } else if (attr.tipo === 'color') {
+                    inputHTML = `<input type="color" class="form-control form-control-color" name="${fieldName}[valor]" value="#000000">`;
+                } else if (attr.tipo === 'select') {
+                    const opciones = Array.isArray(attr.opciones) && attr.opciones.length > 0
+                        ? attr.opciones.map(o => ({ valor: o.nombre }))
+                        : (attr.valores ? attr.valores.split(',').map(v => ({ valor: v.trim() })) : []);
+                    inputHTML = `
+                        <select class="form-select" name="${fieldName}[valor]">
+                            <option value="">Seleccionar...</option>
+                            ${opciones.map(o => `<option value="${o.valor}">${o.valor}</option>`).join('')}
+                        </select>
+                    `;
+                }
+
+                if (!inputHTML) return;
+
+                const col = document.createElement('div');
+                col.className = 'col-md-4';
+                col.innerHTML = `
+                    <label class="form-label small">${attr.nombre}</label>
+                    ${inputHTML}
+                    <input type="hidden" name="${fieldName}[nombre]" value="${attr.nombre}">
+                `;
+                lista.appendChild(col);
+            });
+
+            contenedor.style.display = 'block';
+        })
+        .catch(() => {
+            limpiarAtributos(index);
+        });
 }
 
 function actualizarColores(index, forzarVacio = false) {

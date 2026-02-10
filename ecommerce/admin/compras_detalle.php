@@ -25,6 +25,14 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$compra_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$tiene_atributos_col = false;
+try {
+    $cols_compra_items = $pdo->query("SHOW COLUMNS FROM ecommerce_compra_items")->fetchAll(PDO::FETCH_COLUMN, 0);
+    $tiene_atributos_col = in_array('atributos_json', $cols_compra_items, true);
+} catch (Exception $e) {
+    $tiene_atributos_col = false;
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -82,6 +90,9 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <tr>
                     <th>Producto</th>
                     <th>Medidas</th>
+                    <?php if ($tiene_atributos_col): ?>
+                        <th>Atributos</th>
+                    <?php endif; ?>
                     <th class="text-center">Cantidad</th>
                     <th class="text-end">Costo Unit.</th>
                     <th class="text-end">Subtotal</th>
@@ -98,6 +109,25 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 -
                             <?php endif; ?>
                         </td>
+                        <?php if ($tiene_atributos_col): ?>
+                            <td>
+                                <?php
+                                $attrs = [];
+                                if (!empty($item['atributos_json'])) {
+                                    $attrs = json_decode($item['atributos_json'], true) ?: [];
+                                }
+                                ?>
+                                <?php if (!empty($attrs)): ?>
+                                    <small>
+                                        <?php foreach ($attrs as $attr): ?>
+                                            <div><?= htmlspecialchars($attr['nombre'] ?? '') ?>: <?= htmlspecialchars($attr['valor'] ?? '') ?></div>
+                                        <?php endforeach; ?>
+                                    </small>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                        <?php endif; ?>
                         <td class="text-center"><?= (int)$item['cantidad'] ?></td>
                         <td class="text-end">$<?= number_format($item['costo_unitario'], 2) ?></td>
                         <td class="text-end"><strong>$<?= number_format($item['subtotal'], 2) ?></strong></td>
