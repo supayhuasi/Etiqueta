@@ -48,6 +48,30 @@ if (is_dir($trabajos_dir)) {
         }
     }
 }
+
+$suscripcion_mensaje = '';
+$suscripcion_error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscribir') {
+    $email_sus = trim($_POST['email'] ?? '');
+    if ($email_sus === '') {
+        $suscripcion_error = 'Ingresá un email válido.';
+    } elseif (!filter_var($email_sus, FILTER_VALIDATE_EMAIL)) {
+        $suscripcion_error = 'Email inválido.';
+    } else {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_suscriptores (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+            )");
+            $stmt = $pdo->prepare("INSERT IGNORE INTO ecommerce_suscriptores (email) VALUES (?)");
+            $stmt->execute([$email_sus]);
+            $suscripcion_mensaje = '¡Gracias por suscribirte!';
+        } catch (Exception $e) {
+            $suscripcion_error = 'No pudimos registrar el email. Intentá de nuevo.';
+        }
+    }
+}
 ?>
 
 <?php if (!empty($empresa['marquesina_activa']) && !empty($empresa['marquesina_texto'])): ?>
@@ -65,6 +89,16 @@ if (is_dir($trabajos_dir)) {
                 </div>
             </div>
         </div>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($suscripcion_mensaje)): ?>
+    <div class="container mt-3">
+        <div class="alert alert-success">✓ <?= htmlspecialchars($suscripcion_mensaje) ?></div>
+    </div>
+<?php elseif (!empty($suscripcion_error)): ?>
+    <div class="container mt-3">
+        <div class="alert alert-danger"><?= htmlspecialchars($suscripcion_error) ?></div>
     </div>
 <?php endif; ?>
 
@@ -218,6 +252,46 @@ if (is_dir($trabajos_dir)) {
     </div>
 </section>
 <?php endif; ?>
+
+<!-- Modal Suscripción -->
+<div class="modal fade" id="suscripcionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Suscribite y recibí novedades</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">Dejanos tu email para enviarte ofertas y lanzamientos.</p>
+                <form method="POST" id="suscripcionForm">
+                    <input type="hidden" name="accion" value="suscribir">
+                    <div class="mb-3">
+                        <label for="suscripcion_email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="suscripcion_email" name="email" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Suscribirme</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const suscrito = localStorage.getItem('suscripcion_popup_visto');
+    const tieneMensaje = <?= !empty($suscripcion_mensaje) ? 'true' : 'false' ?>;
+    if (!suscrito && !tieneMensaje) {
+        const modalEl = document.getElementById('suscripcionModal');
+        if (modalEl && window.bootstrap) {
+            const modal = new bootstrap.Modal(modalEl);
+            setTimeout(() => modal.show(), 1200);
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                localStorage.setItem('suscripcion_popup_visto', '1');
+            });
+        }
+    }
+});
+</script>
 
 <!-- Nuestros Clientes -->
 <?php if (!empty($clientes)): ?>
