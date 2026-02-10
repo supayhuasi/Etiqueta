@@ -41,14 +41,18 @@ $stmt->execute([$startStr, $endStr]);
 $total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
 
 // Total cobrado
-$stmt = $pdo->prepare("
-    SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
-    FROM ecommerce_pedido_pagos pp
-    INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-    WHERE p.fecha_creacion BETWEEN ? AND ?
-");
-$stmt->execute([$startStr, $endStr]);
-$total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+$total_cobrado = 0.0;
+$tabla_pagos = $pdo->query("SHOW TABLES LIKE 'ecommerce_pedido_pagos'")->rowCount() > 0;
+if ($tabla_pagos) {
+    $stmt = $pdo->prepare("
+        SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
+        FROM ecommerce_pedido_pagos pp
+        INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
+        WHERE p.fecha_creacion BETWEEN ? AND ?
+    ");
+    $stmt->execute([$startStr, $endStr]);
+    $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+}
 
 $porcentaje_cobrado = $total_vendido > 0 ? ($total_cobrado / $total_vendido) * 100 : 0;
 
