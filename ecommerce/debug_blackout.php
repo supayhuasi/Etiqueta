@@ -3,7 +3,7 @@ require 'config.php';
 
 // Buscar producto Blackout Meret
 $stmt = $pdo->prepare("SELECT id, nombre FROM ecommerce_productos WHERE LOWER(nombre) LIKE ?");
-$stmt->execute(['%blackout%']);
+$stmt->execute(['%meret%']);
 $producto = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$producto) {
