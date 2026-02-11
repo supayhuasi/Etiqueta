@@ -25,13 +25,13 @@ if ($tiene_opciones) {
         FROM ecommerce_atributo_opciones o
         JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
         JOIN ecommerce_productos p ON p.id = a.producto_id
-          WHERE a.tipo = 'select'
-             AND (
-                     LOWER(a.nombre) LIKE '%color%'
-                 OR (o.color IS NOT NULL AND o.color <> '')
-                 OR LOWER(o.nombre) LIKE '%color%'
-                 OR LOWER(o.nombre) REGEXP '(negro|blanco|rojo|azul|verde|gris|plata|dorado|amarillo|naranja|violeta|fucsia|rosa|celeste|turquesa|marr[oó]n|beige|crema|aqua)'
-             )
+        WHERE a.tipo = 'select'
+          AND (
+                LOWER(a.nombre) LIKE '%color%'
+             OR (o.color IS NOT NULL AND o.color <> '')
+             OR LOWER(o.nombre) LIKE '%color%'
+             OR LOWER(o.nombre) REGEXP '(negro|blanco|rojo|azul|verde|gris|plata|dorado|amarillo|naranja|violeta|fucsia|rosa|celeste|turquesa|marr[oó]n|beige|crema|aqua)'
+          )
         ORDER BY p.nombre, o.nombre
     ");
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
