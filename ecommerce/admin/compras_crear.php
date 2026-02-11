@@ -474,7 +474,11 @@ function asegurarDatalistProductos() {
 function obtenerProductoPorTexto(texto) {
     const textoNormalizado = String(texto || '').toLowerCase().trim();
     if (!textoNormalizado) return null;
-    return productos.find(p => String(p.nombre).toLowerCase() === textoNormalizado) || null;
+    // Buscar por coincidencia exacta primero
+    let coincidencia = productos.find(p => String(p.nombre).toLowerCase() === textoNormalizado);
+    if (coincidencia) return coincidencia;
+    // Si no hay coincidencia exacta, buscar por coincidencia parcial
+    return productos.find(p => String(p.nombre).toLowerCase().includes(textoNormalizado)) || null;
 }
 
 function cargarProductoDesdeInput(index) {
