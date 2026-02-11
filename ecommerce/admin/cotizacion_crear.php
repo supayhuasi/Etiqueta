@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/../includes/descuentos.php';
 
 $mensaje = '';
 $error = '';
@@ -154,28 +155,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         $descuento = floatval($_POST['descuento'] ?? 0);
-        $cupon_codigo = trim($_POST['cupon_codigo'] ?? '');
+        $cupon_codigo = normalizar_codigo_descuento((string)($_POST['cupon_codigo'] ?? ''));
         $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
         if ($cupon_codigo !== '') {
-            $hoy = date('Y-m-d');
-            $stmt = $pdo->prepare("
-                SELECT * FROM ecommerce_cupones
-                WHERE codigo = ? AND activo = 1
-                AND (fecha_inicio IS NULL OR fecha_inicio <= ?)
-                AND (fecha_fin IS NULL OR fecha_fin >= ?)
-                LIMIT 1
-            ");
-            $stmt->execute([$cupon_codigo, $hoy, $hoy]);
-            $cupon = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$cupon) {
+            $descuento_row = obtener_descuento_por_codigo($pdo, $cupon_codigo);
+            if (!$descuento_row) {
                 throw new Exception('Cupón inválido');
             }
-            if ($cupon['tipo'] === 'porcentaje') {
-                $cupon_descuento = $subtotal * ((float)$cupon['valor'] / 100);
-            } else {
-                $cupon_descuento = (float)$cupon['valor'];
+            $validacion = validar_descuento($descuento_row, $subtotal);
+            if (!$validacion['valido']) {
+                throw new Exception($validacion['mensaje']);
             }
-            $cupon_descuento = max(0, min($cupon_descuento, $subtotal));
+            $cupon_descuento = calcular_monto_descuento($descuento_row['tipo'], (float)$descuento_row['valor'], $subtotal);
         } else {
             $cupon_descuento = 0;
         }
@@ -872,11 +863,13 @@ function aplicarCupon() {
         .then(r => r.json())
         .then(data => {
             if (!data.valido) {
-                if (info) info.textContent = 'Cupón inválido.';
+                if (info) info.textContent = data.mensaje || 'Cupón inválido.';
                 if (descuentoInput) descuentoInput.value = '0';
             } else {
                 if (descuentoInput) descuentoInput.value = data.descuento || 0;
-                if (info) info.textContent = `Descuento aplicado: $${Number(data.descuento || 0).toFixed(2)}`;
+                if (info) info.textContent = data.mensaje
+                    ? `${data.mensaje} (-$${Number(data.descuento || 0).toFixed(2)})`
+                    : `Descuento aplicado: $${Number(data.descuento || 0).toFixed(2)}`;
             }
             calcularTotales();
         })
