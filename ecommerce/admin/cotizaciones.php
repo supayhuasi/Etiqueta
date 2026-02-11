@@ -213,6 +213,9 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <?php if ($cot['descuento'] > 0): ?>
                                         <br><small class="text-success">-$<?= number_format($cot['descuento'], 2) ?></small>
                                     <?php endif; ?>
+                                    <?php if (!empty($cot['cupon_descuento'])): ?>
+                                        <br><small class="text-primary">Cupón: -$<?= number_format($cot['cupon_descuento'], 2) ?></small>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <?php

@@ -173,6 +173,18 @@ if ($cotizacion['descuento'] > 0) {
     $pdf->SetTextColor(0, 0, 0);
 }
 
+if (!empty($cotizacion['cupon_descuento'])) {
+    $pdf->Cell(120, 6, '', 0);
+    $pdf->SetTextColor(0, 102, 204);
+    $label = 'CUPÓN';
+    if (!empty($cotizacion['cupon_codigo'])) {
+        $label .= ' (' . $cotizacion['cupon_codigo'] . ')';
+    }
+    $pdf->Cell(35, 6, $label . ':', 1, 0, 'R');
+    $pdf->Cell(35, 6, '-$' . number_format($cotizacion['cupon_descuento'], 2), 1, 1, 'R');
+    $pdf->SetTextColor(0, 0, 0);
+}
+
 $pdf->Cell(120, 6, '', 0);
 $pdf->SetFont('Arial', 'B', 12);
 $pdf->SetFillColor(200, 230, 255);

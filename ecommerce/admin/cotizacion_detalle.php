@@ -369,6 +369,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <td class="text-end text-success"><strong>-$<?= number_format($cotizacion['descuento'], 2) ?></strong></td>
                     </tr>
                     <?php endif; ?>
+                    <?php if (!empty($cotizacion['cupon_descuento'])): ?>
+                    <tr>
+                        <td colspan="5" class="text-end text-primary"><strong>Cupón<?= !empty($cotizacion['cupon_codigo']) ? ' (' . htmlspecialchars($cotizacion['cupon_codigo']) . ')' : '' ?>:</strong></td>
+                        <td class="text-end text-primary"><strong>-$<?= number_format($cotizacion['cupon_descuento'], 2) ?></strong></td>
+                    </tr>
+                    <?php endif; ?>
                     <tr class="table-primary">
                         <td colspan="5" class="text-end"><strong>TOTAL:</strong></td>
                         <td class="text-end"><strong style="font-size: 1.2em;">$<?= number_format($cotizacion['total'], 2) ?></strong></td>
