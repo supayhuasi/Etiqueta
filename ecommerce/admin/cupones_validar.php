@@ -1,6 +1,18 @@
 <?php
-require 'includes/header.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$base_path = dirname(dirname(__DIR__));
+require $base_path . '/config.php';
+
 header('Content-Type: application/json');
+
+if (!isset($_SESSION['user'])) {
+    http_response_code(401);
+    echo json_encode(['valido' => false, 'descuento' => 0, 'error' => 'no_auth']);
+    exit;
+}
 
 $codigo = trim($_GET['codigo'] ?? '');
 $subtotal = floatval($_GET['subtotal'] ?? 0);
