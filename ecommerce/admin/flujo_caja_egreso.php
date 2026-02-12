@@ -92,17 +92,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Calcular sueldo total incluyendo conceptos adicionales
-            $sueldo_total = $empleado['sueldo_base'];
-            
-            // Sumar conceptos adicionales (bonificaciones, comisiones, etc.)
+            $sueldo_base = (float)$empleado['sueldo_base'];
+            $bonificaciones = 0;
+            $descuentos = 0;
+
+            $evaluarFormula = function (?string $formula, float $sueldo_base): ?float {
+                if (!$formula) return null;
+                $formula = str_replace('sueldo_base', (string)$sueldo_base, $formula);
+                try {
+                    $resultado = @eval("return " . $formula . ";");
+                    return $resultado !== false ? (float)$resultado : null;
+                } catch (Exception $e) {
+                    return null;
+                }
+            };
+
             $stmt_conceptos = $pdo->prepare("
-                SELECT COALESCE(SUM(monto), 0) as total_conceptos
-                FROM sueldo_conceptos
-                WHERE empleado_id = ? AND mes = ? AND monto > 0
+                SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
+                FROM sueldo_conceptos sc
+                JOIN conceptos c ON sc.concepto_id = c.id
+                WHERE sc.empleado_id = ? AND sc.mes = ?
             ");
             $stmt_conceptos->execute([$empleado_id, $mes_pago]);
-            $conceptos = $stmt_conceptos->fetch(PDO::FETCH_ASSOC);
-            $sueldo_total += $conceptos['total_conceptos'];
+            $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($conceptos as $c) {
+                $monto_concepto = (float)$c['monto'];
+                if (!empty($c['formula'])) {
+                    $calc = $evaluarFormula($c['formula'], $sueldo_base);
+                    if ($calc !== null) {
+                        $monto_concepto = $calc;
+                    }
+                } elseif (!empty($c['es_porcentaje'])) {
+                    $monto_concepto = ($sueldo_base * $monto_concepto) / 100;
+                }
+
+                if ($c['tipo'] === 'descuento') {
+                    $descuentos += $monto_concepto;
+                } else {
+                    $bonificaciones += $monto_concepto;
+                }
+            }
+
+            $sueldo_total = max(0, $sueldo_base + $bonificaciones - $descuentos);
 
             // Registrar en tabla de pagos parciales
             $stmt = $pdo->prepare("
