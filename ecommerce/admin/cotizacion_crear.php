@@ -802,11 +802,9 @@ function calcularTotales() {
             costoAtributos += parseFloat(input.value || 0);
         });
 
-        const precioConAtributos = precioBase + costoAtributos;
-        if (precioInput) {
-            precioInput.value = precioConAtributos.toFixed(2);
-        }
-        const subtotalItem = cantidad * precioConAtributos;
+        // NO modificar el input de precio - PHP se encargará de sumar atributos
+        // Solo usar precioBase para el cálculo local
+        const subtotalItem = cantidad * (precioBase + costoAtributos);
 
         // Actualizar subtotal del item
         const subtotalInput = row.querySelector('.item-subtotal');
