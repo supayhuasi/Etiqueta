@@ -84,17 +84,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         // Agregar concepto manualmente
+        $concepto_id = $_POST['concepto_id'];
+        $mes = $_POST['mes'] ?? $mes_actual;
+        
+        // Verificar si ya existe ese concepto para el empleado en ese mes
+        $stmt_check = $pdo->prepare("
+            SELECT id FROM sueldo_conceptos 
+            WHERE empleado_id = ? AND concepto_id = ? AND mes = ?
+        ");
+        $stmt_check->execute([$id, $concepto_id, $mes]);
+        
+        if ($stmt_check->fetch()) {
+            header("Location: sueldo_conceptos.php?id=$id&error=El concepto ya existe para este mes");
+            exit;
+        }
+        
         $stmt = $pdo->prepare("
             INSERT INTO sueldo_conceptos (empleado_id, concepto_id, monto, formula, es_porcentaje, mes, fecha_creacion) 
             VALUES (?, ?, ?, ?, ?, ?, NOW())
         ");
         $stmt->execute([
             $id,
-            $_POST['concepto_id'],
+            $concepto_id,
             isset($_POST['monto']) ? floatval($_POST['monto']) : null,
             $_POST['formula'] ?? null,
             isset($_POST['es_porcentaje']) ? 1 : 0,
-            $_POST['mes'] ?? $mes_actual
+            $mes
         ]);
         
         header("Location: sueldo_conceptos.php?id=$id&success=Concepto agregado");

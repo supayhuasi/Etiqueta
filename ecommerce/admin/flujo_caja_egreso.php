@@ -91,6 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception('Empleado no encontrado');
             }
 
+            // Calcular sueldo total incluyendo conceptos adicionales
+            $sueldo_total = $empleado['sueldo_base'];
+            
+            // Sumar conceptos adicionales (bonificaciones, comisiones, etc.)
+            $stmt_conceptos = $pdo->prepare("
+                SELECT COALESCE(SUM(monto), 0) as total_conceptos
+                FROM sueldo_conceptos
+                WHERE empleado_id = ? AND mes = ? AND monto > 0
+            ");
+            $stmt_conceptos->execute([$empleado_id, $mes_pago]);
+            $conceptos = $stmt_conceptos->fetch(PDO::FETCH_ASSOC);
+            $sueldo_total += $conceptos['total_conceptos'];
+
             // Registrar en tabla de pagos parciales
             $stmt = $pdo->prepare("
                 INSERT INTO pagos_sueldos_parciales 
@@ -107,16 +120,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_suma->execute([$empleado_id, $mes_pago]);
             $suma = $stmt_suma->fetch(PDO::FETCH_ASSOC);
             $total_pagado = $suma['total_pagado'] + $monto;
-            $sueldo_pendiente = $empleado['sueldo_base'] - $total_pagado;
+            $sueldo_pendiente = $sueldo_total - $total_pagado;
 
-            if ($total_pagado > $empleado['sueldo_base']) {
-                throw new Exception('El monto total de pagos supera el sueldo base');
+            if ($total_pagado > $sueldo_total) {
+                throw new Exception('El monto total de pagos supera el sueldo total (base + conceptos adicionales)');
             }
 
             $stmt->execute([
                 $empleado_id,
                 $mes_pago,
-                $empleado['sueldo_base'],
+                $sueldo_total,
                 $sueldo_pendiente,
                 $monto,
                 $fecha,

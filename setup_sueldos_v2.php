@@ -49,7 +49,17 @@ try {
         $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP");
     }
 
-    // Tabla para asignar plantilla a empleado
+    // Actualizar el UNIQUE KEY para incluir mes (si existe)
+    try {
+        $indexes = $pdo->query("SHOW INDEXES FROM sueldo_conceptos WHERE Key_name = 'unique_emp_concept'")->fetchAll();
+        if (!empty($indexes) && empty(array_filter($indexes, function($idx) { return strpos($idx['Column_name'], 'mes') !== false; }))) {
+            // El índice existe pero no incluye mes, así que eliminarlo y recrearlo
+            $pdo->exec("ALTER TABLE sueldo_conceptos DROP INDEX unique_emp_concept");
+            $pdo->exec("ALTER TABLE sueldo_conceptos ADD UNIQUE KEY unique_emp_concept_mes (empleado_id, concepto_id, mes)");
+        }
+    } catch (Exception $e) {
+        // Ignorar si el índice ya existe en la forma correcta
+    }
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS empleado_plantilla (
             id INT PRIMARY KEY AUTO_INCREMENT,
