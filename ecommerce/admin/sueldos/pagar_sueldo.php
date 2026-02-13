@@ -7,6 +7,74 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
+function calcularSueldoDetalle(PDO $pdo, int $empleado_id, string $mes): array
+{
+    $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
+    $stmt->execute([$empleado_id]);
+    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$empleado) {
+        return [
+            'sueldo_base' => 0.0,
+            'bonificaciones' => 0.0,
+            'descuentos' => 0.0,
+            'sueldo_total' => 0.0
+        ];
+    }
+
+    $sueldo_base = (float)$empleado['sueldo_base'];
+    $bonificaciones = 0.0;
+    $descuentos = 0.0;
+
+    $evaluarFormula = function (?string $formula, float $sueldo_base): ?float {
+        if (!$formula) {
+            return null;
+        }
+        $formula = str_replace('sueldo_base', (string)$sueldo_base, $formula);
+        try {
+            $resultado = @eval("return " . $formula . ";");
+            return $resultado !== false ? (float)$resultado : null;
+        } catch (Exception $e) {
+            return null;
+        }
+    };
+
+    $stmt_conceptos = $pdo->prepare("
+        SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
+        FROM sueldo_conceptos sc
+        JOIN conceptos c ON sc.concepto_id = c.id
+        WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
+    ");
+    $stmt_conceptos->execute([$empleado_id, $mes]);
+    $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($conceptos as $c) {
+        $monto_concepto = (float)$c['monto'];
+        if (!empty($c['formula'])) {
+            $calc = $evaluarFormula($c['formula'], $sueldo_base);
+            if ($calc !== null) {
+                $monto_concepto = $calc;
+            }
+        } elseif (!empty($c['es_porcentaje'])) {
+            $monto_concepto = ($sueldo_base * $monto_concepto) / 100;
+        }
+
+        if ($c['tipo'] === 'descuento') {
+            $descuentos += $monto_concepto;
+        } else {
+            $bonificaciones += $monto_concepto;
+        }
+    }
+
+    $sueldo_total = max(0, $sueldo_base + $bonificaciones - $descuentos);
+
+    return [
+        'sueldo_base' => $sueldo_base,
+        'bonificaciones' => $bonificaciones,
+        'descuentos' => $descuentos,
+        'sueldo_total' => $sueldo_total
+    ];
+}
+
 $empleado_id = $_GET['id'] ?? 0;
 $mes = $_GET['mes'] ?? date('Y-m');
 
@@ -24,20 +92,8 @@ if (!$empleado) {
 }
 
 // Obtener el sueldo total del mes (base + conceptos)
-$stmt = $pdo->prepare("
-    SELECT COALESCE(e.sueldo_base, 0) as sueldo_base,
-           COALESCE(SUM(CASE WHEN c.tipo = 'bonificacion' THEN sc.monto ELSE 0 END), 0) as bonificaciones,
-           COALESCE(SUM(CASE WHEN c.tipo = 'descuento' THEN sc.monto ELSE 0 END), 0) as descuentos
-    FROM empleados e
-    LEFT JOIN sueldo_conceptos sc ON e.id = sc.empleado_id
-    LEFT JOIN conceptos c ON sc.concepto_id = c.id
-    WHERE e.id = ?
-    GROUP BY e.id
-");
-$stmt->execute([$empleado_id]);
-$sueldo_info = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$sueldo_total = $sueldo_info['sueldo_base'] + $sueldo_info['bonificaciones'] - $sueldo_info['descuentos'];
+$sueldo_info = calcularSueldoDetalle($pdo, (int)$empleado_id, $mes);
+$sueldo_total = $sueldo_info['sueldo_total'];
 
 // Obtener pago registrado para este mes
 $stmt = $pdo->prepare("
@@ -47,13 +103,26 @@ $stmt = $pdo->prepare("
 $stmt->execute([$empleado_id, $mes]);
 $pago = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Obtener total de pagos parciales del mes
+$stmt_parciales = $pdo->prepare("
+    SELECT COALESCE(SUM(monto_pagado), 0) as total_pagado
+    FROM pagos_sueldos_parciales
+    WHERE empleado_id = ? AND mes_pago = ?
+");
+$stmt_parciales->execute([$empleado_id, $mes]);
+$parciales = $stmt_parciales->fetch(PDO::FETCH_ASSOC);
+$total_parciales = (float)($parciales['total_pagado'] ?? 0);
+
+$monto_pagado_actual = (float)($pago['monto_pagado'] ?? 0);
+$monto_maximo = max(0, $sueldo_total - $total_parciales);
+
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monto_pagado = floatval($_POST['monto_pagado'] ?? 0);
     $observaciones = $_POST['observaciones'] ?? '';
     
-    if ($monto_pagado <= 0 || $monto_pagado > $sueldo_total) {
-        $error = "El monto debe ser mayor a 0 y no puede exceder el sueldo total de \$" . number_format($sueldo_total, 2);
+    if ($monto_pagado <= 0 || $monto_pagado > $monto_maximo) {
+        $error = "El monto debe ser mayor a 0 y no puede exceder el saldo disponible de \$" . number_format($monto_maximo, 2);
     } else {
         try {
             if ($pago) {
@@ -83,14 +152,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("SELECT * FROM pagos_sueldos WHERE empleado_id = ? AND mes_pago = ?");
             $stmt->execute([$empleado_id, $mes]);
             $pago = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $monto_pagado_actual = (float)($pago['monto_pagado'] ?? 0);
         } catch (Exception $e) {
             $error = "Error al registrar pago: " . $e->getMessage();
         }
     }
 }
 
-$porcentaje_pagado = $sueldo_total > 0 ? round(($pago['monto_pagado'] / $sueldo_total) * 100, 1) : 0;
-$saldo_pendiente = $sueldo_total - ($pago['monto_pagado'] ?? 0);
+$total_pagado = $monto_pagado_actual + $total_parciales;
+$porcentaje_pagado = $sueldo_total > 0 ? round(($total_pagado / $sueldo_total) * 100, 1) : 0;
+$saldo_pendiente = $sueldo_total - $total_pagado;
 ?>
 
 <div class="container mt-4">
@@ -121,6 +193,9 @@ $saldo_pendiente = $sueldo_total - ($pago['monto_pagado'] ?? 0);
                         </div>
                         <div class="col-md-6">
                             <h4 class="text-primary">Sueldo Total: $<?= number_format($sueldo_total, 2) ?></h4>
+                            <?php if ($total_parciales > 0): ?>
+                                <small class="text-info d-block">Pagos parciales: $<?= number_format($total_parciales, 2) ?></small>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -135,7 +210,10 @@ $saldo_pendiente = $sueldo_total - ($pago['monto_pagado'] ?? 0);
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Pagado:</strong> $<?= number_format($pago['monto_pagado'], 2) ?></p>
+                            <p><strong>Pagado:</strong> $<?= number_format($total_pagado, 2) ?></p>
+                            <?php if ($total_parciales > 0): ?>
+                                <small class="text-info d-block">↳ Incluye $<?= number_format($total_parciales, 2) ?> en pagos parciales</small>
+                            <?php endif; ?>
                             <p><strong>Pendiente:</strong> $<?= number_format($saldo_pendiente, 2) ?></p>
                             <p><strong>Porcentaje:</strong> <span class="badge bg-info"><?= $porcentaje_pagado ?>%</span></p>
                         </div>
@@ -166,10 +244,10 @@ $saldo_pendiente = $sueldo_total - ($pago['monto_pagado'] ?? 0);
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
                                 <input type="number" class="form-control" id="monto_pagado" name="monto_pagado" 
-                                       value="<?= $pago['monto_pagado'] ?? $sueldo_total ?>" 
-                                       step="0.01" min="0" max="<?= $sueldo_total ?>" required>
+                                       value="<?= $pago['monto_pagado'] ?? $monto_maximo ?>" 
+                                       step="0.01" min="0" max="<?= $monto_maximo ?>" required>
                             </div>
-                            <small class="form-text text-muted">Máximo: $<?= number_format($sueldo_total, 2) ?></small>
+                            <small class="form-text text-muted">Máximo disponible: $<?= number_format($monto_maximo, 2) ?></small>
                         </div>
 
                         <div class="mb-3">

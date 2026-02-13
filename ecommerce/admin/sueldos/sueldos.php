@@ -8,6 +8,62 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
+function calcularSueldoTotal(PDO $pdo, int $empleado_id, string $mes): float
+{
+    $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
+    $stmt->execute([$empleado_id]);
+    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$empleado) {
+        return 0.0;
+    }
+
+    $sueldo_base = (float)$empleado['sueldo_base'];
+    $bonificaciones = 0.0;
+    $descuentos = 0.0;
+
+    $evaluarFormula = function (?string $formula, float $sueldo_base): ?float {
+        if (!$formula) {
+            return null;
+        }
+        $formula = str_replace('sueldo_base', (string)$sueldo_base, $formula);
+        try {
+            $resultado = @eval("return " . $formula . ";");
+            return $resultado !== false ? (float)$resultado : null;
+        } catch (Exception $e) {
+            return null;
+        }
+    };
+
+    $stmt_conceptos = $pdo->prepare("
+        SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
+        FROM sueldo_conceptos sc
+        JOIN conceptos c ON sc.concepto_id = c.id
+        WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
+    ");
+    $stmt_conceptos->execute([$empleado_id, $mes]);
+    $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($conceptos as $c) {
+        $monto_concepto = (float)$c['monto'];
+        if (!empty($c['formula'])) {
+            $calc = $evaluarFormula($c['formula'], $sueldo_base);
+            if ($calc !== null) {
+                $monto_concepto = $calc;
+            }
+        } elseif (!empty($c['es_porcentaje'])) {
+            $monto_concepto = ($sueldo_base * $monto_concepto) / 100;
+        }
+
+        if ($c['tipo'] === 'descuento') {
+            $descuentos += $monto_concepto;
+        } else {
+            $bonificaciones += $monto_concepto;
+        }
+    }
+
+    return max(0, $sueldo_base + $bonificaciones - $descuentos);
+}
+
 // Obtener mes seleccionado o usar mes actual
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $mes_actual = date('Y-m');
@@ -47,25 +103,17 @@ $total_sueldo = 0;
 $total_pagado = 0;
 $total_pendiente = 0;
 
+$sueldos_calculados = [];
+
 foreach ($empleados as $emp) {
     // Calcular sueldo total si no existe pago registrado
-    if ($emp['pago_id'] == 0) {
-        $stmt_calc = $pdo->prepare("
-            SELECT COALESCE(e.sueldo_base, 0) as sueldo_base,
-                   COALESCE(SUM(CASE WHEN c.tipo = 'bonificacion' THEN sc.monto ELSE 0 END), 0) as bonificaciones,
-                   COALESCE(SUM(CASE WHEN c.tipo = 'descuento' THEN sc.monto ELSE 0 END), 0) as descuentos
-            FROM empleados e
-            LEFT JOIN sueldo_conceptos sc ON e.id = sc.empleado_id
-            LEFT JOIN conceptos c ON sc.concepto_id = c.id
-            WHERE e.id = ?
-            GROUP BY e.id
-        ");
-        $stmt_calc->execute([$emp['id']]);
-        $sueldo_calc = $stmt_calc->fetch(PDO::FETCH_ASSOC);
-        $sueldo_total_emp = $sueldo_calc['sueldo_base'] + $sueldo_calc['bonificaciones'] - $sueldo_calc['descuentos'];
+    if ($emp['pago_id'] == 0 || (float)$emp['sueldo_total'] <= 0) {
+        $sueldo_total_emp = calcularSueldoTotal($pdo, (int)$emp['id'], $mes_filtro);
     } else {
-        $sueldo_total_emp = $emp['sueldo_total'];
+        $sueldo_total_emp = (float)$emp['sueldo_total'];
     }
+
+    $sueldos_calculados[$emp['id']] = $sueldo_total_emp;
     
     // Sumar pagos completos + pagos parciales
     $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
@@ -171,24 +219,7 @@ foreach ($empleados as $emp) {
                     <tbody>
                         <?php foreach ($empleados as $emp): ?>
                             <?php 
-                                // Calcular sueldo total si no existe pago registrado
-                                if ($emp['pago_id'] == 0) {
-                                    $stmt_calc = $pdo->prepare("
-                                        SELECT COALESCE(e.sueldo_base, 0) as sueldo_base,
-                                               COALESCE(SUM(CASE WHEN c.tipo = 'bonificacion' THEN sc.monto ELSE 0 END), 0) as bonificaciones,
-                                               COALESCE(SUM(CASE WHEN c.tipo = 'descuento' THEN sc.monto ELSE 0 END), 0) as descuentos
-                                        FROM empleados e
-                                        LEFT JOIN sueldo_conceptos sc ON e.id = sc.empleado_id
-                                        LEFT JOIN conceptos c ON sc.concepto_id = c.id
-                                        WHERE e.id = ?
-                                        GROUP BY e.id
-                                    ");
-                                    $stmt_calc->execute([$emp['id']]);
-                                    $sueldo_calc = $stmt_calc->fetch(PDO::FETCH_ASSOC);
-                                    $sueldo_total_emp = $sueldo_calc['sueldo_base'] + $sueldo_calc['bonificaciones'] - $sueldo_calc['descuentos'];
-                                } else {
-                                    $sueldo_total_emp = $emp['sueldo_total'];
-                                }
+                                $sueldo_total_emp = $sueldos_calculados[$emp['id']] ?? 0;
                                 
                                 // Sumar pagos completos + pagos parciales
                                 $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];

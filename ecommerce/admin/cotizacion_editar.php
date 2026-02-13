@@ -437,6 +437,24 @@ function agregarItem(itemData = null) {
         cantidad: 1,
         precio_unitario: 0
     };
+
+    const costoAtributosItem = Array.isArray(item.atributos)
+        ? item.atributos.reduce((sum, attr) => {
+            const costo = parseFloat(attr?.costo_adicional ?? attr?.costo ?? 0) || 0;
+            return sum + costo;
+        }, 0)
+        : 0;
+
+    let precioBaseCalculado = null;
+    if (item.precio_base !== undefined && item.precio_base !== null && String(item.precio_base) !== '') {
+        precioBaseCalculado = parseFloat(item.precio_base);
+    } else if (item.precio_unitario !== undefined && item.precio_unitario !== null && String(item.precio_unitario) !== '') {
+        precioBaseCalculado = parseFloat(item.precio_unitario) - costoAtributosItem;
+    }
+
+    if (!isFinite(precioBaseCalculado) || precioBaseCalculado < 0) {
+        precioBaseCalculado = null;
+    }
     
     asegurarDatalistProductos();
     
@@ -479,7 +497,7 @@ function agregarItem(itemData = null) {
                         <label class="form-label">Precio Unit. *</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control item-precio" id="precio_${itemIndex}" name="items[${itemIndex}][precio]" value="${item.precio_unitario || item.precio_base || ''}" step="0.01" min="0" required onchange="actualizarBasePrecio(${itemIndex})">
+                            <input type="number" class="form-control item-precio" id="precio_${itemIndex}" name="items[${itemIndex}][precio]" value="${precioBaseCalculado !== null ? precioBaseCalculado.toFixed(2) : (item.precio_base || item.precio_unitario || '')}" step="0.01" min="0" required onchange="actualizarBasePrecio(${itemIndex})">
                         </div>
                     </div>
                     <div class="col-md-2">
@@ -521,9 +539,13 @@ function agregarItem(itemData = null) {
 
     const precioInput = document.getElementById(`precio_${itemIndex}`);
     if (precioInput) {
-        const base = item.precio_base || item.precio_unitario || '';
-        if (base) {
-            precioInput.dataset.base = parseFloat(base).toFixed(2);
+        if (precioBaseCalculado !== null) {
+            precioInput.dataset.base = precioBaseCalculado.toFixed(2);
+        } else if (item.precio_base || item.precio_unitario) {
+            const baseFallback = parseFloat(item.precio_base || item.precio_unitario || 0) || 0;
+            if (baseFallback > 0) {
+                precioInput.dataset.base = baseFallback.toFixed(2);
+            }
         }
     }
     calcularTotales();
