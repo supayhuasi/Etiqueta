@@ -369,7 +369,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -399,6 +399,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('envio_config')): ?>
                         <a href="<?= $admin_url ?>envio_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'envio_config.php' ? 'active' : '' ?>"><i class="bi bi-truck"></i> Envío</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('suscriptores')): ?>
+                        <a href="<?= $admin_url ?>suscriptores.php" class="<?= basename($_SERVER['PHP_SELF']) === 'suscriptores.php' ? 'active' : '' ?>"><i class="bi bi-envelope-at"></i> Suscriptores</a>
                         <?php endif; ?>
                     </div>
                 </div>

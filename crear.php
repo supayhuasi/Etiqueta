@@ -35,6 +35,7 @@ $colores = $pdo->query("SELECT * FROM colores WHERE activo = 1 ORDER BY nombre")
                         <option value="Banda Vertical">Banda Vertical</option>
                         <option value="Panel Oriental">Panel Oriental</option>
                         <option value="Mosquitero">Mosquitero</option>
+                        <option value="Cortinas Clasicas">Cortina Clasicas</option>
                     </select>
                 </div>
 
