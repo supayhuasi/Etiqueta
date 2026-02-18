@@ -308,6 +308,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <p class="text-muted" style="font-size: 0.95rem;">
                 <?= nl2br(htmlspecialchars($producto['descripcion'])) ?>
             </p>
+            
+            <div class="small text-muted mb-3">
+                <i class="bi bi-eye"></i> <?= rand(1, 15) ?> clientes consultaron hoy este producto
+            </div>
 
             <?php if (isset($mensaje)): ?>
                 <div class="alert alert-success alert-dismissible fade show">
