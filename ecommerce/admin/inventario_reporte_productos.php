@@ -38,8 +38,21 @@ if ($categoria_filtro) {
     $params[] = intval($categoria_filtro);
 }
 
+// Verificar qué columna de stock mínimo existe
+try {
+    $columnas = $pdo->query("SHOW COLUMNS FROM ecommerce_productos")->fetchAll(PDO::FETCH_ASSOC);
+    $columnas_nombres = array_column($columnas, 'Field');
+    
+    $stock_minimo_col = 'stock_minimo'; // por defecto
+    if (!in_array('stock_minimo', $columnas_nombres)) {
+        $stock_minimo_col = '0'; // Si no existe, usar 0 como stock mínimo
+    }
+} catch (Exception $e) {
+    $stock_minimo_col = '0';
+}
+
 if ($stock_filtro === 'bajo') {
-    $where[] = "p.stock > 0 AND p.stock <= p.stock_minimo";
+    $where[] = "p.stock > 0 AND p.stock <= COALESCE(p.stock_minimo, 0)";
 } elseif ($stock_filtro === 'sin') {
     $where[] = "p.stock = 0";
 } elseif ($stock_filtro === 'negativo') {
@@ -52,20 +65,20 @@ $sql = "
         p.nombre,
         p.codigo,
         p.stock,
-        p.stock_minimo,
-        p.precio_venta,
+        COALESCE(p.stock_minimo, 0) as stock_minimo,
+        p.precio_base,
         p.fecha_creacion,
         c.nombre as categoria,
         CASE 
             WHEN p.stock < 0 THEN 'negativo'
             WHEN p.stock = 0 THEN 'sin_stock'
-            WHEN p.stock <= p.stock_minimo THEN 'bajo_minimo'
+            WHEN p.stock <= COALESCE(p.stock_minimo, 0) THEN 'bajo_minimo'
             ELSE 'normal'
         END as estado,
         CASE 
             WHEN p.stock < 0 THEN 'danger'
             WHEN p.stock = 0 THEN 'warning'
-            WHEN p.stock <= p.stock_minimo THEN 'warning'
+            WHEN p.stock <= COALESCE(p.stock_minimo, 0) THEN 'warning'
             ELSE 'success'
         END as badge_color
     FROM ecommerce_productos p
@@ -75,7 +88,7 @@ $sql = "
         CASE 
             WHEN p.stock < 0 THEN 1
             WHEN p.stock = 0 THEN 2
-            WHEN p.stock <= p.stock_minimo THEN 3
+            WHEN p.stock <= COALESCE(p.stock_minimo, 0) THEN 3
             ELSE 4
         END,
         p.nombre ASC
