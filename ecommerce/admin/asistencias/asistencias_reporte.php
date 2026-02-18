@@ -1,4 +1,16 @@
 <?php
+// Habilitar errores para debug
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Incluir configuración para obtener $pdo
+$base_path = dirname(dirname(dirname(dirname(__FILE__))));
+require $base_path . '/config.php';
+
+// Verificar que $pdo existe
+if (!isset($pdo)) {
+    die('Error: No hay conexión a la base de datos');
+}
 
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $empleado_filtro = $_GET['empleado_id'] ?? '';
@@ -12,29 +24,33 @@ if ($empleado_filtro) {
     $params[] = $empleado_filtro;
 }
 
-$sql = "
-    SELECT 
-        e.nombre as empleado,
-        a.fecha,
-        a.hora_entrada,
-        a.hora_salida,
-        a.estado,
-        a.observaciones,
-        COALESCE(hd.hora_entrada, h.hora_entrada) as horario_entrada,
-        COALESCE(hd.hora_salida, h.hora_salida) as horario_salida
-    FROM asistencias a
-    JOIN empleados e ON a.empleado_id = e.id
-    LEFT JOIN empleados_horarios h ON a.empleado_id = h.empleado_id AND h.activo = 1
-    LEFT JOIN empleados_horarios_dias hd ON a.empleado_id = hd.empleado_id 
-        AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1 
-        AND hd.activo = 1
-    WHERE " . implode(" AND ", $where) . "
-    ORDER BY e.nombre, a.fecha
-";
+try {
+    $sql = "
+        SELECT 
+            e.nombre as empleado,
+            a.fecha,
+            a.hora_entrada,
+            a.hora_salida,
+            a.estado,
+            a.observaciones,
+            COALESCE(hd.hora_entrada, h.hora_entrada) as horario_entrada,
+            COALESCE(hd.hora_salida, h.hora_salida) as horario_salida
+        FROM asistencias a
+        JOIN empleados e ON a.empleado_id = e.id
+        LEFT JOIN empleados_horarios h ON a.empleado_id = h.empleado_id AND h.activo = 1
+        LEFT JOIN empleados_horarios_dias hd ON a.empleado_id = hd.empleado_id 
+            AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1 
+            AND hd.activo = 1
+        WHERE " . implode(" AND ", $where) . "
+        ORDER BY e.nombre, a.fecha
+    ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$asistencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $asistencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    die('Error en consulta de asistencias: ' . $e->getMessage());
+}
 
 // Calcular totales
 $totales = [
@@ -83,10 +99,15 @@ foreach ($asistencias as $a) {
         <h3>Período: <?= date('F Y', strtotime($mes_filtro . '-01')) ?></h3>
         <?php if ($empleado_filtro): ?>
             <?php
-            $stmt = $pdo->prepare("SELECT nombre FROM empleados WHERE id = ?");
-            $stmt->execute([$empleado_filtro]);
+            try {
+                $stmt = $pdo->prepare("SELECT nombre FROM empleados WHERE id = ?");
+                $stmt->execute([$empleado_filtro]);
+                $nombre_empleado = $stmt->fetchColumn();
+            } catch (Exception $e) {
+                $nombre_empleado = 'Error al cargar';
+            }
             ?>
-            <h4>Empleado: <?= htmlspecialchars($stmt->fetchColumn()) ?></h4>
+            <h4>Empleado: <?= htmlspecialchars($nombre_empleado) ?></h4>
         <?php endif; ?>
         <p>Generado: <?= date('d/m/Y H:i') ?></p>
     </div>

@@ -1,5 +1,14 @@
 <?php
+// Habilitar errores para debug
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 require 'includes/header.php';
+
+// Verificar que $pdo existe
+if (!isset($pdo)) {
+    die('Error: No hay conexión a la base de datos');
+}
 
 $periodo = $_GET['periodo'] ?? 'mes';
 $year = intval($_GET['year'] ?? date('Y'));
@@ -35,34 +44,47 @@ if ($periodo === 'mes') {
 $startStr = $start->format('Y-m-d H:i:s');
 $endStr = $end->format('Y-m-d H:i:s');
 
-// Total vendido
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ?");
-$stmt->execute([$startStr, $endStr]);
-$total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
+try {
+    // Total vendido
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ?");
+    $stmt->execute([$startStr, $endStr]);
+    $total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
+} catch (Exception $e) {
+    die('Error en consulta de ventas: ' . $e->getMessage());
+}
 
 // Total cobrado
 $total_cobrado = 0.0;
-$tabla_pagos = $pdo->query("SHOW TABLES LIKE 'ecommerce_pedido_pagos'")->rowCount() > 0;
-if ($tabla_pagos) {
-    $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
-        FROM ecommerce_pedido_pagos pp
-        INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-        WHERE p.fecha_creacion BETWEEN ? AND ?
-    ");
-    $stmt->execute([$startStr, $endStr]);
-    $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+try {
+    $tabla_pagos = $pdo->query("SHOW TABLES LIKE 'ecommerce_pedido_pagos'")->rowCount() > 0;
+    if ($tabla_pagos) {
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
+            FROM ecommerce_pedido_pagos pp
+            INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
+            WHERE p.fecha_creacion BETWEEN ? AND ?
+        ");
+        $stmt->execute([$startStr, $endStr]);
+        $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+    }
+} catch (Exception $e) {
+    // Si hay error, continuar con total_cobrado = 0
+    $total_cobrado = 0.0;
 }
 
 $porcentaje_cobrado = $total_vendido > 0 ? ($total_cobrado / $total_vendido) * 100 : 0;
 
 // Pendiente de entrega (monto)
-$estados_entregados = ['entregado'];
-$placeholders = implode(',', array_fill(0, count($estados_entregados), '?'));
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ? AND estado NOT IN ($placeholders)");
-$params = array_merge([$startStr, $endStr], $estados_entregados);
-$stmt->execute($params);
-$pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
+try {
+    $estados_entregados = ['entregado'];
+    $placeholders = implode(',', array_fill(0, count($estados_entregados), '?'));
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ? AND estado NOT IN ($placeholders)");
+    $params = array_merge([$startStr, $endStr], $estados_entregados);
+    $stmt->execute($params);
+    $pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
+} catch (Exception $e) {
+    $pendiente_entrega = 0.0;
+}
 
 $pendiente_cobro = max(0, $total_vendido - $total_cobrado);
 ?>
