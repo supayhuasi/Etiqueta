@@ -188,21 +188,95 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
         position: fixed;
         right: 20px;
         bottom: 20px;
-        background: #25D366;
-        color: #fff;
-        padding: 12px 18px;
-        border-radius: 999px;
-        font-weight: 600;
-        text-decoration: none;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+        border-radius: 50%;
+        box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
         z-index: 9999;
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 8px;
+        justify-content: center;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        cursor: pointer;
       }
+      
+      .whatsapp-float::before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: #25D366;
+        animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        opacity: 0;
+      }
+      
       .whatsapp-float:hover {
-        background: #1ebe5d;
-        color: #fff;
+        transform: scale(1.1);
+        box-shadow: 0 6px 20px rgba(37, 211, 102, 0.6);
+      }
+      
+      .whatsapp-float svg {
+        width: 40px;
+        height: 40px;
+        fill: white;
+        position: relative;
+        z-index: 1;
+      }
+      
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.95);
+          opacity: 0.8;
+        }
+        50% {
+          opacity: 0.4;
+        }
+        100% {
+          transform: scale(1.3);
+          opacity: 0;
+        }
+      }
+      
+      /* Tooltip */
+      .whatsapp-float::after {
+        content: '¿Necesitas ayuda?';
+        position: absolute;
+        right: 80px;
+        background: #fff;
+        color: #333;
+        padding: 8px 15px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      
+      .whatsapp-float:hover::after {
+        opacity: 1;
+      }
+      
+      /* Responsive */
+      @media (max-width: 768px) {
+        .whatsapp-float {
+          width: 60px;
+          height: 60px;
+          right: 15px;
+          bottom: 15px;
+        }
+        .whatsapp-float svg {
+          width: 35px;
+          height: 35px;
+        }
+        .whatsapp-float::after {
+          display: none;
+        }
       }
     </style>
 </head>

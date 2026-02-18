@@ -86,6 +86,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
         </div>
         <div class="col-md-6 text-end">
             <a href="asistencias_crear.php" class="btn btn-primary">➕ Cargar Asistencia</a>
+            <a href="asistencias_rango.php" class="btn btn-primary">📅 Cargar Rango</a>
             <a href="asistencias_horarios.php" class="btn btn-info">⏰ Gestionar Horarios</a>
             <a href="asistencias_reporte.php?mes=<?= $mes_filtro ?>&empleado_id=<?= $empleado_filtro ?>" class="btn btn-success" target="_blank">📊 Generar Reporte</a>
         </div>
