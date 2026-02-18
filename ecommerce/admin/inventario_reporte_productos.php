@@ -141,7 +141,8 @@ $productos_negativo = 0;
 $valor_total_stock = 0;
 
 foreach ($productos as $p) {
-    if ($p['stock'] > 0 && $p['stock'] <= $p['stock_minimo']) {
+    $stock_min = $p['stock_minimo'] ?? 0;
+    if ($p['stock'] > 0 && $p['stock'] <= $stock_min) {
         $productos_bajo_minimo++;
     }
     if ($p['stock'] == 0) {
@@ -150,7 +151,7 @@ foreach ($productos as $p) {
     if ($p['stock'] < 0) {
         $productos_negativo++;
     }
-    $valor_total_stock += $p['stock'] * ($p['precio_venta'] ?? 0);
+    $valor_total_stock += $p['stock'] * ($p['precio_base'] ?? 0);
 }
 ?>
 
