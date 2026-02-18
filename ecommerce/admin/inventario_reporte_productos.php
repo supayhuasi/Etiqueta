@@ -1,5 +1,14 @@
 <?php
+// Habilitar errores para debug
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 require 'includes/header.php';
+
+// Verificar que $pdo existe
+if (!isset($pdo)) {
+    die('Error: No hay conexión a la base de datos');
+}
 
 // Filtros
 $categoria_filtro = $_GET['categoria'] ?? '';
@@ -7,9 +16,13 @@ $stock_filtro = $_GET['stock'] ?? ''; // todos, bajo, sin, negativo
 $buscar = $_GET['buscar'] ?? '';
 $exportar = !empty($_GET['exportar']);
 
-// Obtener categorías
-$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
-$categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    // Obtener categorías
+    $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_categorias WHERE activo = 1 ORDER BY nombre");
+    $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    die('Error al obtener categorías: ' . $e->getMessage());
+}
 
 // Construir consulta de productos
 $where = ["p.activo = 1"];
@@ -68,9 +81,13 @@ $sql = "
         p.nombre ASC
 ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    die('Error en consulta de productos: ' . $e->getMessage());
+}
 
 // Si es exportar a CSV
 if ($exportar) {
