@@ -268,8 +268,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
                             <p class="card-text text-muted flex-grow-1">
                                 <?= htmlspecialchars(substr($producto['descripcion'], 0, 100)) ?>...
                             </p>                            
-                            <div class="small text-muted mb-2">
-                                <i class="bi bi-eye"></i> <?= rand(1, 15) ?> clientes consultaron hoy
+                            <div class="small text-muted mb-2" style="font-family: 'Poppins', 'Arial', sans-serif; font-weight: 700;">
+                                <i class="bi bi-eye"></i> <strong><?= rand(1, 15) ?> clientes consultaron hoy</strong>
                             </div>                            <?php
                             $precio_info = calcular_precio_publico(
                                 (int)$producto['id'],

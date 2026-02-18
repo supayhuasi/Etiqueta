@@ -189,8 +189,8 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <?= htmlspecialchars(substr($producto['descripcion'], 0, 80)) ?>...
                                     </p>
                                     
-                                    <div class="small text-muted mb-2">
-                                        <i class="bi bi-eye"></i> <?= rand(1, 15) ?> clientes consultaron hoy
+                                    <div class="small text-muted mb-2" style="font-family: 'Poppins', 'Arial', sans-serif; font-weight: 700;">
+                                        <i class="bi bi-eye"></i> <strong><?= rand(1, 15) ?> clientes consultaron hoy</strong>
                                     </div>
                                     
                                     <?php if ($producto['tipo_precio'] === 'fijo'): ?>

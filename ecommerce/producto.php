@@ -309,9 +309,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?= nl2br(htmlspecialchars($producto['descripcion'])) ?>
             </p>
             
-            <div class="alert alert-warning d-flex align-items-center gap-2" style="margin: 20px 0; font-weight: 600; font-size: 1.1rem;">
+            <div class="alert alert-warning d-flex align-items-center gap-2" style="margin: 20px 0; font-weight: 700; font-size: 1.1rem; font-family: 'Poppins', 'Arial', sans-serif;">
                 <i class="bi bi-eye" style="font-size: 1.5rem; color: #ff6b6b;"></i>
-                <span style="color: #ff6b6b;">🔥 <?= rand(1, 15) ?> clientes consultaron hoy este producto</span>
+                <span style="color: #ff6b6b;"><strong>🔥 <?= rand(1, 15) ?> clientes consultaron hoy este producto</strong></span>
             </div>
 
             <?php if (isset($mensaje)): ?>
