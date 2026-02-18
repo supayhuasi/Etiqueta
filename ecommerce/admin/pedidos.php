@@ -210,6 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
 $estado_filter = $_GET['estado'] ?? '';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+$cliente_busqueda = $_GET['cliente'] ?? '';
 
 $query = "
     SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
@@ -238,6 +239,14 @@ if (!empty($fecha_desde)) {
 if (!empty($fecha_hasta)) {
     $query .= " AND DATE(p.fecha_pedido) <= ?";
     $params[] = $fecha_hasta;
+}
+
+if (!empty($cliente_busqueda)) {
+    $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+    $busqueda_wildcard = '%' . $cliente_busqueda . '%';
+    $params[] = $busqueda_wildcard;
+    $params[] = $busqueda_wildcard;
+    $params[] = $busqueda_wildcard;
 }
 
 $query .= " ORDER BY p.fecha_pedido DESC";
@@ -303,6 +312,10 @@ unset($pedido);
                 </select>
             </div>
             <div class="col-auto">
+                <label for="cliente" class="form-label">Cliente:</label>
+                <input type="text" name="cliente" id="cliente" class="form-control" placeholder="Nombre, email o #pedido" value="<?= htmlspecialchars($cliente_busqueda) ?>">
+            </div>
+            <div class="col-auto">
                 <label for="fecha_desde" class="form-label">Desde:</label>
                 <input type="date" name="fecha_desde" id="fecha_desde" class="form-control" value="<?= $fecha_desde ?>">
             </div>
@@ -312,7 +325,7 @@ unset($pedido);
             </div>
             <div class="col-auto">
                 <button type="submit" class="btn btn-outline-secondary">Filtrar</button>
-                <?php if (!empty($estado_filter) || !empty($fecha_desde) || !empty($fecha_hasta)): ?>
+                <?php if (!empty($estado_filter) || !empty($fecha_desde) || !empty($fecha_hasta) || !empty($cliente_busqueda)): ?>
                     <a href="pedidos.php" class="btn btn-outline-secondary">Limpiar</a>
                 <?php endif; ?>
             </div>
