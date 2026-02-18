@@ -44,9 +44,28 @@ if ($periodo === 'mes') {
 $startStr = $start->format('Y-m-d H:i:s');
 $endStr = $end->format('Y-m-d H:i:s');
 
+// Verificar qué columna de fecha existe en ecommerce_pedidos
+try {
+    $columnas = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_ASSOC);
+    $columnas_nombres = array_column($columnas, 'Field');
+    
+    // Determinar qué columna usar para las fechas
+    if (in_array('fecha_creacion', $columnas_nombres)) {
+        $fecha_columna = 'fecha_creacion';
+    } elseif (in_array('fecha', $columnas_nombres)) {
+        $fecha_columna = 'fecha';
+    } elseif (in_array('created_at', $columnas_nombres)) {
+        $fecha_columna = 'created_at';
+    } else {
+        die('Error: No se encontró columna de fecha en ecommerce_pedidos. Columnas disponibles: ' . implode(', ', $columnas_nombres));
+    }
+} catch (Exception $e) {
+    die('Error al verificar estructura de tabla: ' . $e->getMessage());
+}
+
 try {
     // Total vendido
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ?");
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ?");
     $stmt->execute([$startStr, $endStr]);
     $total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
 } catch (Exception $e) {
@@ -62,7 +81,7 @@ try {
             SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
             FROM ecommerce_pedido_pagos pp
             INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-            WHERE p.fecha_creacion BETWEEN ? AND ?
+            WHERE p.$fecha_columna BETWEEN ? AND ?
         ");
         $stmt->execute([$startStr, $endStr]);
         $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
@@ -78,7 +97,7 @@ $porcentaje_cobrado = $total_vendido > 0 ? ($total_cobrado / $total_vendido) * 1
 try {
     $estados_entregados = ['entregado'];
     $placeholders = implode(',', array_fill(0, count($estados_entregados), '?'));
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE fecha_creacion BETWEEN ? AND ? AND estado NOT IN ($placeholders)");
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado NOT IN ($placeholders)");
     $params = array_merge([$startStr, $endStr], $estados_entregados);
     $stmt->execute($params);
     $pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
