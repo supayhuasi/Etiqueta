@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
                                 </div>
                             <?php endif; ?>
                             <h4 class="text-primary">$<?= number_format($precio_info['precio'], 2, ',', '.') ?></h4>
-                            <a href="producto.php?id=<?= $producto['id'] ?>" class="btn btn-primary mt-auto">Ver Detalles</a>
+                            <a href="producto.php?id=<?= $producto['id'] ?>" class="btn btn-primary mt-auto">Cotizar Ahora</a>
                         </div>
                     </div>
                 </div>

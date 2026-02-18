@@ -204,7 +204,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <small class="text-muted">desde $<?= number_format($precio_info['precio'], 2, ',', '.') ?></small>
                                     <?php endif; ?>
                                     
-                                    <a href="producto.php?id=<?= $producto['id'] ?>" class="btn btn-primary mt-auto">Ver Detalles</a>
+                                    <a href="producto.php?id=<?= $producto['id'] ?>" class="btn btn-primary mt-auto">Cotizar Ahora</a>
                                 </div>
                             </div>
                         </div>
