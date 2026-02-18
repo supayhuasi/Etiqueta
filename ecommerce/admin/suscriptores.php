@@ -1,6 +1,17 @@
 <?php
 require 'includes/header.php';
 
+// Verificar que existe la tabla, si no crearla
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_suscriptores (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+} catch (Exception $e) {
+    // Tabla ya existe o error
+}
+
 // Obtener todos los suscriptores
 $stmt = $pdo->query("SELECT * FROM ecommerce_suscriptores ORDER BY fecha_creacion DESC");
 $suscriptores = $stmt->fetchAll(PDO::FETCH_ASSOC);
