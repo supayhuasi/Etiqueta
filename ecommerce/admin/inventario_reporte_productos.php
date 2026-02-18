@@ -117,11 +117,28 @@ if ($exportar) {
 
 // Estadísticas
 $total_productos = count($productos);
-$total_stock = array_sum(array_column($productos, 'stock'));
-$productos_bajo_minimo = count(array_filter($productos, fn($p) => $p['stock'] > 0 && $p['stock'] <= $p['stock_minimo']));
-$productos_sin_stock = count(array_filter($productos, fn($p) => $p['stock'] == 0));
-$productos_negativo = count(array_filter($productos, fn($p) => $p['stock'] < 0));
-$valor_total_stock = array_reduce($productos, fn($sum, $p) => $sum + ($p['stock'] * ($p['precio_venta'] ?? 0)), 0);
+$total_stock = 0;
+foreach ($productos as $p) {
+    $total_stock += $p['stock'];
+}
+
+$productos_bajo_minimo = 0;
+$productos_sin_stock = 0;
+$productos_negativo = 0;
+$valor_total_stock = 0;
+
+foreach ($productos as $p) {
+    if ($p['stock'] > 0 && $p['stock'] <= $p['stock_minimo']) {
+        $productos_bajo_minimo++;
+    }
+    if ($p['stock'] == 0) {
+        $productos_sin_stock++;
+    }
+    if ($p['stock'] < 0) {
+        $productos_negativo++;
+    }
+    $valor_total_stock += $p['stock'] * ($p['precio_venta'] ?? 0);
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
