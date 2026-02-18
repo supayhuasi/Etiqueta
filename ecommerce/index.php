@@ -155,7 +155,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
                     <select name="producto" class="form-select" id="producto-select" required>
                         <option value="">-- Elegir producto --</option>
                         <?php foreach ($productos_destacados as $prod): ?>
-                            <option value="<?= $prod['id'] ?>" data-precio="<?= obtener_precio_producto($pdo, $prod['id'], $mapas_lista_publica) ?>">
+                            <?php
+                            $precio_info_cot = calcular_precio_publico(
+                                (int)$prod['id'],
+                                (int)($prod['categoria_id'] ?? 0),
+                                (float)$prod['precio_base'],
+                                $lista_publica_id,
+                                $mapas_lista_publica['items'],
+                                $mapas_lista_publica['categorias']
+                            );
+                            ?>
+                            <option value="<?= $prod['id'] ?>" data-precio="<?= $precio_info_cot['precio'] ?>">
                                 <?= htmlspecialchars($prod['nombre']) ?>
                             </option>
                         <?php endforeach; ?>
