@@ -108,7 +108,7 @@ if ($exportar) {
     header('Content-Disposition: attachment; filename="inventario_productos_' . date('Y-m-d') . '.csv"');
     
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['ID', 'Nombre', 'Código', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'Precio Venta', 'Estado', 'Fecha Creación'], ';');
+    fputcsv($output, ['ID', 'Nombre', 'Código', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'Precio Base', 'Estado', 'Fecha Creación'], ';');
     
     foreach ($productos as $p) {
         fputcsv($output, [
@@ -117,8 +117,8 @@ if ($exportar) {
             $p['codigo'] ?? '',
             $p['categoria'] ?? '',
             $p['stock'],
-            $p['stock_minimo'],
-            $p['precio_venta'],
+            $p['stock_minimo'] ?? 0,
+            $p['precio_base'],
             $p['estado'],
             date('d/m/Y', strtotime($p['fecha_creacion']))
         ], ';');
@@ -250,7 +250,7 @@ foreach ($productos as $p) {
                         <th style="width: 10%;">Código</th>
                         <th class="text-end">Stock Actual</th>
                         <th class="text-end">Stock Mín.</th>
-                        <th class="text-end">Precio Venta</th>
+                        <th class="text-end">Precio Base</th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
@@ -269,10 +269,10 @@ foreach ($productos as $p) {
                                 <strong><?= number_format($p['stock']) ?></strong> un.
                             </td>
                             <td class="text-end">
-                                <code><?= number_format($p['stock_minimo']) ?></code>
+                                <code><?= number_format($p['stock_minimo'] ?? 0) ?></code>
                             </td>
                             <td class="text-end">
-                                $<?= number_format($p['precio_venta'], 2) ?>
+                                $<?= number_format($p['precio_base'] ?? 0, 2) ?>
                             </td>
                             <td class="text-center">
                                 <span class="badge bg-<?= $p['badge_color'] ?>">
