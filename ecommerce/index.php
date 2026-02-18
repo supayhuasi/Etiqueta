@@ -143,21 +143,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
 <?php endif; ?>
 
 <!-- Cotizador Rápido -->
-<section class="cotizador-rapido-section py-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+<section class="cotizador-rapido-section py-5" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-top: 3px solid #25D366;">
     <div class="container">
         <div class="cotizador-rapido">
-            <h3 class="mb-4">💰 Calculá tu Presupuesto en 30 segundos</h3>
+            <h3 class="mb-2">💰 Cotizador Rápido</h3>
+            <p class="text-muted mb-4">Selecciona un producto y obtén un presupuesto estimado en segundos</p>
             
             <form id="cotizador" class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">¿Qué tipo de cortina necesitás?</label>
-                    <select name="tipo" class="form-select" required>
-                        <option value="">Seleccionar...</option>
-                        <option value="roller-translucida">Roller Traslúcida</option>
-                        <option value="roller-blackout">Roller Blackout</option>
-                        <option value="roller-sunscreen">Roller Sunscreen</option>
-                        <option value="toldo">Toldo</option>
-                        <option value="banda-vertical">Banda Vertical</option>
+                    <label class="form-label">Selecciona un Producto</label>
+                    <select name="producto" class="form-select" id="producto-select" required>
+                        <option value="">-- Elegir producto --</option>
+                        <?php foreach ($productos_destacados as $prod): ?>
+                            <option value="<?= $prod['id'] ?>" data-precio="<?= obtener_precio_producto($pdo, $prod['id'], $mapas_lista_publica) ?>">
+                                <?= htmlspecialchars($prod['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 
@@ -168,24 +169,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
                 
                 <div class="col-md-6">
                     <label class="form-label">Ancho aproximado (cm)</label>
-                    <input type="number" name="ancho" class="form-control" placeholder="ej: 120" required>
+                    <input type="number" name="ancho" class="form-control" placeholder="ej: 120" min="20" max="500" required>
                 </div>
                 
                 <div class="col-md-6">
                     <label class="form-label">Alto aproximado (cm)</label>
-                    <input type="number" name="alto" class="form-control" placeholder="ej: 150" required>
+                    <input type="number" name="alto" class="form-control" placeholder="ej: 150" min="20" max="500" required>
                 </div>
                 
                 <div class="col-12">
-                    <button type="submit" class="btn btn-light btn-lg w-100" style="font-weight: bold;">VER PRECIO ESTIMADO</button>
+                    <button type="submit" class="btn btn-success btn-lg w-100" style="font-weight: bold; font-size: 1.1rem; padding: 12px;">
+                        <i class="bi bi-calculator"></i> CALCULAR PRESUPUESTO
+                    </button>
                 </div>
             </form>
             
-            <div id="resultado-cotizador" style="display:none; margin-top: 20px;">
-                <div class="alert alert-light text-dark">
-                    <h4>Precio Estimado: $<span id="precio-estimado">0</span></h4>
-                    <p class="mb-2" style="font-size: 0.9rem;">*Precio orientativo. Cotización final después de toma de medidas</p>
-                    <a href="javascript:void(0);" onclick="enviarWhatsappCotizacion()" class="btn btn-warning w-100" style="font-weight: bold;">SOLICITAR PRESUPUESTO EXACTO POR WHATSAPP</a>
+            <div id="resultado-cotizador" style="display:none; margin-top: 25px;">
+                <div class="alert alert-success text-dark" style="border-left: 5px solid #25D366; padding: 20px;">
+                    <h4 style="color: #25D366; margin-bottom: 10px;">💚 Presupuesto Estimado</h4>
+                    <h2 style="color: #25D366; margin-bottom: 5px;">$<span id="precio-estimado">0</span></h2>
+                    <p class="mb-3" style="font-size: 0.9rem; color: #666;">*Precio orientativo. Cotización final después de toma de medidas</p>
+                    <a href="javascript:void(0);" onclick="enviarWhatsappCotizacion()" class="btn btn-success w-100" style="font-weight: bold; font-size: 1rem; padding: 12px;">
+                        <i class="bi bi-whatsapp"></i> SOLICITAR PRESUPUESTO EXACTO
+                    </a>
                 </div>
             </div>
         </div>
@@ -409,35 +415,27 @@ document.addEventListener('DOMContentLoaded', function() {
 document.getElementById('cotizador').addEventListener('submit', function(e) {
     e.preventDefault();
     
-    const tipo = document.querySelector('select[name="tipo"]').value;
+    const producto_id = document.querySelector('select[name="producto"]').value;
     const ventanas = parseInt(document.querySelector('input[name="ventanas"]').value) || 1;
     const ancho = parseInt(document.querySelector('input[name="ancho"]').value) || 0;
     const alto = parseInt(document.querySelector('input[name="alto"]').value) || 0;
     
-    if (!tipo || !ancho || !alto) {
+    if (!producto_id || !ancho || !alto) {
         alert('Por favor completá todos los campos');
         return;
     }
     
-    // Precios base estimados por tipo (por unidad)
-    const precios_base = {
-        'roller-translucida': 50,
-        'roller-blackout': 60,
-        'roller-sunscreen': 65,
-        'toldo': 80,
-        'banda-vertical': 45
-    };
+    // Obtener el precio base del producto del atributo data-precio
+    const productoSelect = document.querySelector(`option[value="${producto_id}"]`);
+    const precio_base = parseFloat(productoSelect.getAttribute('data-precio')) || 0;
     
-    const precio_base = precios_base[tipo] || 50;
-    
-    // Cálculo: precio base + 0.15 por cm² de área + cantidad de ventanas
-    const area_cm2 = (ancho * alto) / 100; // en metros cuadrados (aproximado)
-    const precio_por_area = area_cm2 * 0.15;
-    const precio_unitario = precio_base + precio_por_area;
+    // Cálculo: precio base * área (m²) * ventanas
+    const area_m2 = (ancho * alto) / 10000; // convertir cm² a m²
+    const precio_unitario = Math.max(precio_base, precio_base * area_m2); // usar el mayor entre precio base y calculado
     const precio_total = precio_unitario * ventanas;
     
-    // Agregar variación aleatoria (±15%) para que sea más realista
-    const variacion = (Math.random() - 0.5) * 0.3; // ±15%
+    // Agregar variación aleatoria (±10%) para que sea más realista
+    const variacion = (Math.random() - 0.5) * 0.2; // ±10%
     const precio_final = Math.round(precio_total * (1 + variacion));
     
     // Mostrar resultado
@@ -445,28 +443,25 @@ document.getElementById('cotizador').addEventListener('submit', function(e) {
     document.getElementById('resultado-cotizador').style.display = 'block';
     
     // Scroll suave hacia el resultado
-    document.getElementById('resultado-cotizador').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => {
+        document.getElementById('resultado-cotizador').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
 });
 
 // Enviar cotización por WhatsApp
 function enviarWhatsappCotizacion() {
-    const tipo = document.querySelector('select[name="tipo"]').value;
+    const producto_id = document.querySelector('select[name="producto"]').value;
+    const producto_select = document.querySelector('select[name="producto"]');
+    const producto_nombre = producto_select.options[producto_select.selectedIndex].text;
+    
     const ventanas = document.querySelector('input[name="ventanas"]').value;
     const ancho = document.querySelector('input[name="ancho"]').value;
     const alto = document.querySelector('input[name="alto"]').value;
     const precio = document.getElementById('precio-estimado').textContent;
     
-    const tipos_texto = {
-        'roller-translucida': 'Roller Traslúcida',
-        'roller-blackout': 'Roller Blackout',
-        'roller-sunscreen': 'Roller Sunscreen',
-        'toldo': 'Toldo',
-        'banda-vertical': 'Banda Vertical'
-    };
-    
     const mensaje = `Hola! Me interesa cotizar:
-    
-📋 Tipo: ${tipos_texto[tipo] || tipo}
+
+📋 Producto: ${producto_nombre}
 🪟 Ventanas: ${ventanas}
 📏 Ancho: ${ancho} cm
 📏 Alto: ${alto} cm

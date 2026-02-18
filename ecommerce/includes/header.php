@@ -285,89 +285,81 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
       }
       
       .cotizador-rapido {
-        background: rgba(255, 255, 255, 0.95);
+        background: white;
         color: #333;
-        padding: 40px;
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        max-width: 600px;
+        padding: 50px 40px;
+        border-radius: 15px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        max-width: 700px;
         margin: 0 auto;
       }
       
       .cotizador-rapido h3 {
-        color: #667eea;
+        color: #25D366;
         font-weight: bold;
         font-size: 1.8rem;
-        margin-bottom: 25px;
+        margin-bottom: 5px;
+      }
+      
+      .cotizador-rapido .text-muted {
+        font-size: 1rem;
       }
       
       .cotizador-rapido .form-label {
-        color: #555;
+        color: #333;
         font-weight: 600;
         font-size: 0.95rem;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
       }
       
       .cotizador-rapido .form-select,
       .cotizador-rapido .form-control {
         border: 2px solid #e0e0e0;
-        border-radius: 6px;
-        padding: 12px;
+        border-radius: 8px;
+        padding: 12px 15px;
         font-size: 0.95rem;
-        transition: border-color 0.3s ease;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
       }
       
       .cotizador-rapido .form-select:focus,
       .cotizador-rapido .form-control:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        border-color: #25D366;
+        box-shadow: 0 0 0 0.2rem rgba(37, 211, 102, 0.15);
       }
       
-      .cotizador-rapido .btn {
-        border-radius: 6px;
-        padding: 12px 20px;
+      .cotizador-rapido .btn-success {
+        background: #25D366;
+        border: none;
+        border-radius: 8px;
+        padding: 14px 24px;
         font-size: 0.95rem;
         transition: all 0.3s ease;
       }
       
-      .cotizador-rapido .btn-light {
-        background: #667eea;
-        color: white;
-        border: none;
-      }
-      
-      .cotizador-rapido .btn-light:hover {
-        background: #764ba2;
+      .cotizador-rapido .btn-success:hover {
+        background: #1ebe5d;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 6px 20px rgba(37, 211, 102, 0.35);
       }
       
-      .cotizador-rapido .alert-light {
-        background: #f8f9ff;
-        border-left: 5px solid #667eea;
+      .cotizador-rapido .alert-success {
+        background: #f0fdf4;
+        border: 2px solid #25D366;
+        border-radius: 10px;
       }
       
-      .cotizador-rapido .alert-light h4 {
-        color: #667eea;
-        font-size: 1.5rem;
-        margin-bottom: 10px;
+      .cotizador-rapido .alert-success h4 {
+        font-size: 1.1rem;
       }
       
-      .cotizador-rapido .btn-warning {
-        background: #ffc107;
-        color: #333;
-        border: none;
-      }
-      
-      .cotizador-rapido .btn-warning:hover {
-        background: #ffb300;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+      .cotizador-rapido .alert-success h2 {
+        font-size: 2.2rem;
+        font-weight: bold;
       }
       
       @media (max-width: 768px) {
         .cotizador-rapido {
-          padding: 25px;
+          padding: 30px 20px;
         }
         
         .cotizador-rapido h3 {
@@ -376,6 +368,10 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
         
         .cotizador-rapido .row.g-3 {
           row-gap: 1.5rem;
+        }
+        
+        .cotizador-rapido .alert-success h2 {
+          font-size: 1.8rem;
         }
       }
     </style>
