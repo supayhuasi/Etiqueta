@@ -50,7 +50,9 @@ try {
     $columnas_nombres = array_column($columnas, 'Field');
     
     // Determinar qué columna usar para las fechas
-    if (in_array('fecha_creacion', $columnas_nombres)) {
+    if (in_array('fecha_pedido', $columnas_nombres)) {
+        $fecha_columna = 'fecha_pedido';
+    } elseif (in_array('fecha_creacion', $columnas_nombres)) {
         $fecha_columna = 'fecha_creacion';
     } elseif (in_array('fecha', $columnas_nombres)) {
         $fecha_columna = 'fecha';
