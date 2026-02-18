@@ -1,4 +1,7 @@
 <?php
+// Definir constante de seguridad
+define('SECURITY_CHECK', true);
+
 session_start();
 if (isset($_SESSION['user'])) {
   header("Location: ../index.php");
@@ -8,6 +11,7 @@ if (isset($_SESSION['user'])) {
 // Obtener config desde 4 niveles arriba (../../config.php)
 $base_path = dirname(dirname(dirname(dirname(__FILE__))));
 require $base_path . '/config.php';
+require $base_path . '/ecommerce/includes/security.php';
 
 $empresa = null;
 try {
@@ -56,11 +60,12 @@ if (!empty($empresa['logo'])) {
           <?php endif; ?>
 
           <form method="post" action="check.php">
+            <?= csrf_field() ?>
             <div class="mb-3">
-              <input type="text" name="usuario" class="form-control" placeholder="Usuario" required>
+              <input type="text" name="usuario" class="form-control" placeholder="Usuario" required autocomplete="username">
             </div>
             <div class="mb-3">
-              <input type="password" name="password" class="form-control" placeholder="Contraseña" required>
+              <input type="password" name="password" class="form-control" placeholder="Contraseña" required autocomplete="current-password">
             </div>
             <button class="btn btn-primary w-100">Ingresar</button>
           </form>

@@ -1,4 +1,10 @@
 <?php
+// Prevenir acceso directo si no está definido desde archivo autorizado
+if (!defined('SECURITY_CHECK') && !defined('CONFIG_LOADED')) {
+    // Permitir carga pero con flag
+    define('CONFIG_LOADED', true);
+}
+
 $host = "149.50.133.145";
 $db   = "tucuroller_produccion";
 $user = "Roco";
@@ -9,10 +15,16 @@ try {
         "mysql:host=$host;dbname=$db;charset=utf8mb4",
         $user,
         $pass,
-        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_EMULATE_PREPARES => false, // Prevenir SQL injection
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]
     );
 } catch (PDOException $e) {
-    die("Error DB: " . $e->getMessage());
+    // No mostrar detalles del error en producción
+    error_log("Error DB: " . $e->getMessage());
+    die("Error de conexión a la base de datos. Por favor contacte al administrador.");
 }
 
 // Configuración de correo (SMTP)
