@@ -1041,8 +1041,11 @@ function guardarItemDesdeModal() {
             if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
         }
     } catch(e){}
-    modalEl.setAttribute('aria-hidden', 'true');
-    try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+    // aplicar aria-hidden/inert en el siguiente tick, tras permitir que blur/focus se efectúe
+    setTimeout(() => {
+        try { modalEl.setAttribute('aria-hidden', 'true'); } catch(e){}
+        try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+    }, 0);
     document.body.classList.remove('modal-open');
     document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
 }
