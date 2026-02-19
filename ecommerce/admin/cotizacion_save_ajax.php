@@ -9,8 +9,9 @@ try {
     try {
         $logsDir = __DIR__ . '/logs';
         if (!is_dir($logsDir)) @mkdir($logsDir, 0755, true);
-        @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "--- " . date('c') . " ---\nPOST_keys: " . implode(',', array_keys($_POST)) . "\n\n", FILE_APPEND);
-    } catch (Exception $e) {}
+        $res = @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "--- " . date('c') . " ---\nPOST_keys: " . implode(',', array_keys($_POST)) . "\n\n", FILE_APPEND);
+        if ($res === false) error_log('cotizacion_save_ajax: failed to write to ' . $logsDir . '/cotizacion_save_ajax.log');
+    } catch (Exception $e) { error_log('cotizacion_save_ajax: log init exception: ' . $e->getMessage()); }
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método no permitido');
 
     // decode items_json if present
@@ -126,12 +127,12 @@ try {
 
     $cotizacion_id = $pdo->lastInsertId();
 
-    try { @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "Inserted id: " . $cotizacion_id . "\n", FILE_APPEND); } catch (Exception $e) {}
+    try { $res = @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "Inserted id: " . $cotizacion_id . "\n", FILE_APPEND); if ($res === false) error_log('cotizacion_save_ajax: failed to append inserted id'); } catch (Exception $e) { error_log('cotizacion_save_ajax: append exception: ' . $e->getMessage()); }
 
     echo json_encode(['success' => true, 'id' => $cotizacion_id, 'redirect' => 'cotizacion_detalle.php?id=' . $cotizacion_id]);
     exit;
 } catch (Exception $e) {
-    try { @file_put_contents(__DIR__ . '/logs/cotizacion_save_ajax.log', "ERROR: " . $e->getMessage() . "\n\n", FILE_APPEND); } catch (Exception $ex) {}
+    try { $res = @file_put_contents(__DIR__ . '/logs/cotizacion_save_ajax.log', "ERROR: " . $e->getMessage() . "\n\n", FILE_APPEND); if ($res === false) error_log('cotizacion_save_ajax: failed to write error to log'); } catch (Exception $ex) { error_log('cotizacion_save_ajax: error write exception: ' . $ex->getMessage()); }
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     exit;

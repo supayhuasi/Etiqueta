@@ -34,8 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!is_dir($logsDir)) {
             @mkdir($logsDir, 0755, true);
         }
-        @file_put_contents($logsDir . '/cotizacion_post.log', "=== POST ENTRY " . date('c') . " ===\n" . print_r($_POST, true) . "\n", FILE_APPEND);
-    } catch (Exception $e) {}
+        $res = @file_put_contents($logsDir . '/cotizacion_post.log', "=== POST ENTRY " . date('c') . " ===\n" . print_r($_POST, true) . "\n", FILE_APPEND);
+        if ($res === false) error_log('cotizacion_crear: failed to write to ' . $logsDir . '/cotizacion_post.log');
+    } catch (Exception $e) { error_log('cotizacion_crear: log init exception: ' . $e->getMessage()); }
     try {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
