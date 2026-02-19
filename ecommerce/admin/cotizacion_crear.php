@@ -712,7 +712,17 @@ function abrirModalItem(editIndex = null) {
 
 function resetearModalItem() {
     const form = document.getElementById('itemModalForm');
-    if (form) form.reset();
+    if (form) {
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(el => {
+            const type = (el.type || '').toLowerCase();
+            if (type === 'checkbox' || type === 'radio') {
+                el.checked = false;
+            } else {
+                el.value = '';
+            }
+        });
+    }
     const productoIdInput = document.getElementById('producto_id_modal');
     if (productoIdInput) productoIdInput.value = '';
     const precioInput = document.getElementById('precio_modal');
