@@ -487,7 +487,7 @@ foreach ($lista_cat_rows as $row) {
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="form-label">Nombre del Producto *</label>
-                                <input type="text" class="form-control" id="nombre_modal" required>
+                                <input type="text" class="form-control" id="nombre_modal">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Descripción</label>
@@ -503,13 +503,13 @@ foreach ($lista_cat_rows as $row) {
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label">Cant. *</label>
-                                <input type="number" class="form-control" id="cantidad_modal" value="1" min="1" required>
+                                <input type="number" class="form-control" id="cantidad_modal" value="1" min="1">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Precio Unit. *</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
-                                    <input type="number" class="form-control" id="precio_modal" step="0.01" min="0" required onchange="actualizarBasePrecioModal()">
+                                    <input type="number" class="form-control" id="precio_modal" step="0.01" min="0" onchange="actualizarBasePrecioModal()">
                                 </div>
                                 <small class="text-muted">Se guarda como precio base, sin atributos.</small>
                             </div>
