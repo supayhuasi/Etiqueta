@@ -1362,25 +1362,41 @@ document.addEventListener('DOMContentLoaded', function() {
     const formCot = document.getElementById('formCotizacion');
     if (formCot) {
         formCot.addEventListener('submit', function(e) {
+            e.preventDefault();
             const items = document.querySelectorAll('.item-row');
             if (!items || items.length === 0) {
-                e.preventDefault();
                 alert('Debes agregar al menos un item antes de guardar la cotización.');
                 return false;
             }
-            // preparar items JSON para el servidor
             try {
                 const itemsArray = collectItemsForSubmit();
-                let input = document.querySelector('input[name="items_json"]');
-                if (!input) {
-                    input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'items_json';
-                    formCot.appendChild(input);
-                }
-                input.value = JSON.stringify(itemsArray);
-                try { console.log('Enviando cotizacion, items count:', itemsArray.length); } catch(e){}
-            } catch(e) { console.error('Error serializing items for submit', e); }
+                const fd = new FormData(formCot);
+                fd.set('items_json', JSON.stringify(itemsArray));
+                // Indicador para backend si fuera necesario
+                fd.set('ajax', '1');
+                const submitBtn = formCot.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+                fetch('cotizacion_save_ajax.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (submitBtn) submitBtn.disabled = false;
+                        if (!data || !data.success) {
+                            alert(data && data.error ? data.error : 'Error guardando cotización');
+                            return;
+                        }
+                        // redirigir a listado o detalle
+                        if (data.redirect) window.location.href = data.redirect; else window.location.href = 'cotizaciones.php?mensaje=creada';
+                    })
+                    .catch(err => {
+                        if (submitBtn) submitBtn.disabled = false;
+                        console.error('Error en AJAX save:', err);
+                        alert('No se pudo guardar la cotización (error de red).');
+                    });
+            } catch(e) {
+                console.error('Error serializing items for submit', e);
+                alert('Error preparando la cotización para enviar.');
+            }
+            return false;
         });
         // Force submit on button click to bypass other submit handlers that call preventDefault()
         try {
