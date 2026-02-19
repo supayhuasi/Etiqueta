@@ -335,6 +335,17 @@ foreach ($lista_cat_rows as $row) {
         </div>
     </div>
 
+    <style>
+        .modal-backdrop.show {
+            opacity: 0.4;
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+        }
+        .modal-content {
+            border-radius: 12px;
+        }
+    </style>
+
     <!-- Modal Agregar/Editar Item -->
     <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -933,14 +944,27 @@ function guardarItemDesdeModal() {
     const atributos = obtenerAtributosDesdeModal();
     if (atributos === null) return;
 
+    const cantidadValue = parseInt(document.getElementById('cantidad_modal').value || '0', 10);
+    const precioRaw = String(document.getElementById('precio_modal').value || '').replace(',', '.');
+    const precioValue = parseFloat(precioRaw);
+
+    if (!Number.isFinite(cantidadValue) || cantidadValue <= 0) {
+        alert('Ingresá una cantidad válida.');
+        return;
+    }
+    if (!Number.isFinite(precioValue) || precioValue <= 0) {
+        alert('Ingresá un precio válido.');
+        return;
+    }
+
     const itemData = {
         producto_id: document.getElementById('producto_id_modal').value || '',
         nombre: document.getElementById('nombre_modal').value.trim(),
         descripcion: document.getElementById('descripcion_modal').value.trim(),
         ancho: document.getElementById('ancho_modal').value,
         alto: document.getElementById('alto_modal').value,
-        cantidad: document.getElementById('cantidad_modal').value,
-        precio: document.getElementById('precio_modal').value,
+        cantidad: cantidadValue,
+        precio: precioValue.toFixed(2),
         atributos
     };
 
@@ -950,11 +974,16 @@ function guardarItemDesdeModal() {
     }
 
     let index = modalEditIndex;
+    const itemsContainer = document.getElementById('itemsContainer');
+    if (!itemsContainer) {
+        alert('No se encontró el contenedor de items.');
+        return;
+    }
     if (!index) {
         itemIndex++;
         index = itemIndex;
         const html = renderItemResumen(index, itemData);
-        document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+        itemsContainer.insertAdjacentHTML('beforeend', html);
     } else {
         const html = renderItemResumen(index, itemData);
         const row = document.getElementById(`item_${index}`);
@@ -963,7 +992,11 @@ function guardarItemDesdeModal() {
         }
     }
 
-    calcularTotales();
+    try {
+        calcularTotales();
+    } catch (err) {
+        console.error('Error calculando totales:', err);
+    }
     modalEditIndex = null;
     const modalEl = document.getElementById('itemModal');
     if (!modalEl) return;
