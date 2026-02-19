@@ -162,9 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Obtener productos activos para el selector
+// Obtener productos activos para el selector (incluir tipo_origen si existe)
+$cols_prod = $pdo->query("SHOW COLUMNS FROM ecommerce_productos")->fetchAll(PDO::FETCH_COLUMN, 0);
+$select_tipo = in_array('tipo_origen', $cols_prod, true) ? 'tipo_origen' : "'fabricacion_propia' as tipo_origen";
 $stmt = $pdo->query("
-    SELECT id, nombre, tipo_precio, precio_base, categoria_id
+    SELECT id, nombre, tipo_precio, precio_base, categoria_id, $select_tipo
     FROM ecommerce_productos
     WHERE activo = 1
     ORDER BY nombre
@@ -352,6 +354,10 @@ foreach ($lista_cat_rows as $row) {
                                 <label class="form-label">Producto del catálogo</label>
                                 <input type="text" class="form-control" list="productos-datalist" id="producto_input_modal" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeModalInput()">
                                 <input type="hidden" id="producto_id_modal">
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" value="1" id="filtrar_propios" checked>
+                                    <label class="form-check-label" for="filtrar_propios">Mostrar solo productos de fabricación propia</label>
+                                </div>
                                 <small class="text-muted">O completá manualmente los campos.</small>
                             </div>
                             <div class="col-md-5">
@@ -459,16 +465,27 @@ function calcularPrecioConLista(productoId, precioBase) {
 }
 
 function asegurarDatalistProductos() {
-    let datalist = document.getElementById('productos-datalist');
-    if (!datalist) {
-        datalist = document.createElement('datalist');
-        datalist.id = 'productos-datalist';
-        productos.forEach(p => {
-            const option = document.createElement('option');
-            option.value = productoLabel(p);
-            datalist.appendChild(option);
-        });
-        document.body.appendChild(datalist);
+    let existing = document.getElementById('productos-datalist');
+    if (existing) existing.remove();
+    const datalist = document.createElement('datalist');
+    datalist.id = 'productos-datalist';
+    const filterPropios = document.getElementById('filtrar_propios');
+    const listaProductos = Array.isArray(productos) ? productos.filter(p => {
+        try {
+            if (!filterPropios) return true;
+            if (!filterPropios.checked) return true;
+            return (p.tipo_origen || '') === 'fabricacion_propia';
+        } catch (e) { return true; }
+    }) : [];
+    listaProductos.forEach(p => {
+        const option = document.createElement('option');
+        option.value = productoLabel(p);
+        datalist.appendChild(option);
+    });
+    document.body.appendChild(datalist);
+    if (filterPropios) {
+        filterPropios.removeEventListener('change', asegurarDatalistProductos);
+        filterPropios.addEventListener('change', asegurarDatalistProductos);
     }
 }
 
