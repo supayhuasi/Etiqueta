@@ -467,7 +467,7 @@ foreach ($lista_cat_rows as $row) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <form id="itemModalForm" novalidate>
+                    <div id="itemModalForm">
                         <div class="row mb-3">
                             <div class="col-md-7">
                                 <label class="form-label">Producto del catálogo</label>
@@ -520,7 +520,7 @@ foreach ($lista_cat_rows as $row) {
                             <h6 class="mb-3">🎨 Atributos del Producto</h6>
                             <div id="atributos-list-modal"></div>
                         </div>
-                    </form>
+                    </div>
                 </div>
                 <div class="modal-footer px-4 py-3">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -1354,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btnGuardar.addEventListener('click', guardarItemDesdeModal);
     }
     const formModal = document.getElementById('itemModalForm') || document.querySelector('#itemModal form');
-    if (formModal) {
+    if (formModal && formModal.tagName === 'FORM') {
         formModal.addEventListener('submit', function(e) {
             e.preventDefault();
             guardarItemDesdeModal();
