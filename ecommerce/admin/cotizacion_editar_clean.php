@@ -538,6 +538,12 @@ function abrirModalItem(editIndex = null) {
     asegurarDatalistProductos();
     resetearModalItem();
 
+    // Guardar el elemento que tenía el foco antes de abrir el modal
+    try {
+        const prev = document.activeElement;
+        window.__lastFocusedBeforeModal = prev;
+    } catch (e) {}
+
     if (editIndex) {
         const itemData = obtenerItemDesdeDOM(editIndex);
         if (itemData) {
@@ -564,12 +570,14 @@ function abrirModalItem(editIndex = null) {
     if (!modalEl) return;
     if (window.bootstrap && bootstrap.Modal) {
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
         modal.show();
         return;
     }
     modalEl.classList.add('show');
     modalEl.style.display = 'block';
     modalEl.removeAttribute('aria-hidden');
+    try { if ('inert' in modalEl) modalEl.inert = false; } catch(e){}
     document.body.classList.add('modal-open');
     if (!document.querySelector('.modal-backdrop')) {
         const backdrop = document.createElement('div');
@@ -1013,12 +1021,28 @@ function guardarItemDesdeModal() {
     if (!modalEl) return;
     if (window.bootstrap && bootstrap.Modal) {
         const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+        // Restaurar/limpiar foco antes de cerrar
+        try {
+            const active = document.activeElement;
+            if (active && modalEl.contains(active)) {
+                const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+                if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+            }
+        } catch(e){}
         if (modal) modal.hide();
         return;
     }
     modalEl.classList.remove('show');
     modalEl.style.display = 'none';
+    try {
+        const active = document.activeElement;
+        if (active && modalEl.contains(active)) {
+            const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+            if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+        }
+    } catch(e){}
     modalEl.setAttribute('aria-hidden', 'true');
+    try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
     document.body.classList.remove('modal-open');
     document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
 }

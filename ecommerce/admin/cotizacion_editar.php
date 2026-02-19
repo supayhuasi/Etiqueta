@@ -528,6 +528,12 @@ function abrirModalItem(editIndex = null) {
     asegurarDatalistProductos();
     resetearModalItem();
 
+    // Guardar el elemento que tenía el foco antes de abrir el modal
+    try {
+        const prev = document.activeElement;
+        window.__lastFocusedBeforeModal = prev;
+    } catch (e) {}
+
     if (editIndex) {
         const itemData = obtenerItemDesdeDOM(editIndex);
         if (itemData) {
@@ -552,6 +558,7 @@ function abrirModalItem(editIndex = null) {
 
     const modalEl = document.getElementById('itemModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
     modal.show();
 }
 
@@ -955,6 +962,14 @@ function guardarItemDesdeModal() {
     calcularTotales();
     modalEditIndex = null;
     const modal = bootstrap.Modal.getInstance(document.getElementById('itemModal'));
+    try {
+        const modalEl = document.getElementById('itemModal');
+        const active = document.activeElement;
+        if (active && modalEl && modalEl.contains(active)) {
+            const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+            if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+        }
+    } catch(e){}
     if (modal) modal.hide();
 }
 
@@ -2119,6 +2134,14 @@ function guardarItemDesdeModal() {
     calcularTotales();
     modalEditIndex = null;
     const modal = bootstrap.Modal.getInstance(document.getElementById('itemModal'));
+    try {
+        const modalEl = document.getElementById('itemModal');
+        const active = document.activeElement;
+        if (active && modalEl && modalEl.contains(active)) {
+            const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+            if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+        }
+    } catch(e){}
     if (modal) modal.hide();
 }
 
@@ -2863,6 +2886,14 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
             calcularTotales();
             modalEditIndex = null;
             const modal = bootstrap.Modal.getInstance(document.getElementById('itemModal'));
+            try {
+                const modalEl = document.getElementById('itemModal');
+                const active = document.activeElement;
+                if (active && modalEl && modalEl.contains(active)) {
+                    const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+                    if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+                }
+            } catch(e){}
             if (modal) modal.hide();
         }
                 <div class="modal-header">
