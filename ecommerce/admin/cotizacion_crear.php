@@ -1004,12 +1004,8 @@ function renderItemResumen(index, itemData) {
 }
 
 function guardarItemDesdeModal() {
-    const form = document.getElementById('itemModalForm');
-    if (!form) {
-        alert('No se encontró el formulario del item.');
-        return;
-    }
-    if (!form.checkValidity()) {
+    const form = document.getElementById('itemModalForm') || document.querySelector('#itemModal form');
+    if (form && !form.checkValidity()) {
         form.reportValidity();
         return;
     }
@@ -1267,7 +1263,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnGuardar) {
         btnGuardar.addEventListener('click', guardarItemDesdeModal);
     }
-    const formModal = document.getElementById('itemModalForm');
+    const formModal = document.getElementById('itemModalForm') || document.querySelector('#itemModal form');
     if (formModal) {
         formModal.addEventListener('submit', function(e) {
             e.preventDefault();
