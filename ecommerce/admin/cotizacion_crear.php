@@ -28,15 +28,15 @@ if (!in_array('cupon_descuento', $cols_cot, true)) {
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Inicializar log de POST (registro inmediato para detectar fallos tempranos)
     try {
-        // DEBUG: registrar POST para ayudar a diagnosticar por qué no se guarda
-        try {
-            $logsDir = __DIR__ . '/logs';
-            if (!is_dir($logsDir)) {
-                @mkdir($logsDir, 0755, true);
-            }
-            @file_put_contents($logsDir . '/cotizacion_post.log', "--- " . date('c') . " ---\n" . print_r($_POST, true) . "\n", FILE_APPEND);
-        } catch (Exception $e) {}
+        $logsDir = __DIR__ . '/logs';
+        if (!is_dir($logsDir)) {
+            @mkdir($logsDir, 0755, true);
+        }
+        @file_put_contents($logsDir . '/cotizacion_post.log', "=== POST ENTRY " . date('c') . " ===\n" . print_r($_POST, true) . "\n", FILE_APPEND);
+    } catch (Exception $e) {}
+    try {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
@@ -228,6 +228,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
     } catch (Exception $e) {
         $error = $e->getMessage();
+        try {
+            if (!empty($logsDir)) {
+                @file_put_contents($logsDir . '/cotizacion_post.log', "!!! EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n", FILE_APPEND);
+            }
+        } catch (Exception $ex) {}
     }
 }
 
@@ -624,6 +629,7 @@ function agregarItem() {
 }
 
 function abrirModalItem(editIndex = null) {
+    try { console.debug('abrirModalItem', editIndex); } catch(e){}
     modalEditIndex = editIndex;
     asegurarDatalistProductos();
     resetearModalItem();
