@@ -136,7 +136,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
 
         $stmt->execute([
-$cols_prod = $pdo->query("SHOW COLUMNS FROM ecommerce_productos")->fetchAll(PDO::FETCH_COLUMN, 0);
+            $nombre_cliente,
+            $email,
+            $telefono,
+            $direccion,
+            $lista_precio_id,
+            json_encode($items_nuevos, JSON_UNESCAPED_UNICODE),
+            $subtotal,
             $descuento,
             $cupon_codigo ?: null,
             $cupon_descuento,
