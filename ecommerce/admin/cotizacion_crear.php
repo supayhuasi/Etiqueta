@@ -1082,10 +1082,25 @@ function renderItemResumen(index, itemData) {
     return html;
 }
 
+
 function guardarItemDesdeModal() {
-    const form = document.getElementById('itemModalForm') || document.querySelector('#itemModal form');
-    if (form && !form.checkValidity()) {
-        form.reportValidity();
+    // Validar manualmente los campos requeridos del modal
+    const nombre = document.getElementById('nombre_modal');
+    const cantidad = document.getElementById('cantidad_modal');
+    const precio = document.getElementById('precio_modal');
+    if (!nombre.value.trim()) {
+        alert('El nombre del producto es obligatorio.');
+        nombre.focus();
+        return;
+    }
+    if (!cantidad.value || parseInt(cantidad.value, 10) <= 0) {
+        alert('Ingresá una cantidad válida.');
+        cantidad.focus();
+        return;
+    }
+    if (!precio.value || parseFloat(precio.value) <= 0) {
+        alert('Ingresá un precio válido.');
+        precio.focus();
         return;
     }
 
