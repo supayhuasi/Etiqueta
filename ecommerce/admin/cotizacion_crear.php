@@ -1005,6 +1005,10 @@ function renderItemResumen(index, itemData) {
 
 function guardarItemDesdeModal() {
     const form = document.getElementById('itemModalForm');
+    if (!form) {
+        alert('No se encontró el formulario del item.');
+        return;
+    }
     if (!form.checkValidity()) {
         form.reportValidity();
         return;
