@@ -109,7 +109,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Procesar items
         $items = [];
         $subtotal = 0;
-        
+
+        // soportar items enviados como JSON desde el cliente
+        if (!empty($_POST['items_json'])) {
+            $decoded = json_decode($_POST['items_json'], true);
+            if (is_array($decoded)) {
+                $_POST['items'] = $decoded;
+            }
+        }
+
         if (isset($_POST['items']) && is_array($_POST['items'])) {
             foreach ($_POST['items'] as $item) {
                 if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
@@ -1360,8 +1368,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Debes agregar al menos un item antes de guardar la cotización.');
                 return false;
             }
-            // opcional: registrar en consola para depuración antes de enviar
-            try { console.log('Enviando cotizacion, items:', items.length); } catch(err){}
+            // preparar items JSON para el servidor
+            try {
+                const itemsArray = collectItemsForSubmit();
+                let input = document.querySelector('input[name="items_json"]');
+                if (!input) {
+                    input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'items_json';
+                    formCot.appendChild(input);
+                }
+                input.value = JSON.stringify(itemsArray);
+                try { console.log('Enviando cotizacion, items count:', itemsArray.length); } catch(e){}
+            } catch(e) { console.error('Error serializing items for submit', e); }
         });
         // Force submit on button click to bypass other submit handlers that call preventDefault()
         try {
@@ -1374,6 +1393,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('Debes agregar al menos un item antes de guardar la cotización.');
                         return false;
                     }
+                    // preparar items JSON para el servidor
+                    try {
+                        const itemsArray = collectItemsForSubmit();
+                        let input = document.querySelector('input[name="items_json"]');
+                        if (!input) {
+                            input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = 'items_json';
+                            formCot.appendChild(input);
+                        }
+                        input.value = JSON.stringify(itemsArray);
+                    } catch(e) { console.error('Error serializing items for submit', e); }
                     // prevenir el submit normal y forzar envío nativo (evita submit listeners)
                     e.preventDefault();
                     try { setTimeout(() => formCot.submit(), 0); } catch(err) { formCot.submit(); }
@@ -1382,6 +1413,46 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch(e) {}
     }
 });
+
+function collectItemsForSubmit() {
+    const items = [];
+    document.querySelectorAll('.item-row').forEach(row => {
+        const idMatch = (row.id || '').split('_')[1];
+        const idx = idMatch;
+        const nombre = document.getElementById(`nombre_${idx}`)?.value || '';
+        const descripcion = document.getElementById(`descripcion_${idx}`)?.value || '';
+        const ancho = document.getElementById(`ancho_${idx}`)?.value || '';
+        const alto = document.getElementById(`alto_${idx}`)?.value || '';
+        const cantidad = document.getElementById(`cantidad_${idx}`)?.value || 0;
+        const precio = document.getElementById(`precio_${idx}`)?.value || 0;
+        const producto_id = document.getElementById(`producto_id_${idx}`)?.value || null;
+
+        // recoger atributos asociados (si los hay)
+        const atributos = [];
+        // buscar inputs con nombre que empiece por items[idx][atributos]
+        try {
+            const attrInputs = row.querySelectorAll(`input[name^="items[${idx}][atributos]"]`);
+            // agrupar por id
+            const grouped = {};
+            attrInputs.forEach(inp => {
+                const name = inp.name; // e.g. items[1][atributos][3][nombre]
+                const m = name.match(/items\[\d+\]\[atributos\]\[(\d+)\]\[(\w+)\]/);
+                if (m) {
+                    const aid = m[1]; const key = m[2];
+                    grouped[aid] = grouped[aid] || {};
+                    grouped[aid][key] = inp.value;
+                }
+            });
+            Object.keys(grouped).forEach(aid => {
+                const g = grouped[aid];
+                atributos.push({ id: aid, nombre: g.nombre || '', valor: g.valor || '', costo: parseFloat(g.costo || 0) });
+            });
+        } catch(e) {}
+
+        items.push({ producto_id: producto_id || null, nombre, descripcion, ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0,10), precio: parseFloat(precio || 0), atributos });
+    });
+    return items;
+}
 </script>
 
 <?php require 'includes/footer.php'; ?>
