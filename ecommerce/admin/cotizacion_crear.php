@@ -427,11 +427,11 @@ foreach ($lista_cat_rows as $row) {
     <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header px-4 py-3">
                     <h5 class="modal-title" id="itemModalLabel">Agregar item</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4">
                     <form id="itemModalForm" novalidate>
                         <div class="row mb-3">
                             <div class="col-md-7">
@@ -483,7 +483,7 @@ foreach ($lista_cat_rows as $row) {
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer px-4 py-3">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="button" class="btn btn-primary" onclick="guardarItemDesdeModal()">Guardar item</button>
                 </div>
@@ -1029,8 +1029,18 @@ function guardarItemDesdeModal() {
 
     calcularTotales();
     modalEditIndex = null;
-    const modal = bootstrap.Modal.getInstance(document.getElementById('itemModal'));
-    if (modal) modal.hide();
+    const modalEl = document.getElementById('itemModal');
+    if (!modalEl) return;
+    if (window.bootstrap && bootstrap.Modal) {
+        const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+        if (modal) modal.hide();
+        return;
+    }
+    modalEl.classList.remove('show');
+    modalEl.style.display = 'none';
+    modalEl.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
 }
 
 function eliminarItem(index) {
