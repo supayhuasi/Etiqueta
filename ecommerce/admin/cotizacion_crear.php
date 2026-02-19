@@ -881,6 +881,7 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
 }
 
 function actualizarCostoAtributoModal(attrId, costoBase, costoOpcion, valorSeleccionado) {
+    try { console.debug('actualizarCostoAtributoModal', attrId, costoBase, costoOpcion, valorSeleccionado); } catch(e){}
     const inputCosto = document.getElementById(`modal_attr_costo_${attrId}`);
     if (!inputCosto) return;
 
@@ -1266,6 +1267,7 @@ function aplicarCupon() {
 }
 
 function marcarOpcionAtributo(radio) {
+    try { console.debug('marcarOpcionAtributo', radio && (radio.name || radio)); } catch(e){}
     if (!radio || !radio.name) return;
     
     // Encontrar el contenedor de opciones del atributo (el padre más cercano con flex wrap)
