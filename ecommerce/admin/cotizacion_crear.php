@@ -1376,21 +1376,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 fd.set('ajax', '1');
                 const submitBtn = formCot.querySelector('button[type="submit"]');
                 if (submitBtn) submitBtn.disabled = true;
-                fetch('cotizacion_save_ajax.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-                    .then(r => r.json())
-                    .then(data => {
+                console.debug('Enviando AJAX a cotizacion_save_ajax.php, items length:', itemsArray.length, 'formData keys:', Array.from(fd.keys()));
+                fetch('./cotizacion_save_ajax.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(r => r.text().then(t => ({ status: r.status, text: t })))
+                    .then(resp => {
                         if (submitBtn) submitBtn.disabled = false;
-                        if (!data || !data.success) {
-                            alert(data && data.error ? data.error : 'Error guardando cotización');
-                            return;
+                        console.debug('AJAX response status', resp.status, 'text:', resp.text);
+                        try {
+                            const data = JSON.parse(resp.text);
+                            if (!data || !data.success) {
+                                alert(data && data.error ? data.error : 'Error guardando cotización');
+                                return;
+                            }
+                            if (data.redirect) window.location.href = data.redirect; else window.location.href = 'cotizaciones.php?mensaje=creada';
+                        } catch (e) {
+                            alert('Respuesta inválida del servidor. Ver consola para detalles.');
+                            console.error('Invalid JSON response from server:', resp.text);
                         }
-                        // redirigir a listado o detalle
-                        if (data.redirect) window.location.href = data.redirect; else window.location.href = 'cotizaciones.php?mensaje=creada';
                     })
                     .catch(err => {
                         if (submitBtn) submitBtn.disabled = false;
                         console.error('Error en AJAX save:', err);
-                        alert('No se pudo guardar la cotización (error de red).');
+                        alert('No se pudo guardar la cotización (error de red). Revisa la consola y admin/logs/cotizacion_save_ajax.log');
                     });
             } catch(e) {
                 console.error('Error serializing items for submit', e);

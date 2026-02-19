@@ -5,6 +5,12 @@ require_once __DIR__ . '/../includes/descuentos.php';
 header('Content-Type: application/json; charset=utf-8');
 
 try {
+    // Log incoming raw post for debugging
+    try {
+        $logsDir = __DIR__ . '/logs';
+        if (!is_dir($logsDir)) @mkdir($logsDir, 0755, true);
+        @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "--- " . date('c') . " ---\nPOST_keys: " . implode(',', array_keys($_POST)) . "\n\n", FILE_APPEND);
+    } catch (Exception $e) {}
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método no permitido');
 
     // decode items_json if present
@@ -120,9 +126,12 @@ try {
 
     $cotizacion_id = $pdo->lastInsertId();
 
+    try { @file_put_contents($logsDir . '/cotizacion_save_ajax.log', "Inserted id: " . $cotizacion_id . "\n", FILE_APPEND); } catch (Exception $e) {}
+
     echo json_encode(['success' => true, 'id' => $cotizacion_id, 'redirect' => 'cotizacion_detalle.php?id=' . $cotizacion_id]);
     exit;
 } catch (Exception $e) {
+    try { @file_put_contents(__DIR__ . '/logs/cotizacion_save_ajax.log', "ERROR: " . $e->getMessage() . "\n\n", FILE_APPEND); } catch (Exception $ex) {}
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     exit;
