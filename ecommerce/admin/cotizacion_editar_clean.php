@@ -2,6 +2,17 @@
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 
+$id = intval($_GET['id'] ?? 0);
+
+$stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
+$stmt->execute([$id]);
+$cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$cotizacion) {
+    die("Cotización no encontrada");
+}
+
+$items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = '';
 $error = '';
 
@@ -36,83 +47,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
-        $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
-        $guardar_cliente = isset($_POST['guardar_cliente']) ? 1 : 0;
-        
-        // Validaciones
+
         if (empty($nombre_cliente)) {
             throw new Exception("Nombre es obligatorio");
         }
-        
+
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Email no válido");
         }
-        
-        // Resolver cliente si corresponde
-        if ($cliente_id > 0) {
-            $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE id = ?");
-            $stmt->execute([$cliente_id]);
-            if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
-                $cliente_id = 0;
-            }
-        }
 
-        if ($cliente_id <= 0 && $guardar_cliente) {
-            $email_normalizado = $email ? strtolower(trim($email)) : '';
-            if ($email_normalizado) {
-                $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE email = ? LIMIT 1");
-                $stmt->execute([$email_normalizado]);
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                if ($row) {
-                    $cliente_id = (int)$row['id'];
-                }
-            }
-
-            if ($cliente_id <= 0) {
-                // Intentar insertar con direccion, si falla usar empresa
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
-                        VALUES (?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([
-                        $nombre_cliente,
-                        $email ? $email : null,
-                        $telefono ? $telefono : null,
-                        $direccion ? $direccion : null
-                    ]);
-                } catch (Exception $e) {
-                    // Fallback a empresa si direccion no existe
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
-                        VALUES (?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([
-                        $nombre_cliente,
-                        $email ? $email : null,
-                        $telefono ? $telefono : null,
-                        $direccion ? $direccion : null
-                    ]);
-                }
-                $cliente_id = (int)$pdo->lastInsertId();
-            }
-        }
-
-        // Procesar items
-        $items = [];
+        $items_nuevos = [];
         $subtotal = 0;
-        
+
         if (isset($_POST['items']) && is_array($_POST['items'])) {
             foreach ($_POST['items'] as $item) {
                 if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
                     continue;
                 }
-                
+
                 $cantidad = intval($item['cantidad']);
                 $precio = floatval($item['precio']);
                 $total_item = $cantidad * $precio;
-                
-                // Procesar atributos si existen
+
                 $atributos = [];
                 $costo_atributos_total = 0;
                 if (!empty($item['atributos']) && is_array($item['atributos'])) {
@@ -128,12 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                 }
-                
-                // Agregar costo de atributos al precio unitario
+
                 $precio_total_unitario = $precio + $costo_atributos_total;
                 $total_item = $cantidad * $precio_total_unitario;
-                
-                $items[] = [
+
+                $items_nuevos[] = [
                     'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
                     'nombre' => $item['nombre'],
                     'descripcion' => $item['descripcion'] ?? '',
@@ -145,15 +100,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'precio_unitario' => $precio_total_unitario,
                     'precio_total' => $total_item
                 ];
-                
+
                 $subtotal += $total_item;
             }
         }
-        
-        if (empty($items)) {
+
+        if (empty($items_nuevos)) {
             throw new Exception("Debe agregar al menos un item");
         }
-        
+
         $descuento = floatval($_POST['descuento'] ?? 0);
         $cupon_codigo = normalizar_codigo_descuento((string)($_POST['cupon_codigo'] ?? ''));
         $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
@@ -172,37 +127,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $total = $subtotal - $descuento - $cupon_descuento;
-        
-        // Generar número de cotización
-        $año = date('Y');
-        $stmt = $pdo->query("SELECT MAX(id) as max_id FROM ecommerce_cotizaciones");
-        $max_id = $stmt->fetch()['max_id'] ?? 0;
-        $numero_cotizacion = 'COT-' . $año . '-' . str_pad($max_id + 1, 5, '0', STR_PAD_LEFT);
-        
-        // Guardar cotización (compatible con empresa/direccion)
-        try {
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_cotizaciones 
-                (numero_cotizacion, nombre_cliente, email, telefono, direccion, cliente_id, lista_precio_id, items, subtotal, descuento, cupon_codigo, cupon_descuento, total, observaciones, validez_dias, creado_por)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-        } catch (Exception $e) {
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_cotizaciones 
-                (numero_cotizacion, nombre_cliente, email, telefono, empresa, cliente_id, lista_precio_id, items, subtotal, descuento, cupon_codigo, cupon_descuento, total, observaciones, validez_dias, creado_por)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-        }
-        
+
+        $stmt = $pdo->prepare("
+            UPDATE ecommerce_cotizaciones
+            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,
+                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
+            WHERE id = ?
+        ");
+
         $stmt->execute([
-            $numero_cotizacion,
             $nombre_cliente,
             $email,
             $telefono,
             $direccion,
-            $cliente_id ?: null,
             $lista_precio_id,
-            json_encode($items),
+            json_encode($items_nuevos),
             $subtotal,
             $descuento,
             $cupon_codigo ?: null,
@@ -210,14 +149,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $total,
             $observaciones,
             $validez_dias,
-            $_SESSION['user']['id']
+            $id
         ]);
-        
-        $cotizacion_id = $pdo->lastInsertId();
-        
-        header("Location: cotizaciones.php?mensaje=creada");
+
+        header("Location: cotizacion_detalle.php?id=" . $id);
         exit;
-        
+
     } catch (Exception $e) {
         $error = $e->getMessage();
     }
@@ -225,9 +162,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Obtener productos activos para el selector
 $stmt = $pdo->query("
-    SELECT id, nombre, tipo_precio, precio_base, categoria_id 
-    FROM ecommerce_productos 
-    WHERE activo = 1 
+    SELECT id, nombre, tipo_precio, precio_base, categoria_id
+    FROM ecommerce_productos
+    WHERE activo = 1
     ORDER BY nombre
 ");
 $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -235,10 +172,6 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Listas de precios activas
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
 $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Clientes para cotizaciones
-$stmt = $pdo->query("SELECT id, nombre, email, telefono, direccion FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
-$clientes_cot = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
 $lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -260,10 +193,9 @@ foreach ($lista_cat_rows as $row) {
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1>➕ Nueva Cotización</h1>
-        <p class="text-muted">Crear una cotización/presupuesto para un cliente</p>
+        <h1>✏️ Editar Cotización <?= htmlspecialchars($cotizacion['numero_cotizacion']) ?></h1>
     </div>
-    <a href="cotizaciones.php" class="btn btn-secondary">← Volver</a>
+    <a href="cotizacion_detalle.php?id=<?= $id ?>" class="btn btn-secondary">← Volver</a>
 </div>
 
 <?php if ($error): ?>
@@ -298,7 +230,6 @@ foreach ($lista_cat_rows as $row) {
         }
     </style>
     <div class="row">
-        <!-- Información del Cliente -->
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
@@ -307,25 +238,24 @@ foreach ($lista_cat_rows as $row) {
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="nombre_cliente" class="form-label">Nombre Completo *</label>
-                        <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" required>
+                        <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" value="<?= htmlspecialchars($cotizacion['nombre_cliente'] ?? '') ?>" required>
                     </div>
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email">
+                        <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cotizacion['email'] ?? '') ?>">
                     </div>
                     <div class="mb-3">
                         <label for="telefono" class="form-label">Teléfono</label>
-                        <input type="text" class="form-control" id="telefono" name="telefono">
+                        <input type="text" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars($cotizacion['telefono'] ?? '') ?>">
                     </div>
                     <div class="mb-3">
                         <label for="direccion" class="form-label">Dirección</label>
-                        <input type="text" class="form-control" id="direccion" name="direccion">
+                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cotizacion['direccion'] ?? '') ?>">
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Configuración -->
+
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header bg-info text-white">
@@ -334,7 +264,7 @@ foreach ($lista_cat_rows as $row) {
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="validez_dias" class="form-label">Validez (días)</label>
-                        <input type="number" class="form-control" id="validez_dias" name="validez_dias" value="15" min="1" max="90">
+                        <input type="number" class="form-control" id="validez_dias" name="validez_dias" value="<?= (int)$cotizacion['validez_dias'] ?>" min="1" max="90">
                         <small class="text-muted">Días de validez del presupuesto</small>
                     </div>
                     <div class="mb-3">
@@ -342,47 +272,33 @@ foreach ($lista_cat_rows as $row) {
                         <select class="form-select" id="lista_precio_id" name="lista_precio_id" onchange="aplicarListaPrecios()">
                             <option value="">-- Sin lista --</option>
                             <?php foreach ($listas_precios as $lista): ?>
-                                <option value="<?= $lista['id'] ?>"><?= htmlspecialchars($lista['nombre']) ?></option>
+                                <option value="<?= $lista['id'] ?>" <?= (int)($cotizacion['lista_precio_id'] ?? 0) === (int)$lista['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($lista['nombre']) ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
                     </div>
                     <div class="mb-3">
-                        <label for="cliente_id" class="form-label">Cliente</label>
-                        <select class="form-select" id="cliente_id" name="cliente_id" onchange="autocompletarCliente()">
-                            <option value="">-- Seleccionar cliente --</option>
-                            <?php foreach ($clientes_cot as $cli): ?>
-                                <option value="<?= $cli['id'] ?>">
-                                    <?= htmlspecialchars($cli['nombre']) ?><?= !empty($cli['empresa']) ? ' - ' . htmlspecialchars($cli['empresa']) : '' ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small class="text-muted">Si seleccionás un cliente, se completan los datos.</small>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" value="1" id="guardar_cliente" name="guardar_cliente">
-                        <label class="form-check-label" for="guardar_cliente">Guardar cliente en agenda</label>
-                    </div>
-                    <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
-                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas internas, condiciones especiales, etc."></textarea>
+                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4"><?= htmlspecialchars($cotizacion['observaciones'] ?? '') ?></textarea>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Items -->
+
     <div class="card mb-4">
         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0">📦 Items de la Cotización</h5>
-            <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light btn-sm" onclick="actualizarPreciosCotizacion()">🔄 Actualizar precios</button>
+                <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
+            </div>
         </div>
         <div class="card-body">
-            <div id="itemsContainer">
-                <!-- Los items se agregan dinámicamente aquí -->
-            </div>
-            
+            <div id="itemsContainer"></div>
+
             <div class="row mt-4">
                 <div class="col-md-8"></div>
                 <div class="col-md-4">
@@ -392,24 +308,20 @@ foreach ($lista_cat_rows as $row) {
                             <td class="text-end"><span id="subtotal">$0.00</span></td>
                         </tr>
                         <tr>
-                            <th>
-                                <label for="descuento">Descuento:</label>
-                            </th>
+                            <th><label for="descuento">Descuento:</label></th>
                             <td class="text-end">
-                                <input type="number" class="form-control form-control-sm text-end" id="descuento" name="descuento" value="0" step="0.01" min="0" onchange="calcularTotales()">
+                                <input type="number" class="form-control form-control-sm text-end" id="descuento" name="descuento" value="<?= (float)($cotizacion['descuento'] ?? 0) ?>" step="0.01" min="0" onchange="calcularTotales()">
                                 <small id="descuento_lista_info" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr>
-                            <th>
-                                <label for="cupon_codigo">Cupón:</label>
-                            </th>
+                            <th><label for="cupon_codigo">Cupón:</label></th>
                             <td class="text-end">
                                 <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control text-end" id="cupon_codigo" name="cupon_codigo" placeholder="Código">
+                                    <input type="text" class="form-control text-end" id="cupon_codigo" name="cupon_codigo" value="<?= htmlspecialchars($cotizacion['cupon_codigo'] ?? '') ?>" placeholder="Código">
                                     <button class="btn btn-outline-secondary" type="button" onclick="aplicarCupon()">Aplicar</button>
                                 </div>
-                                <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="0">
+                                <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="<?= (float)($cotizacion['cupon_descuento'] ?? 0) ?>">
                                 <small id="cupon_info" class="text-muted d-block"></small>
                             </td>
                         </tr>
@@ -422,7 +334,7 @@ foreach ($lista_cat_rows as $row) {
             </div>
         </div>
     </div>
-    
+
     <!-- Modal Agregar/Editar Item -->
     <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -476,7 +388,6 @@ foreach ($lista_cat_rows as $row) {
                             </div>
                         </div>
 
-                        <!-- Atributos del producto -->
                         <div id="atributos-container-modal" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
                             <h6 class="mb-3">🎨 Atributos del Producto</h6>
                             <div id="atributos-list-modal"></div>
@@ -490,19 +401,20 @@ foreach ($lista_cat_rows as $row) {
             </div>
         </div>
     </div>
-    
+
     <div class="text-center">
-        <button type="submit" class="btn btn-primary btn-lg">💾 Crear Cotización</button>
-        <a href="cotizaciones.php" class="btn btn-secondary btn-lg">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-lg">💾 Guardar Cambios</button>
+        <a href="cotizacion_detalle.php?id=<?= $id ?>" class="btn btn-secondary btn-lg">Cancelar</a>
     </div>
 </form>
 
 <script>
 let itemIndex = 0;
+let modalEditIndex = null;
+const itemsExistentes = <?= json_encode($items) ?>;
 const productos = <?= json_encode($productos) ?>;
 const listaItems = <?= json_encode($lista_items_map) ?>;
 const listaCategorias = <?= json_encode($lista_cat_map) ?>;
-const clientesCot = <?= json_encode($clientes_cot) ?>;
 
 function productoLabel(p) {
     const precioLabel = p.tipo_precio === 'variable'
@@ -544,27 +456,6 @@ function calcularPrecioConLista(productoId, precioBase) {
     return precioBase;
 }
 
-function actualizarCostoAtributo(index, attrId, costoBase, costoOpcion, valorSeleccionado) {
-    const inputCosto = document.getElementById(`attr_costo_${attrId}_${index}`);
-    if (!inputCosto) return;
-
-    const base = parseFloat(costoBase || 0);
-    const opcion = parseFloat(costoOpcion || 0);
-    const tieneValor = valorSeleccionado !== undefined && valorSeleccionado !== null && String(valorSeleccionado).trim() !== '';
-
-    if (!tieneValor) {
-        inputCosto.value = '0';
-    } else if (opcion > 0) {
-        inputCosto.value = opcion.toFixed(2);
-    } else if (base > 0) {
-        inputCosto.value = base.toFixed(2);
-    } else {
-        inputCosto.value = '0';
-    }
-
-    calcularTotales();
-}
-
 function asegurarDatalistProductos() {
     let datalist = document.getElementById('productos-datalist');
     if (!datalist) {
@@ -579,10 +470,55 @@ function asegurarDatalistProductos() {
     }
 }
 
-let modalEditIndex = null;
+function agregarItem(itemData = null) {
+    if (!itemData) {
+        abrirModalItem();
+        return;
+    }
 
-function agregarItem() {
-    abrirModalItem();
+    itemIndex++;
+    const normalizado = normalizarItemData(itemData);
+    const html = renderItemResumen(itemIndex, normalizado);
+    document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+    calcularTotales();
+}
+
+function normalizarItemData(item) {
+    const costoAtributosItem = Array.isArray(item.atributos)
+        ? item.atributos.reduce((sum, attr) => {
+            const costo = parseFloat(attr?.costo_adicional ?? attr?.costo ?? 0) || 0;
+            return sum + costo;
+        }, 0)
+        : 0;
+
+    let precioBaseCalculado = null;
+    if (item.precio_base !== undefined && item.precio_base !== null && String(item.precio_base) !== '') {
+        precioBaseCalculado = parseFloat(item.precio_base);
+    } else if (item.precio_unitario !== undefined && item.precio_unitario !== null && String(item.precio_unitario) !== '') {
+        precioBaseCalculado = parseFloat(item.precio_unitario) - costoAtributosItem;
+    } else if (item.precio !== undefined && item.precio !== null && String(item.precio) !== '') {
+        precioBaseCalculado = parseFloat(item.precio);
+    }
+
+    if (!isFinite(precioBaseCalculado) || precioBaseCalculado < 0) {
+        precioBaseCalculado = 0;
+    }
+
+    return {
+        producto_id: item.producto_id || '',
+        nombre: item.nombre || '',
+        descripcion: item.descripcion || '',
+        ancho: item.ancho || '',
+        alto: item.alto || '',
+        cantidad: item.cantidad || 1,
+        precio: precioBaseCalculado.toFixed(2),
+        atributos: Array.isArray(item.atributos) ? item.atributos.map(a => ({
+            id: a.id,
+            nombre: a.nombre,
+            valor: a.valor,
+            costo: parseFloat(a.costo_adicional ?? a.costo ?? 0) || 0
+        })) : []
+    };
 }
 
 function abrirModalItem(editIndex = null) {
@@ -635,6 +571,7 @@ function obtenerProductoPorTexto(texto) {
     const textoNormalizado = texto.toLowerCase();
     return productos.find(p => productoLabel(p).toLowerCase() === textoNormalizado);
 }
+
 function cargarProductoDesdeModalInput() {
     const input = document.getElementById('producto_input_modal');
     const texto = input.value.trim();
@@ -688,7 +625,6 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                 document.getElementById('atributos-container-modal').style.display = 'block';
 
                 data.atributos.forEach(attr => {
-                    const valorPrevio = valoresExistentes.find(v => String(v.id) === String(attr.id));
                     const requerido = attr.es_obligatorio ? 'required' : '';
                     let inputHTML = '';
 
@@ -1021,7 +957,7 @@ function guardarItemDesdeModal() {
 }
 
 function eliminarItem(index) {
-    document.getElementById('item_' + index).remove();
+    document.getElementById('item_' + index)?.remove();
     calcularTotales();
 }
 
@@ -1041,11 +977,8 @@ function calcularTotales() {
             costoAtributos += parseFloat(input.value || 0);
         });
 
-        // NO modificar el input de precio - PHP se encargará de sumar atributos
-        // Solo usar precioBase para el cálculo local
-        const subtotalItem = cantidad * (precioBase + costoAtributos);
+    const subtotalItem = cantidad * (precioBase + costoAtributos);
 
-        // Actualizar subtotal del item
         const subtotalInput = row.querySelector('.item-subtotal');
         if (subtotalInput) {
             subtotalInput.value = subtotalItem.toFixed(2);
@@ -1121,17 +1054,12 @@ function aplicarCupon() {
 
 function marcarOpcionAtributo(radio) {
     if (!radio || !radio.name) return;
-    
-    // Encontrar el contenedor de opciones del atributo (el padre más cercano con flex wrap)
     const label = radio.closest('label');
     if (!label) return;
-    
     const divPadre = label.parentElement;
     if (!divPadre || !divPadre.parentElement) return;
-    
     const contenedorOpciones = divPadre.parentElement;
-    
-    // Desmarcar todas las opciones del mismo atributo
+
     contenedorOpciones.querySelectorAll('input[type="radio"][name="' + radio.name + '"]').forEach(r => {
         const l = r.closest('label');
         if (l) {
@@ -1143,8 +1071,7 @@ function marcarOpcionAtributo(radio) {
             }
         }
     });
-    
-    // Marcar la opción seleccionada
+
     if (radio.checked) {
         const divOpcion = label.querySelector('.attr-option');
         if (divOpcion) {
@@ -1155,6 +1082,69 @@ function marcarOpcionAtributo(radio) {
     }
 }
 
+function aplicarListaPrecios() {
+    calcularTotales();
+}
+
+function obtenerIndexDesdeRow(row) {
+    const id = row?.id || '';
+    const match = id.match(/item_(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+function actualizarPreciosCotizacion() {
+    const filas = Array.from(document.querySelectorAll('.item-row'));
+    if (filas.length === 0) {
+        return;
+    }
+
+    const tareas = filas.map(row => {
+        const index = obtenerIndexDesdeRow(row);
+        if (!index) return Promise.resolve();
+
+        const productoId = document.getElementById(`producto_id_${index}`)?.value;
+        if (!productoId) return Promise.resolve();
+
+        const producto = productos.find(p => String(p.id) === String(productoId));
+        if (!producto) return Promise.resolve();
+
+        if (producto.tipo_precio === 'fijo') {
+            const precioBase = parseFloat(producto.precio_base || 0);
+            const precioInput = document.getElementById(`precio_${index}`);
+            if (precioInput) {
+                precioInput.dataset.base = precioBase.toFixed(2);
+                precioInput.value = precioBase.toFixed(2);
+            }
+            return Promise.resolve();
+        }
+
+        const ancho = parseFloat(document.getElementById(`ancho_${index}`)?.value || 0);
+        const alto = parseFloat(document.getElementById(`alto_${index}`)?.value || 0);
+        if (ancho <= 0 || alto <= 0) {
+            return Promise.resolve();
+        }
+
+        return fetch(`cotizacion_producto_precio.php?producto_id=${productoId}&ancho=${ancho}&alto=${alto}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    return;
+                }
+                const precioBase = parseFloat(data.precio || 0);
+                const precioInput = document.getElementById(`precio_${index}`);
+                if (precioInput) {
+                    precioInput.dataset.base = precioBase.toFixed(2);
+                    precioInput.value = precioBase.toFixed(2);
+                }
+            })
+            .catch(() => {});
+    });
+
+    Promise.all(tareas).then(() => {
+        calcularTotales();
+    });
+}
+
 document.addEventListener('change', function(e) {
     const radio = e.target;
     if (radio && radio.matches('input[type="radio"].attr-radio')) {
@@ -1162,35 +1152,12 @@ document.addEventListener('change', function(e) {
     }
 });
 
-
-
-function aplicarListaPrecios() {
-    calcularTotales();
-}
-
-function autocompletarCliente() {
-    const select = document.getElementById('cliente_id');
-    const clienteId = select ? parseInt(select.value || '0', 10) : 0;
-    if (!clienteId) {
-        return;
-    }
-    const cliente = clientesCot.find(c => String(c.id) === String(clienteId));
-    if (!cliente) {
-        return;
-    }
-    const nombreInput = document.getElementById('nombre_cliente');
-    const emailInput = document.getElementById('email');
-    const telefonoInput = document.getElementById('telefono');
-    const empresaInput = document.getElementById('empresa');
-
-    if (nombreInput && cliente.nombre) nombreInput.value = cliente.nombre;
-    if (emailInput && cliente.email) emailInput.value = cliente.email;
-    if (telefonoInput && cliente.telefono) telefonoInput.value = cliente.telefono;
-    if (empresaInput && cliente.empresa) empresaInput.value = cliente.empresa;
-}
-
-// Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    if (itemsExistentes.length > 0) {
+        itemsExistentes.forEach(item => {
+            agregarItem(item);
+        });
+    }
     aplicarListaPrecios();
 });
 </script>
