@@ -407,7 +407,7 @@ foreach ($lista_cat_rows as $row) {
                 </div>
                 <div class="modal-footer px-4 py-3">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="guardarItemDesdeModal()">Guardar item</button>
+                    <button type="button" class="btn btn-primary" id="guardarItemBtn">Guardar item</button>
                 </div>
             </div>
         </div>
@@ -571,6 +571,11 @@ function abrirModalItem(editIndex = null) {
     modalEl.style.display = 'block';
     modalEl.removeAttribute('aria-hidden');
     document.body.classList.add('modal-open');
+    if (!document.querySelector('.modal-backdrop')) {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(backdrop);
+    }
 }
 
 function resetearModalItem() {
@@ -948,11 +953,11 @@ function guardarItemDesdeModal() {
     const precioRaw = String(document.getElementById('precio_modal').value || '').replace(',', '.');
     const precioValue = parseFloat(precioRaw);
 
-    if (!Number.isFinite(cantidadValue) || cantidadValue <= 0) {
+    if (!isFinite(cantidadValue) || cantidadValue <= 0) {
         alert('Ingresá una cantidad válida.');
         return;
     }
-    if (!Number.isFinite(precioValue) || precioValue <= 0) {
+    if (!isFinite(precioValue) || precioValue <= 0) {
         alert('Ingresá un precio válido.');
         return;
     }
@@ -973,23 +978,29 @@ function guardarItemDesdeModal() {
         return;
     }
 
-    let index = modalEditIndex;
-    const itemsContainer = document.getElementById('itemsContainer');
-    if (!itemsContainer) {
-        alert('No se encontró el contenedor de items.');
-        return;
-    }
-    if (!index) {
-        itemIndex++;
-        index = itemIndex;
-        const html = renderItemResumen(index, itemData);
-        itemsContainer.insertAdjacentHTML('beforeend', html);
-    } else {
-        const html = renderItemResumen(index, itemData);
-        const row = document.getElementById(`item_${index}`);
-        if (row) {
-            row.outerHTML = html;
+    try {
+        let index = modalEditIndex;
+        const itemsContainer = document.getElementById('itemsContainer');
+        if (!itemsContainer) {
+            alert('No se encontró el contenedor de items.');
+            return;
         }
+        if (!index) {
+            itemIndex++;
+            index = itemIndex;
+            const html = renderItemResumen(index, itemData);
+            itemsContainer.insertAdjacentHTML('beforeend', html);
+        } else {
+            const html = renderItemResumen(index, itemData);
+            const row = document.getElementById(`item_${index}`);
+            if (row) {
+                row.outerHTML = html;
+            }
+        }
+    } catch (err) {
+        console.error('Error guardando item:', err);
+        alert('No se pudo guardar el item.');
+        return;
     }
 
     try {
@@ -1215,6 +1226,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     aplicarListaPrecios();
+    const btnGuardar = document.getElementById('guardarItemBtn');
+    if (btnGuardar) {
+        btnGuardar.addEventListener('click', guardarItemDesdeModal);
+    }
+    const formModal = document.getElementById('itemModalForm');
+    if (formModal) {
+        formModal.addEventListener('submit', function(e) {
+            e.preventDefault();
+            guardarItemDesdeModal();
+        });
+    }
 });
 </script>
 
