@@ -589,6 +589,24 @@ function abrirModalItem(editIndex = null) {
     if (window.bootstrap && bootstrap.Modal) {
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
+        try {
+            if (!modalEl._bsListenersAdded) {
+                modalEl.addEventListener('hide.bs.modal', function() {
+                    try {
+                        const active = document.activeElement;
+                        if (active && modalEl.contains(active)) {
+                            const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+                            if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+                        }
+                    } catch(e){}
+                });
+                modalEl.addEventListener('hidden.bs.modal', function() {
+                    try { modalEl.setAttribute('aria-hidden', 'true'); } catch(e){}
+                    try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+                });
+                modalEl._bsListenersAdded = true;
+            }
+        } catch(e){}
         modal.show();
         return;
     }
