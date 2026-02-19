@@ -1363,6 +1363,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // opcional: registrar en consola para depuración antes de enviar
             try { console.log('Enviando cotizacion, items:', items.length); } catch(err){}
         });
+        // Force submit on button click to bypass other submit handlers that call preventDefault()
+        try {
+            const submitBtn = formCot.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function(e) {
+                    const items = document.querySelectorAll('.item-row');
+                    if (!items || items.length === 0) {
+                        e.preventDefault();
+                        alert('Debes agregar al menos un item antes de guardar la cotización.');
+                        return false;
+                    }
+                    // prevenir el submit normal y forzar envío nativo (evita submit listeners)
+                    e.preventDefault();
+                    try { setTimeout(() => formCot.submit(), 0); } catch(err) { formCot.submit(); }
+                });
+            }
+        } catch(e) {}
     }
 });
 </script>
