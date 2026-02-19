@@ -29,6 +29,13 @@ if (!in_array('cupon_descuento', $cols_cot, true)) {
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        // DEBUG: registrar POST para ayudar a diagnosticar por qué no se guarda
+        try {
+            if (!is_dir(__DIR__ . '/../../logs')) {
+                @mkdir(__DIR__ . '/../../logs', 0755, true);
+            }
+            @file_put_contents(__DIR__ . '/../../logs/cotizacion_post.log', "--- " . date('c') . " ---\n" . print_r($_POST, true) . "\n", FILE_APPEND);
+        } catch (e) {}
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
@@ -1333,6 +1340,19 @@ document.addEventListener('DOMContentLoaded', function() {
         formModal.addEventListener('submit', function(e) {
             e.preventDefault();
             guardarItemDesdeModal();
+        });
+    }
+    const formCot = document.getElementById('formCotizacion');
+    if (formCot) {
+        formCot.addEventListener('submit', function(e) {
+            const items = document.querySelectorAll('.item-row');
+            if (!items || items.length === 0) {
+                e.preventDefault();
+                alert('Debes agregar al menos un item antes de guardar la cotización.');
+                return false;
+            }
+            // opcional: registrar en consola para depuración antes de enviar
+            try { console.log('Enviando cotizacion, items:', items.length); } catch(err){}
         });
     }
 });
