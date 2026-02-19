@@ -31,11 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // DEBUG: registrar POST para ayudar a diagnosticar por qué no se guarda
         try {
-            if (!is_dir(__DIR__ . '/../../logs')) {
-                @mkdir(__DIR__ . '/../../logs', 0755, true);
+            $logsDir = __DIR__ . '/logs';
+            if (!is_dir($logsDir)) {
+                @mkdir($logsDir, 0755, true);
             }
-            @file_put_contents(__DIR__ . '/../../logs/cotizacion_post.log', "--- " . date('c') . " ---\n" . print_r($_POST, true) . "\n", FILE_APPEND);
-        } catch (e) {}
+            @file_put_contents($logsDir . '/cotizacion_post.log', "--- " . date('c') . " ---\n" . print_r($_POST, true) . "\n", FILE_APPEND);
+        } catch (Exception $e) {}
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
