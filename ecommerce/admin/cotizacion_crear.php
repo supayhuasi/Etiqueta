@@ -570,7 +570,8 @@ function asegurarDatalistProductos() {
     if (!datalist) {
         datalist = document.createElement('datalist');
         datalist.id = 'productos-datalist';
-        productos.forEach(p => {
+        const listaProductos = Array.isArray(productos) ? productos : [];
+        listaProductos.forEach(p => {
             const option = document.createElement('option');
             option.value = productoLabel(p);
             datalist.appendChild(option);
@@ -613,16 +614,28 @@ function abrirModalItem(editIndex = null) {
     }
 
     const modalEl = document.getElementById('itemModal');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
+    if (!modalEl) return;
+    if (window.bootstrap && bootstrap.Modal) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        return;
+    }
+    modalEl.classList.add('show');
+    modalEl.style.display = 'block';
+    modalEl.removeAttribute('aria-hidden');
+    document.body.classList.add('modal-open');
 }
 
 function resetearModalItem() {
-    document.getElementById('itemModalForm').reset();
-    document.getElementById('producto_id_modal').value = '';
+    const form = document.getElementById('itemModalForm');
+    if (form) form.reset();
+    const productoIdInput = document.getElementById('producto_id_modal');
+    if (productoIdInput) productoIdInput.value = '';
     const precioInput = document.getElementById('precio_modal');
-    precioInput.value = '';
-    precioInput.dataset.base = '';
+    if (precioInput) {
+        precioInput.value = '';
+        precioInput.dataset.base = '';
+    }
     const info = document.getElementById('precio-info-modal');
     if (info) info.style.display = 'none';
     const attrsContainer = document.getElementById('atributos-list-modal');
