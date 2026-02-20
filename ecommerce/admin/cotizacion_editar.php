@@ -2428,66 +2428,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
     id INT PRIMARY KEY AUTO_INCREMENT,
     codigo VARCHAR(50) NOT NULL UNIQUE,
     // Eliminadas definiciones duplicadas de modalEditIndex y funciones agregarItem/normalizarItemData
-
-    function abrirModalItem(editIndex = null) {
-        modalEditIndex = editIndex;
-        asegurarDatalistProductos();
-        resetearModalItem();
-
-        if (editIndex) {
-            const itemData = obtenerItemDesdeDOM(editIndex);
-            if (itemData) {
-                document.getElementById('itemModalLabel').textContent = 'Editar item';
-                document.getElementById('producto_input_modal').value = itemData.productoLabel || '';
-                document.getElementById('producto_id_modal').value = itemData.producto_id || '';
-                document.getElementById('nombre_modal').value = itemData.nombre || '';
-                document.getElementById('descripcion_modal').value = itemData.descripcion || '';
-                document.getElementById('ancho_modal').value = itemData.ancho || '';
-                document.getElementById('alto_modal').value = itemData.alto || '';
-                document.getElementById('cantidad_modal').value = itemData.cantidad || 1;
-                const precioInput = document.getElementById('precio_modal');
-                precioInput.value = itemData.precio || '';
-                precioInput.dataset.base = itemData.precio || '';
-                if (itemData.producto_id) {
-                    cargarAtributosProductoModal(itemData.producto_id, itemData.atributos || []);
-                }
-            }
-        } else {
-            document.getElementById('itemModalLabel').textContent = 'Agregar item';
-        }
-
-        const modalEl = document.getElementById('itemModal');
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modal.show();
-    }
-
-    function resetearModalItem() {
-        document.getElementById('itemModalForm').reset();
-        document.getElementById('producto_id_modal').value = '';
-        const precioInput = document.getElementById('precio_modal');
-        precioInput.value = '';
-        precioInput.dataset.base = '';
-        const info = document.getElementById('precio-info-modal');
-        if (info) info.style.display = 'none';
-        const attrsContainer = document.getElementById('atributos-list-modal');
-        if (attrsContainer) attrsContainer.innerHTML = '';
-        const attrsWrapper = document.getElementById('atributos-container-modal');
-        if (attrsWrapper) attrsWrapper.style.display = 'none';
-    }
-        
-        // Actualizar cotización
-        $stmt = $pdo->prepare("
-            UPDATE ecommerce_cotizaciones 
-            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?, 
-                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
-            WHERE id = ?
-        ");
-        
-        $stmt->execute([
-            $nombre_cliente,
-            $email,
-            $telefono,
-            $direccion,
+    // ...existing code...
+<?php require 'includes/footer.php'; ?>
             $lista_precio_id,
             json_encode($items_nuevos),
             $subtotal,
