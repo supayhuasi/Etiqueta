@@ -1189,8 +1189,6 @@ if (!$cotizacion) {
 $items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = '';
 $error = '';
-
-// ...existing code...
 $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
 if (!in_array('cupon_codigo', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
