@@ -1,3 +1,17 @@
+document.addEventListener('DOMContentLoaded', function() {
+    const btnGuardar = document.querySelector('.modal-footer .btn-primary');
+    if (btnGuardar) {
+        btnGuardar.removeEventListener('click', guardarItemDesdeModal);
+        btnGuardar.addEventListener('click', guardarItemDesdeModal);
+    }
+    const formModal = document.getElementById('itemModalForm');
+    if (formModal) {
+        formModal.addEventListener('submit', function(e) {
+            e.preventDefault();
+            guardarItemDesdeModal();
+        });
+    }
+});
 <?php
 require __DIR__ . '/cotizacion_editar_clean.php';
 $__cotizacion_editar_trash = <<<'__COTIZACION_EDITAR_TRASH__'
