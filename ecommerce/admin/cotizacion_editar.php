@@ -871,7 +871,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php require 'includes/footer.php'; ?><?php
+<?php require 'includes/footer.php'; ?>
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 
@@ -1209,6 +1209,7 @@ foreach ($lista_cat_rows as $row) {
                                 <label class="form-label">Producto del catálogo</label>
                                 <input type="text" class="form-control" list="productos-datalist" id="producto_input_modal" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeModalInput()">
                                 <input type="hidden" id="producto_id_modal">
+                                <?php
                                 <small class="text-muted">O completá manualmente los campos.</small>
                             </div>
                             <div class="col-md-5">
