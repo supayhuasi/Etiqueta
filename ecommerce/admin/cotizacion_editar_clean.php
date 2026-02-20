@@ -1093,8 +1093,11 @@ function guardarItemDesdeModal() {
 }
 
 function eliminarItem(index) {
-    document.getElementById('item_' + index)?.remove();
-    calcularTotales();
+    try {
+        const el = document.getElementById('item_' + index);
+        if (el && typeof el.remove === 'function') el.remove();
+    } catch(e) { console.error('eliminarItem error', e); }
+    try { calcularTotales(); } catch(e) { console.error('calcularTotales error', e); }
 }
 
 function calcularTotales() {
