@@ -1224,9 +1224,6 @@ $mensaje = '';
 $error = '';
 
 // Tabla de cupones
-$pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    codigo VARCHAR(50) NOT NULL UNIQUE,
     tipo ENUM('porcentaje','monto') NOT NULL,
     valor DECIMAL(10,2) NOT NULL,
     activo TINYINT(1) DEFAULT 1,
