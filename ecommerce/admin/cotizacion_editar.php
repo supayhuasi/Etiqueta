@@ -1,4 +1,3 @@
-// ...existing code...
 
 // Columnas de cupón en cotizaciones
 $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
