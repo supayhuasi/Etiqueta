@@ -1,10 +1,4 @@
-    tipo ENUM('porcentaje','monto') NOT NULL,
-    valor DECIMAL(10,2) NOT NULL,
-    activo TINYINT(1) DEFAULT 1,
-    fecha_inicio DATE NULL,
-    fecha_fin DATE NULL,
-    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
-)");
+// ...existing code...
 
 // Columnas de cupón en cotizaciones
 $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
@@ -1197,16 +1191,7 @@ $items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = '';
 $error = '';
 
-// Tabla de cupones
-    tipo ENUM('porcentaje','monto') NOT NULL,
-    valor DECIMAL(10,2) NOT NULL,
-    activo TINYINT(1) DEFAULT 1,
-    fecha_inicio DATE NULL,
-    fecha_fin DATE NULL,
-    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
-)");
-
-// Columnas de cupón en cotizaciones
+// ...existing code...
 $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
 if (!in_array('cupon_codigo', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
