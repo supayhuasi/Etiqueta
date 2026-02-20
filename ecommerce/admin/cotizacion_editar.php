@@ -1212,7 +1212,7 @@ document.addEventListener('change', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     if (itemsExistentes.length > 0) {
         itemsExistentes.forEach(item => {
-            agregarItem(item);
+    if (editIndex !== null && editIndex !== undefined) {
         });
     }
     aplicarListaPrecios();
@@ -1746,8 +1746,12 @@ function abrirModalItem(editIndex = null) {
     modalEditIndex = editIndex;
     asegurarDatalistProductos();
     resetearModalItem();
-
-    if (editIndex) {
+    // Guardar el elemento que tenía el foco antes de abrir el modal
+    try {
+        const prev = document.activeElement;
+        window.__lastFocusedBeforeModal = prev;
+    } catch (e) {}
+    if (editIndex !== null && editIndex !== undefined) {
         const itemData = obtenerItemDesdeDOM(editIndex);
         if (itemData) {
             document.getElementById('itemModalLabel').textContent = 'Editar item';
@@ -1768,9 +1772,29 @@ function abrirModalItem(editIndex = null) {
     } else {
         document.getElementById('itemModalLabel').textContent = 'Agregar item';
     }
-
     const modalEl = document.getElementById('itemModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
+    try { modalEl.removeAttribute('aria-hidden'); } catch(e){}
+    try { if ('inert' in modalEl) modalEl.inert = false; } catch(e){}
+    try {
+        if (!modalEl._bsListenersAdded) {
+            modalEl.addEventListener('hide.bs.modal', function() {
+                try {
+                    const active = document.activeElement;
+                    if (active && modalEl.contains(active)) {
+                        const prev = modalEl._previouslyFocused || window.__lastFocusedBeforeModal;
+                        if (prev && typeof prev.focus === 'function') prev.focus(); else active.blur();
+                    }
+                } catch(e){}
+            });
+            modalEl.addEventListener('hidden.bs.modal', function() {
+                try { modalEl.setAttribute('aria-hidden', 'true'); } catch(e){}
+                try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+            });
+            modalEl._bsListenersAdded = true;
+        }
+    } catch(e){}
     modal.show();
 }
 
