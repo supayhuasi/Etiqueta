@@ -983,9 +983,20 @@ function guardarItemDesdeModal() {
     }
 
     let index = modalEditIndex;
-    if (!index) {
-        itemIndex++;
-        index = itemIndex;
+    // Si index es null, undefined o 0, es un nuevo item
+    if (index === null || index === undefined || index === 0) {
+        // Buscar el mayor índice actual
+        let maxIndex = 0;
+        document.querySelectorAll('.item-row').forEach(row => {
+            const id = row.id;
+            const m = id.match(/item_(\d+)/);
+            if (m && m[1]) {
+                const idx = parseInt(m[1], 10);
+                if (idx > maxIndex) maxIndex = idx;
+            }
+        });
+        index = maxIndex + 1;
+        itemIndex = index;
         const html = renderItemResumen(index, itemData);
         document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
     } else {
