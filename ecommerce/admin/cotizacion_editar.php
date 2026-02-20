@@ -100,32 +100,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception($validacion['mensaje']);
             }
             $cupon_descuento = calcular_monto_descuento($descuento_row['tipo'], (float)$descuento_row['valor'], $subtotal);
-        } else {
-            $cupon_descuento = 0;
-        }
-
-        $total = $subtotal - $descuento - $cupon_descuento;
-
-        $stmt = $pdo->prepare("
-            UPDATE ecommerce_cotizaciones
-            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,
-                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
-            WHERE id = ?
-        ");
-
-        $stmt->execute([
-            $nombre_cliente,
-            $email,
-            $telefono,
-            $direccion,
-            $lista_precio_id,
-            json_encode($items_nuevos),
-            $subtotal,
-            $descuento,
-            $cupon_codigo ?: null,
-            $cupon_descuento,
-            $total,
-            $observaciones,
             $validez_dias,
             $id
         ]);
