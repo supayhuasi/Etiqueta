@@ -138,185 +138,152 @@ foreach ($lista_cat_rows as $row) {
 }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1>✏️ Editar Cotización <?= htmlspecialchars($cotizacion['numero_cotizacion']) ?></h1>
-    </div>
-    <a href="cotizacion_detalle.php?id=<?= $id ?>" class="btn btn-secondary">← Volver</a>
-</div>
+<?php
+require 'includes/header.php';
+require_once __DIR__ . '/../includes/descuentos.php';
 
-<?php if ($error): ?>
-    <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-<?php endif; ?>
-
-<form method="POST" id="formCotizacion">
-    <style>
-        .attr-option-item {
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            padding: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: #fff;
+$id = intval($_GET['id'] ?? 0);
+$stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
+$stmt->execute([$id]);
+$cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$cotizacion) {
+    die("Cotización no encontrada");
+}
+$items = json_decode($cotizacion['items'], true) ?? [];
+$mensaje = '';
+$error = '';
+$cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('cupon_codigo', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
+}
+if (!in_array('cupon_descuento', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        $nombre_cliente = $_POST['nombre_cliente'] ?? '';
+        $email = $_POST['email'] ?? '';
+        $telefono = $_POST['telefono'] ?? '';
+        $direccion = $_POST['direccion'] ?? '';
+        $observaciones = $_POST['observaciones'] ?? '';
+        $validez_dias = intval($_POST['validez_dias'] ?? 15);
+        $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
+        if (empty($nombre_cliente)) {
+            throw new Exception("Nombre es obligatorio");
         }
-        .attr-option-item.selected {
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 2px rgba(13,110,253,.2);
-            background: #e7f1ff;
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception("Email no válido");
         }
-        .item-resumen-title {
-            font-weight: 600;
-            font-size: 1rem;
+        $items_nuevos = [];
+        $subtotal = 0;
+        if (isset($_POST['items']) && is_array($_POST['items'])) {
+            foreach ($_POST['items'] as $item) {
+                if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
+                    continue;
+                }
+                $cantidad = intval($item['cantidad']);
+                $precio = floatval($item['precio']);
+                $total_item = $cantidad * $precio;
+                $atributos = [];
+                $costo_atributos_total = 0;
+                if (!empty($item['atributos']) && is_array($item['atributos'])) {
+                    foreach ($item['atributos'] as $attr) {
+                        if (!empty($attr['nombre'])) {
+                            $costo = floatval($attr['costo'] ?? 0);
+                            $atributos[] = [
+                                'nombre' => $attr['nombre'],
+                                'valor' => $attr['valor'] ?? '',
+                                'costo_adicional' => $costo
+                            ];
+                            $costo_atributos_total += $costo;
+                        }
+                    }
+                }
+                $precio_total_unitario = $precio + $costo_atributos_total;
+                $total_item = $cantidad * $precio_total_unitario;
+                $items_nuevos[] = [
+                    'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
+                    'nombre' => $item['nombre'],
+                    'descripcion' => $item['descripcion'] ?? '',
+                    'cantidad' => $cantidad,
+                    'ancho' => !empty($item['ancho']) ? floatval($item['ancho']) : null,
+                    'alto' => !empty($item['alto']) ? floatval($item['alto']) : null,
+                    'precio_base' => $precio,
+                    'atributos' => $atributos,
+                    'precio_unitario' => $precio_total_unitario,
+                    'precio_total' => $total_item
+                ];
+                $subtotal += $total_item;
+            }
         }
-        .item-resumen-meta {
-            font-size: 0.85rem;
-            color: #6c757d;
+        if (empty($items_nuevos)) {
+            throw new Exception("Debe agregar al menos un item");
         }
-        .item-resumen-attrs .badge {
-            font-weight: 500;
+        $descuento = floatval($_POST['descuento'] ?? 0);
+        $cupon_codigo = normalizar_codigo_descuento((string)($_POST['cupon_codigo'] ?? ''));
+        $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
+        if ($cupon_codigo !== '') {
+            $descuento_row = obtener_descuento_por_codigo($pdo, $cupon_codigo);
+            if (!$descuento_row) {
+                throw new Exception('Cupón inválido');
+            }
+            $validacion = validar_descuento($descuento_row, $subtotal);
+            if (!$validacion['valido']) {
+                throw new Exception($validacion['mensaje']);
+            }
+            $cupon_descuento = calcular_monto_descuento($descuento_row['tipo'], (float)$descuento_row['valor'], $subtotal);
+        } else {
+            $cupon_descuento = 0;
         }
-    </style>
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">👤 Información del Cliente</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="nombre_cliente" class="form-label">Nombre Completo *</label>
-                        <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" value="<?= htmlspecialchars($cotizacion['nombre_cliente'] ?? '') ?>" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($cotizacion['email'] ?? '') ?>">
-                    </div>
-                    <div class="mb-3">
-                        <label for="telefono" class="form-label">Teléfono</label>
-                        <input type="text" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars($cotizacion['telefono'] ?? '') ?>">
-                    </div>
-                    <div class="mb-3">
-                        <label for="direccion" class="form-label">Dirección</label>
-                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cotizacion['direccion'] ?? '') ?>">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">⚙️ Configuración</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="validez_dias" class="form-label">Validez (días)</label>
-                        <input type="number" class="form-control" id="validez_dias" name="validez_dias" value="<?= (int)$cotizacion['validez_dias'] ?>" min="1" max="90">
-                        <small class="text-muted">Días de validez del presupuesto</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="lista_precio_id" class="form-label">Lista de Precios</label>
-                        <select class="form-select" id="lista_precio_id" name="lista_precio_id" onchange="aplicarListaPrecios()">
-                            <option value="">-- Sin lista --</option>
-                            <?php foreach ($listas_precios as $lista): ?>
-                                <option value="<?= $lista['id'] ?>" <?= (int)($cotizacion['lista_precio_id'] ?? 0) === (int)$lista['id'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($lista['nombre']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small class="text-muted">Aplica descuentos por producto o categoría</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="observaciones" class="form-label">Observaciones</label>
-                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4"><?= htmlspecialchars($cotizacion['observaciones'] ?? '') ?></textarea>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">📦 Items de la Cotización</h5>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-light btn-sm" onclick="actualizarPreciosCotizacion()">🔄 Actualizar precios</button>
-                <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
-            </div>
-        </div>
-        <div class="card-body">
-            <div id="itemsContainer"></div>
-            <div class="row mt-4">
-                <div class="col-md-8"></div>
-                <div class="col-md-4">
-                    <table class="table">
-                        <tr>
-                            <th>Subtotal:</th>
-                            <td class="text-end"><span id="subtotal">$0.00</span></td>
-                        </tr>
-                        <tr>
-                            <th><label for="descuento">Descuento:</label></th>
-                            <td class="text-end">
-                                <input type="number" class="form-control form-control-sm text-end" id="descuento" name="descuento" value="<?= (float)($cotizacion['descuento'] ?? 0) ?>" step="0.01" min="0" onchange="calcularTotales()">
-                                <small id="descuento_lista_info" class="text-muted d-block"></small>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th><label for="cupon_codigo">Cupón:</label></th>
-                            <td class="text-end">
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control text-end" id="cupon_codigo" name="cupon_codigo" value="<?= htmlspecialchars($cotizacion['cupon_codigo'] ?? '') ?>" placeholder="Código">
-                                    <button class="btn btn-outline-secondary" type="button" onclick="aplicarCupon()">Aplicar</button>
-                                </div>
-                                <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="<?= (float)($cotizacion['cupon_descuento'] ?? 0) ?>">
-                                <small id="cupon_info" class="text-muted d-block"></small>
-                            </td>
-                        </tr>
-                        <tr class="table-primary">
-                            <th>TOTAL:</th>
-                            <th class="text-end"><span id="total">$0.00</span></th>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Agregar/Editar Item -->
-    <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="itemModalLabel">Agregar item</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="itemModalFields">
-                        <div class="row mb-3">
-                            <div class="col-md-7">
-                                <label class="form-label">Producto del catálogo</label>
-                                <input type="text" class="form-control" list="productos-datalist" id="producto_input_modal" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeModalInput()">
-                                <input type="hidden" id="producto_id_modal">
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" value="1" id="filtrar_propios" checked>
-                                    <label class="form-check-label" for="filtrar_propios">Mostrar solo productos de fabricación propia</label>
-                                </div>
-                                <small class="text-muted">O completá manualmente los campos.</small>
-                            </div>
-                            <div class="col-md-5">
-                                <div id="precio-info-modal" class="alert alert-info mt-4" style="display:none; padding: 8px; margin: 0;"></div>
-                            </div>
-                        </div>
-
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Nombre del Producto *</label>
-                                <input type="text" class="form-control" id="nombre_modal" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Descripción</label>
-                                <input type="text" class="form-control" id="descripcion_modal">
-                            </div>
-                            <div class="col-md-2">
+        $total = $subtotal - $descuento - $cupon_descuento;
+        $stmt = $pdo->prepare("
+            UPDATE ecommerce_cotizaciones
+            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,
+                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $nombre_cliente,
+            $email,
+            $telefono,
+            $direccion,
+            $lista_precio_id,
+            json_encode($items_nuevos),
+            $subtotal,
+            $descuento,
+            $cupon_codigo ?: null,
+            $cupon_descuento,
+            $total,
+            $observaciones,
+            $validez_dias,
+            $id
+        ]);
+        header("Location: cotizacion_detalle.php?id=" . $id);
+        exit;
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
+$stmt = $pdo->query("SELECT id, nombre, tipo_precio, precio_base, categoria_id FROM ecommerce_productos WHERE activo = 1 ORDER BY nombre");
+$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
+$listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
+$lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$lista_items_map = [];
+foreach ($lista_items_rows as $row) {
+    $lista_items_map[$row['lista_precio_id']][$row['producto_id']] = [
+        'precio_nuevo' => (float)$row['precio_nuevo'],
+        'descuento_porcentaje' => (float)$row['descuento_porcentaje']
+    ];
+}
+$stmt = $pdo->query("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1");
+$lista_cat_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$lista_cat_map = [];
+foreach ($lista_cat_rows as $row) {
+    $lista_cat_map[$row['lista_precio_id']][$row['categoria_id']] = (float)$row['descuento_porcentaje'];
+}
+?>
                                 <label class="form-label">Ancho (cm)</label>
                                 <input type="number" class="form-control" id="ancho_modal" step="0.01" min="0" onchange="actualizarPrecioItemModal()">
                             </div>
