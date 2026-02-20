@@ -648,7 +648,7 @@ function abrirModalItem(editIndex = null) {
         // Almacenar referencia global temporal; se copiará al modal cuando exista
         window.__lastFocusedBeforeModal = prev;
     } catch (e) {}
-    if (editIndex) {
+    if (editIndex !== null && editIndex !== undefined) {
         const itemData = obtenerItemDesdeDOM(editIndex);
         if (itemData) {
             document.getElementById('itemModalLabel').textContent = 'Editar item';

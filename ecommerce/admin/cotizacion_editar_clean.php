@@ -568,7 +568,7 @@ function abrirModalItem(editIndex = null) {
         window.__lastFocusedBeforeModal = prev;
     } catch (e) {}
 
-    if (editIndex) {
+    if (editIndex !== null && editIndex !== undefined) {
         const itemData = obtenerItemDesdeDOM(editIndex);
         if (itemData) {
             document.getElementById('itemModalLabel').textContent = 'Editar item';
