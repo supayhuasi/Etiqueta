@@ -323,7 +323,7 @@ foreach ($lista_cat_rows as $row) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="itemModalForm" novalidate>
+                    <div id="itemModalFields">
                         <div class="row mb-3">
                             <div class="col-md-7">
                                 <label class="form-label">Producto del catálogo</label>
