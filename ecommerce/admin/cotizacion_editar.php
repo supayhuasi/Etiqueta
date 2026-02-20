@@ -2468,58 +2468,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
 $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
     id INT PRIMARY KEY AUTO_INCREMENT,
     codigo VARCHAR(50) NOT NULL UNIQUE,
-    let modalEditIndex = null;
-
-    function agregarItem(itemData = null) {
-        if (!itemData) {
-            abrirModalItem();
-            return;
-        }
-
-        itemIndex++;
-        const normalizado = normalizarItemData(itemData);
-        const html = renderItemResumen(itemIndex, normalizado);
-        document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
-        calcularTotales();
-    }
-
-    function normalizarItemData(item) {
-        const costoAtributosItem = Array.isArray(item.atributos)
-            ? item.atributos.reduce((sum, attr) => {
-                const costo = parseFloat(attr?.costo_adicional ?? attr?.costo ?? 0) || 0;
-                return sum + costo;
-            }, 0)
-            : 0;
-
-        let precioBaseCalculado = null;
-        if (item.precio_base !== undefined && item.precio_base !== null && String(item.precio_base) !== '') {
-            precioBaseCalculado = parseFloat(item.precio_base);
-        } else if (item.precio_unitario !== undefined && item.precio_unitario !== null && String(item.precio_unitario) !== '') {
-            precioBaseCalculado = parseFloat(item.precio_unitario) - costoAtributosItem;
-        } else if (item.precio !== undefined && item.precio !== null && String(item.precio) !== '') {
-            precioBaseCalculado = parseFloat(item.precio);
-        }
-
-        if (!isFinite(precioBaseCalculado) || precioBaseCalculado < 0) {
-            precioBaseCalculado = 0;
-        }
-
-        return {
-            producto_id: item.producto_id || '',
-            nombre: item.nombre || '',
-            descripcion: item.descripcion || '',
-            ancho: item.ancho || '',
-            alto: item.alto || '',
-            cantidad: item.cantidad || 1,
-            precio: precioBaseCalculado.toFixed(2),
-            atributos: Array.isArray(item.atributos) ? item.atributos.map(a => ({
-                id: a.id,
-                nombre: a.nombre,
-                valor: a.valor,
-                costo: parseFloat(a.costo_adicional ?? a.costo ?? 0) || 0
-            })) : []
-        };
-    }
+    // Eliminadas definiciones duplicadas de modalEditIndex y funciones agregarItem/normalizarItemData
 
     function abrirModalItem(editIndex = null) {
         modalEditIndex = editIndex;
