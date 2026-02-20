@@ -126,158 +126,148 @@ $lista_items_map = [];
 foreach ($lista_items_rows as $row) {
     $lista_items_map[$row['lista_precio_id']][$row['producto_id']] = [
         'precio_nuevo' => (float)$row['precio_nuevo'],
-        'descuento_porcentaje' => (float)$row['descuento_porcentaje']
-    ];
-}
 
-$stmt = $pdo->query("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1");
-$lista_cat_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$lista_cat_map = [];
-foreach ($lista_cat_rows as $row) {
-    $lista_cat_map[$row['lista_precio_id']][$row['categoria_id']] = (float)$row['descuento_porcentaje'];
-}
-?>
+        <?php
+        require 'includes/header.php';
+        require_once __DIR__ . '/../includes/descuentos.php';
 
-<?php
-require 'includes/header.php';
-require_once __DIR__ . '/../includes/descuentos.php';
-
-$id = intval($_GET['id'] ?? 0);
-$stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
-$stmt->execute([$id]);
-$cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$cotizacion) {
-    die("Cotización no encontrada");
-}
-$items = json_decode($cotizacion['items'], true) ?? [];
-$mensaje = '';
-$error = '';
-$cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
-if (!in_array('cupon_codigo', $cols_cot, true)) {
-    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
-}
-if (!in_array('cupon_descuento', $cols_cot, true)) {
-    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        $nombre_cliente = $_POST['nombre_cliente'] ?? '';
-        $email = $_POST['email'] ?? '';
-        $telefono = $_POST['telefono'] ?? '';
-        $direccion = $_POST['direccion'] ?? '';
-        $observaciones = $_POST['observaciones'] ?? '';
-        $validez_dias = intval($_POST['validez_dias'] ?? 15);
-        $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
-        if (empty($nombre_cliente)) {
-            throw new Exception("Nombre es obligatorio");
+        $id = intval($_GET['id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
+        $stmt->execute([$id]);
+        $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$cotizacion) {
+            die("Cotización no encontrada");
         }
-        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new Exception("Email no válido");
+        $items = json_decode($cotizacion['items'], true) ?? [];
+        $mensaje = '';
+        $error = '';
+        $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+        if (!in_array('cupon_codigo', $cols_cot, true)) {
+            $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_codigo VARCHAR(50) NULL");
         }
-        $items_nuevos = [];
-        $subtotal = 0;
-        if (isset($_POST['items']) && is_array($_POST['items'])) {
-            foreach ($_POST['items'] as $item) {
-                if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
-                    continue;
+        if (!in_array('cupon_descuento', $cols_cot, true)) {
+            $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
+        }
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            try {
+                $nombre_cliente = $_POST['nombre_cliente'] ?? '';
+                $email = $_POST['email'] ?? '';
+                $telefono = $_POST['telefono'] ?? '';
+                $direccion = $_POST['direccion'] ?? '';
+                $observaciones = $_POST['observaciones'] ?? '';
+                $validez_dias = intval($_POST['validez_dias'] ?? 15);
+                $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
+                if (empty($nombre_cliente)) {
+                    throw new Exception("Nombre es obligatorio");
                 }
-                $cantidad = intval($item['cantidad']);
-                $precio = floatval($item['precio']);
-                $total_item = $cantidad * $precio;
-                $atributos = [];
-                $costo_atributos_total = 0;
-                if (!empty($item['atributos']) && is_array($item['atributos'])) {
-                    foreach ($item['atributos'] as $attr) {
-                        if (!empty($attr['nombre'])) {
-                            $costo = floatval($attr['costo'] ?? 0);
-                            $atributos[] = [
-                                'nombre' => $attr['nombre'],
-                                'valor' => $attr['valor'] ?? '',
-                                'costo_adicional' => $costo
-                            ];
-                            $costo_atributos_total += $costo;
+                if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    throw new Exception("Email no válido");
+                }
+                $items_nuevos = [];
+                $subtotal = 0;
+                if (isset($_POST['items']) && is_array($_POST['items'])) {
+                    foreach ($_POST['items'] as $item) {
+                        if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
+                            continue;
                         }
+                        $cantidad = intval($item['cantidad']);
+                        $precio = floatval($item['precio']);
+                        $total_item = $cantidad * $precio;
+                        $atributos = [];
+                        $costo_atributos_total = 0;
+                        if (!empty($item['atributos']) && is_array($item['atributos'])) {
+                            foreach ($item['atributos'] as $attr) {
+                                if (!empty($attr['nombre'])) {
+                                    $costo = floatval($attr['costo'] ?? 0);
+                                    $atributos[] = [
+                                        'nombre' => $attr['nombre'],
+                                        'valor' => $attr['valor'] ?? '',
+                                        'costo_adicional' => $costo
+                                    ];
+                                    $costo_atributos_total += $costo;
+                                }
+                            }
+                        }
+                        $precio_total_unitario = $precio + $costo_atributos_total;
+                        $total_item = $cantidad * $precio_total_unitario;
+                        $items_nuevos[] = [
+                            'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
+                            'nombre' => $item['nombre'],
+                            'descripcion' => $item['descripcion'] ?? '',
+                            'cantidad' => $cantidad,
+                            'ancho' => !empty($item['ancho']) ? floatval($item['ancho']) : null,
+                            'alto' => !empty($item['alto']) ? floatval($item['alto']) : null,
+                            'precio_base' => $precio,
+                            'atributos' => $atributos,
+                            'precio_unitario' => $precio_total_unitario,
+                            'precio_total' => $total_item
+                        ];
+                        $subtotal += $total_item;
                     }
                 }
-                $precio_total_unitario = $precio + $costo_atributos_total;
-                $total_item = $cantidad * $precio_total_unitario;
-                $items_nuevos[] = [
-                    'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
-                    'nombre' => $item['nombre'],
-                    'descripcion' => $item['descripcion'] ?? '',
-                    'cantidad' => $cantidad,
-                    'ancho' => !empty($item['ancho']) ? floatval($item['ancho']) : null,
-                    'alto' => !empty($item['alto']) ? floatval($item['alto']) : null,
-                    'precio_base' => $precio,
-                    'atributos' => $atributos,
-                    'precio_unitario' => $precio_total_unitario,
-                    'precio_total' => $total_item
-                ];
-                $subtotal += $total_item;
+                if (empty($items_nuevos)) {
+                    throw new Exception("Debe agregar al menos un item");
+                }
+                $descuento = floatval($_POST['descuento'] ?? 0);
+                $cupon_codigo = normalizar_codigo_descuento((string)($_POST['cupon_codigo'] ?? ''));
+                $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
+                if ($cupon_codigo !== '') {
+                    $descuento_row = obtener_descuento_por_codigo($pdo, $cupon_codigo);
+                    if (!$descuento_row) {
+                        throw new Exception('Cupón inválido');
+                    }
+                    $validacion = validar_descuento($descuento_row, $subtotal);
+                    if (!$validacion['valido']) {
+                        throw new Exception($validacion['mensaje']);
+                    }
+                    $cupon_descuento = calcular_monto_descuento($descuento_row['tipo'], (float)$descuento_row['valor'], $subtotal);
+                } else {
+                    $cupon_descuento = 0;
+                }
+                $total = $subtotal - $descuento - $cupon_descuento;
+                $stmt = $pdo->prepare("\n            UPDATE ecommerce_cotizaciones\n            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,\n                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?\n            WHERE id = ?\n        ");
+                $stmt->execute([
+                    $nombre_cliente,
+                    $email,
+                    $telefono,
+                    $direccion,
+                    $lista_precio_id,
+                    json_encode($items_nuevos),
+                    $subtotal,
+                    $descuento,
+                    $cupon_codigo ?: null,
+                    $cupon_descuento,
+                    $total,
+                    $observaciones,
+                    $validez_dias,
+                    $id
+                ]);
+                header("Location: cotizacion_detalle.php?id=" . $id);
+                exit;
+            } catch (Exception $e) {
+                $error = $e->getMessage();
             }
         }
-        if (empty($items_nuevos)) {
-            throw new Exception("Debe agregar al menos un item");
+        $stmt = $pdo->query("SELECT id, nombre, tipo_precio, precio_base, categoria_id FROM ecommerce_productos WHERE activo = 1 ORDER BY nombre");
+        $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
+        $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
+        $lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $lista_items_map = [];
+        foreach ($lista_items_rows as $row) {
+            $lista_items_map[$row['lista_precio_id']][$row['producto_id']] = [
+                'precio_nuevo' => (float)$row['precio_nuevo'],
+                'descuento_porcentaje' => (float)$row['descuento_porcentaje']
+            ];
         }
-        $descuento = floatval($_POST['descuento'] ?? 0);
-        $cupon_codigo = normalizar_codigo_descuento((string)($_POST['cupon_codigo'] ?? ''));
-        $cupon_descuento = floatval($_POST['cupon_descuento'] ?? 0);
-        if ($cupon_codigo !== '') {
-            $descuento_row = obtener_descuento_por_codigo($pdo, $cupon_codigo);
-            if (!$descuento_row) {
-                throw new Exception('Cupón inválido');
-            }
-            $validacion = validar_descuento($descuento_row, $subtotal);
-            if (!$validacion['valido']) {
-                throw new Exception($validacion['mensaje']);
-            }
-            $cupon_descuento = calcular_monto_descuento($descuento_row['tipo'], (float)$descuento_row['valor'], $subtotal);
-        } else {
-            $cupon_descuento = 0;
+        $stmt = $pdo->query("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1");
+        $lista_cat_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $lista_cat_map = [];
+        foreach ($lista_cat_rows as $row) {
+            $lista_cat_map[$row['lista_precio_id']][$row['categoria_id']] = (float)$row['descuento_porcentaje'];
         }
-        $total = $subtotal - $descuento - $cupon_descuento;
-        $stmt = $pdo->prepare("
-            UPDATE ecommerce_cotizaciones
-            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,
-                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([
-            $nombre_cliente,
-            $email,
-            $telefono,
-            $direccion,
-            $lista_precio_id,
-            json_encode($items_nuevos),
-            $subtotal,
-            $descuento,
-            $cupon_codigo ?: null,
-            $cupon_descuento,
-            $total,
-            $observaciones,
-            $validez_dias,
-            $id
-        ]);
-        header("Location: cotizacion_detalle.php?id=" . $id);
-        exit;
-    } catch (Exception $e) {
-        $error = $e->getMessage();
-    }
-}
-$stmt = $pdo->query("SELECT id, nombre, tipo_precio, precio_base, categoria_id FROM ecommerce_productos WHERE activo = 1 ORDER BY nombre");
-$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activo = 1 ORDER BY nombre");
-$listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
-$lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$lista_items_map = [];
-foreach ($lista_items_rows as $row) {
-    $lista_items_map[$row['lista_precio_id']][$row['producto_id']] = [
-        'precio_nuevo' => (float)$row['precio_nuevo'],
-        'descuento_porcentaje' => (float)$row['descuento_porcentaje']
-    ];
-}
-$stmt = $pdo->query("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1");
+        ?>
 $lista_cat_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $lista_cat_map = [];
 foreach ($lista_cat_rows as $row) {
