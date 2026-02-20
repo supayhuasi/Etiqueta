@@ -318,7 +318,6 @@ foreach ($lista_cat_rows as $row) {
         </div>
         <div class="card-body">
             <div id="itemsContainer"></div>
-
             <div class="row mt-4">
                 <div class="col-md-8"></div>
                 <div class="col-md-4">
