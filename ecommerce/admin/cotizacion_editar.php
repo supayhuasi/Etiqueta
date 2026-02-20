@@ -576,6 +576,8 @@ function abrirModalItem(editIndex = null) {
     const modalEl = document.getElementById('itemModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
+    try { modalEl.removeAttribute('aria-hidden'); } catch(e){}
+    try { if ('inert' in modalEl) modalEl.inert = false; } catch(e){}
     try {
         if (!modalEl._bsListenersAdded) {
             modalEl.addEventListener('hide.bs.modal', function() {

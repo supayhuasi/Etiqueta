@@ -1063,6 +1063,9 @@ function guardarItemDesdeModal() {
     if (!modalEl) return;
     if (window.bootstrap && bootstrap.Modal) {
         const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+        // Asegurar que modal no permanezca inert/aria-hidden al reabrir
+        try { modalEl.removeAttribute('aria-hidden'); } catch(e){}
+        try { if ('inert' in modalEl) modalEl.inert = false; } catch(e){}
         // Restaurar/limpiar foco antes de cerrar
         try {
             const active = document.activeElement;

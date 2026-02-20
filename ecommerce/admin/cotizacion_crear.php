@@ -672,9 +672,12 @@ function abrirModalItem(editIndex = null) {
 
     const modalEl = document.getElementById('itemModal');
     if (!modalEl) return;
-    if (window.bootstrap && bootstrap.Modal) {
+        if (window.bootstrap && bootstrap.Modal) {
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         try { modalEl._previouslyFocused = window.__lastFocusedBeforeModal || null; } catch(e){}
+        // Asegurar que no quede aria-hidden/inert del cierre anterior
+        try { modalEl.removeAttribute('aria-hidden'); } catch(e){}
+        try { if ('inert' in modalEl) modalEl.inert = false; } catch(e){}
         // Añadir listeners para asegurar foco antes de que bootstrap marque aria-hidden
         try {
             if (!modalEl._bsListenersAdded) {
