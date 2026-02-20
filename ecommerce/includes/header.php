@@ -411,12 +411,12 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
     </style>
 </head>
 <body>
-  <div id="topPromoBar" class="top-promo-bar" role="region" aria-label="Promociones principales">
+    <div id="topPromoBar" class="top-promo-bar" role="region" aria-label="Promociones principales">
     <span>🚚 <strong>ENVÍO GRATIS</strong></span>
     <span class="sep">|</span>
     <span>💳 <strong>3 CUOTAS SIN INTERÉS</strong></span>
     <span class="sep hide-mobile">|</span>
-    <span class="hide-mobile">📏 <strong>INSTALACIÓN INCLUIDA</strong></span>
+    <span class="hide-mobile">📏 <strong>INSTALACIÓN GRATIS DENTRO DE TUCUMÁN</strong></span>
     <span class="sep hide-mobile">|</span>
     <span>🔥 <strong>Hasta 35% OFF</strong></span>
     <button id="topPromoClose" class="close-btn" aria-label="Cerrar barra promocional">×</button>
