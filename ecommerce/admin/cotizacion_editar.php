@@ -12,16 +12,12 @@ eno, this.value); marcarOpcionAtributo(this);">
                         `;
                     }
 
-                    const attrHTML = `
-                        <div class="mb-2 modal-attr-item" data-attr-id="${attr.id}" data-attr-nombre="${attr.nombre}" data-required="${attr.es_obligatorio ? 1 : 0}">
-                            <label class="form-label small mb-1">
-                                ${attr.nombre}
-                                ${attr.costo_adicional > 0 ? `<span class="badge bg-warning text-dark">+$${parseFloat(attr.costo_adicional).toFixed(2)}</span>` : ''}
-                            </label>
-                            ${inputHTML}
-                            <input type="hidden" id="modal_attr_costo_${attr.id}" value="0" data-base="${attr.costo_adicional}">
-                        </div>
-                    `;
+                    var attrHTML = '<div class="mb-2 modal-attr-item" data-attr-id="' + attr.id + '" data-attr-nombre="' + attr.nombre + '" data-required="' + (attr.es_obligatorio ? 1 : 0) + '">' +
+                        '<label class="form-label small mb-1">' + attr.nombre +
+                        (attr.costo_adicional > 0 ? '<span class="badge bg-warning text-dark">+$' + parseFloat(attr.costo_adicional).toFixed(2) + '</span>' : '') +
+                        '</label>' + inputHTML +
+                        '<input type="hidden" id="modal_attr_costo_' + attr.id + '" value="0" data-base="' + attr.costo_adicional + '">' +
+                        '</div>';
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
 
                     if (attr.tipo === 'color') {
@@ -195,53 +191,51 @@ function obtenerAtributosDesdeModal() {
 function renderItemResumen(index, itemData) {
     const atributos = itemData.atributos || [];
     const atributosResumen = atributos.length
-        ? atributos.map(a => `<span class="badge bg-light text-dark me-1">${a.nombre}: ${a.valor}${a.costo > 0 ? ` (+$${parseFloat(a.costo).toFixed(2)})` : ''}</span>`).join('')
+        ? atributos.map(function(a) {
+            return '<span class="badge bg-light text-dark me-1">' + a.nombre + ': ' + a.valor + (a.costo > 0 ? ' (+$' + parseFloat(a.costo).toFixed(2) + ')' : '') + '</span>';
+        }).join('')
         : '<span class="text-muted">Sin atributos</span>';
 
     const dimensiones = (itemData.ancho && itemData.alto)
-        ? `${itemData.ancho} x ${itemData.alto} cm`
+        ? itemData.ancho + ' x ' + itemData.alto + ' cm'
         : '—';
 
-    const html = `
-        <div class="card mb-3 item-row" id="item_${index}">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                    <div class="flex-grow-1">
-                        <div class="item-resumen-title">${itemData.nombre || 'Producto sin nombre'}</div>
-                        ${itemData.descripcion ? `<div class="item-resumen-meta">${itemData.descripcion}</div>` : ''}
-                        <div class="item-resumen-meta">Cantidad: <strong>${itemData.cantidad}</strong> · Medidas: <strong>${dimensiones}</strong></div>
-                        <div class="item-resumen-meta">Precio base: <strong>$${parseFloat(itemData.precio || 0).toFixed(2)}</strong></div>
-                        <div class="item-resumen-attrs mt-2">${atributosResumen}</div>
-                    </div>
-                    <div class="text-end">
-                        <div class="badge bg-primary-subtle text-primary border" style="font-size: 0.95rem;">
-                            Subtotal: $<span class="item-subtotal-text" id="item_subtotal_text_${index}">0.00</span>
-                        </div>
-                        <div class="mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="abrirModalItem(${index})">✏️ Editar</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItem(${index})">🗑️ Eliminar</button>
-                        </div>
-                    </div>
-                </div>
-
-                <input type="hidden" class="item-nombre" id="nombre_${index}" name="items[${index}][nombre]" value="${itemData.nombre || ''}">
-                <input type="hidden" id="descripcion_${index}" name="items[${index}][descripcion]" value="${itemData.descripcion || ''}">
-                <input type="hidden" class="item-ancho" id="ancho_${index}" name="items[${index}][ancho]" value="${itemData.ancho || ''}">
-                <input type="hidden" class="item-alto" id="alto_${index}" name="items[${index}][alto]" value="${itemData.alto || ''}">
-                <input type="hidden" class="item-cantidad" id="cantidad_${index}" name="items[${index}][cantidad]" value="${itemData.cantidad || 1}">
-                <input type="hidden" class="item-precio" id="precio_${index}" name="items[${index}][precio]" value="${itemData.precio || 0}" data-base="${itemData.precio || 0}">
-                <input type="hidden" id="producto_id_${index}" name="items[${index}][producto_id]" value="${itemData.producto_id || ''}">
-                <input type="text" class="form-control item-subtotal" id="subtotal_${index}" readonly style="display:none;">
-                <div id="precio-info-${index}" style="display:none;"></div>
-                ${atributos.map(a => `
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][nombre]" value="${a.nombre}">
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][valor]" value="${a.valor}">
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][costo]" value="${parseFloat(a.costo || 0).toFixed(2)}">
-                `).join('')}
-            </div>
-        </div>
-    `;
-
+    var html = '<div class="card mb-3 item-row" id="item_' + index + '">' +
+        '<div class="card-body">' +
+            '<div class="d-flex justify-content-between align-items-start flex-wrap gap-3">' +
+                '<div class="flex-grow-1">' +
+                    '<div class="item-resumen-title">' + (itemData.nombre || 'Producto sin nombre') + '</div>' +
+                    (itemData.descripcion ? '<div class="item-resumen-meta">' + itemData.descripcion + '</div>' : '') +
+                    '<div class="item-resumen-meta">Cantidad: <strong>' + itemData.cantidad + '</strong> · Medidas: <strong>' + dimensiones + '</strong></div>' +
+                    '<div class="item-resumen-meta">Precio base: <strong>$' + parseFloat(itemData.precio || 0).toFixed(2) + '</strong></div>' +
+                    '<div class="item-resumen-attrs mt-2">' + atributosResumen + '</div>' +
+                '</div>' +
+                '<div class="text-end">' +
+                    '<div class="badge bg-primary-subtle text-primary border" style="font-size: 0.95rem;">' +
+                        'Subtotal: $<span class="item-subtotal-text" id="item_subtotal_text_' + index + '">0.00</span>' +
+                    '</div>' +
+                    '<div class="mt-2">' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary" onclick="abrirModalItem(' + index + ')">✏️ Editar</button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItem(' + index + ')">🗑️ Eliminar</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<input type="hidden" class="item-nombre" id="nombre_' + index + '" name="items[' + index + '][nombre]" value="' + (itemData.nombre || '') + '">' +
+            '<input type="hidden" id="descripcion_' + index + '" name="items[' + index + '][descripcion]" value="' + (itemData.descripcion || '') + '">' +
+            '<input type="hidden" class="item-ancho" id="ancho_' + index + '" name="items[' + index + '][ancho]" value="' + (itemData.ancho || '') + '">' +
+            '<input type="hidden" class="item-alto" id="alto_' + index + '" name="items[' + index + '][alto]" value="' + (itemData.alto || '') + '">' +
+            '<input type="hidden" class="item-cantidad" id="cantidad_' + index + '" name="items[' + index + '][cantidad]" value="' + (itemData.cantidad || 1) + '">' +
+            '<input type="hidden" class="item-precio" id="precio_' + index + '" name="items[' + index + '][precio]" value="' + (itemData.precio || 0) + '" data-base="' + (itemData.precio || 0) + '">' +
+            '<input type="hidden" id="producto_id_' + index + '" name="items[' + index + '][producto_id]" value="' + (itemData.producto_id || '') + '">' +
+            '<input type="text" class="form-control item-subtotal" id="subtotal_' + index + '" readonly style="display:none;">' +
+            '<div id="precio-info-' + index + '" style="display:none;"></div>' +
+            atributos.map(function(a) {
+                return '<input type="hidden" name="items[' + index + '][atributos][' + a.id + '][nombre]" value="' + a.nombre + '">' +
+                    '<input type="hidden" name="items[' + index + '][atributos][' + a.id + '][valor]" value="' + a.valor + '">' +
+                    '<input type="hidden" name="items[' + index + '][atributos][' + a.id + '][costo]" value="' + parseFloat(a.costo || 0).toFixed(2) + '">';
+            }).join('') +
+        '</div>' +
+    '</div>';
     return html;
 }
 
