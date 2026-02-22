@@ -512,5 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php require 'includes/footer.php'; ?>
-__COTIZACION_EDITAR_TRASH__;
+
+// Redirige a la versión funcional de edición
+header('Location: cotizacion_editar_clean.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+exit;
