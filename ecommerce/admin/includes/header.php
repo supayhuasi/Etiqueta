@@ -77,6 +77,8 @@ $role_permissions = [
     'ventas' => [
         'dashboard',
         'pedidos',
+        'ordenes_produccion',
+        'instalaciones',
         'cotizaciones',
         'cotizacion_clientes',
         'clientes_web',

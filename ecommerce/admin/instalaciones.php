@@ -4,31 +4,37 @@ require 'includes/header.php';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $incluir_entregados = !empty($_GET['incluir_entregados']);
+$pedidos = [];
+$error_pagina = '';
 
-$sql = "
-    SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
-           p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
-           p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_creacion,
-           c.nombre AS cliente_nombre
-    FROM ecommerce_ordenes_produccion op
-    JOIN ecommerce_pedidos p ON op.pedido_id = p.id
-    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'") . "
-";
-$params = [];
-if ($fecha_desde !== '') {
-    $sql .= " AND DATE(p.fecha_creacion) >= ?";
-    $params[] = $fecha_desde;
-}
-if ($fecha_hasta !== '') {
-    $sql .= " AND DATE(p.fecha_creacion) <= ?";
-    $params[] = $fecha_hasta;
-}
-$sql .= " ORDER BY p.fecha_creacion DESC, op.pedido_id ASC";
+try {
+    $sql = "
+        SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
+               p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
+               p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_creacion,
+               c.nombre AS cliente_nombre
+        FROM ecommerce_ordenes_produccion op
+        JOIN ecommerce_pedidos p ON op.pedido_id = p.id
+        LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+        WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'") . "
+    ";
+    $params = [];
+    if ($fecha_desde !== '') {
+        $sql .= " AND DATE(p.fecha_creacion) >= ?";
+        $params[] = $fecha_desde;
+    }
+    if ($fecha_hasta !== '') {
+        $sql .= " AND DATE(p.fecha_creacion) <= ?";
+        $params[] = $fecha_hasta;
+    }
+    $sql .= " ORDER BY p.fecha_creacion DESC, op.pedido_id ASC";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $error_pagina = $e->getMessage();
+}
 
 $qs = http_build_query(array_filter([
     'fecha_desde' => $fecha_desde,
@@ -44,6 +50,13 @@ $qs = http_build_query(array_filter([
     </div>
     <a href="ordenes_produccion.php" class="btn btn-outline-secondary">Ordenes de Produccion</a>
 </div>
+
+<?php if ($error_pagina !== ''): ?>
+<div class="alert alert-danger">
+    <strong>Error al cargar:</strong> <?= htmlspecialchars($error_pagina) ?>
+    <p class="mb-0 mt-2 small">Comprobá que existan las tablas <code>ecommerce_ordenes_produccion</code>, <code>ecommerce_pedidos</code> y <code>ecommerce_clientes</code>.</p>
+</div>
+<?php endif; ?>
 
 <div class="card mb-4">
     <div class="card-body">
