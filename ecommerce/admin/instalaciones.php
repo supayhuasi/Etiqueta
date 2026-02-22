@@ -13,12 +13,9 @@ $sql = "
     FROM ecommerce_ordenes_produccion op
     JOIN ecommerce_pedidos p ON op.pedido_id = p.id
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    WHERE op.estado = 'terminado'
+    WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'") . "
 ";
 $params = [];
-if (!$incluir_entregados) {
-    $sql .= " AND (op.estado != 'entregado' OR op.estado IS NULL)";
-}
 if ($fecha_desde !== '') {
     $sql .= " AND DATE(p.fecha_creacion) >= ?";
     $params[] = $fecha_desde;

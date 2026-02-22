@@ -70,12 +70,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!empty($items_post) && is_array($items_post)) {
             foreach ($items_post as $item) {
-                if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
+                $nombre = trim((string)($item['nombre'] ?? ''));
+                $cantidad = (int)($item['cantidad'] ?? 0);
+                $precio = floatval($item['precio'] ?? 0);
+                if ($nombre === '' || $cantidad < 1 || $precio < 0) {
                     continue;
                 }
 
-                $cantidad = intval($item['cantidad']);
-                $precio = floatval($item['precio']);
                 $total_item = $cantidad * $precio;
 
                 $atributos = [];
@@ -99,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $items_nuevos[] = [
                     'producto_id' => !empty($item['producto_id']) ? intval($item['producto_id']) : null,
-                    'nombre' => $item['nombre'],
+                    'nombre' => $nombre,
                     'descripcion' => $item['descripcion'] ?? '',
                     'cantidad' => $cantidad,
                     'ancho' => !empty($item['ancho']) ? floatval($item['ancho']) : null,
@@ -1296,35 +1297,45 @@ document.addEventListener('change', function(e) {
 
 function collectItemsForSubmit() {
     const items = [];
-    document.querySelectorAll('.item-row').forEach(row => {
+    const formCot = document.getElementById('formCotizacion');
+    const container = formCot ? formCot.querySelector('#itemsContainer') : null;
+    const rows = container ? container.querySelectorAll('.item-row') : document.querySelectorAll('.item-row');
+    rows.forEach(function(row) {
         const idMatch = (row.id || '').match(/item_(\d+)/);
         if (!idMatch) return;
         const idx = idMatch[1];
-        const nombre = document.getElementById('nombre_' + idx)?.value || '';
-        const descripcion = document.getElementById('descripcion_' + idx)?.value || '';
-        const ancho = document.getElementById('ancho_' + idx)?.value || '';
-        const alto = document.getElementById('alto_' + idx)?.value || '';
-        const cantidad = document.getElementById('cantidad_' + idx)?.value || 0;
-        const precio = document.getElementById('precio_' + idx)?.value || 0;
-        const producto_id = document.getElementById('producto_id_' + idx)?.value || null;
-        const atributos = [];
+        var nombre = (row.querySelector('input[name="items[' + idx + '][nombre]"]') || document.getElementById('nombre_' + idx));
+        var descripcion = (row.querySelector('input[name="items[' + idx + '][descripcion]"]') || document.getElementById('descripcion_' + idx));
+        var ancho = (row.querySelector('input[name="items[' + idx + '][ancho]"]') || document.getElementById('ancho_' + idx));
+        var alto = (row.querySelector('input[name="items[' + idx + '][alto]"]') || document.getElementById('alto_' + idx));
+        var cantidad = (row.querySelector('input[name="items[' + idx + '][cantidad]"]') || document.getElementById('cantidad_' + idx));
+        var precio = (row.querySelector('input[name="items[' + idx + '][precio]"]') || document.getElementById('precio_' + idx));
+        var producto_id = (row.querySelector('input[name="items[' + idx + '][producto_id]"]') || document.getElementById('producto_id_' + idx));
+        nombre = nombre ? nombre.value : '';
+        descripcion = descripcion ? descripcion.value : '';
+        ancho = ancho ? ancho.value : '';
+        alto = alto ? alto.value : '';
+        cantidad = cantidad ? cantidad.value : 0;
+        precio = precio ? precio.value : 0;
+        producto_id = producto_id ? producto_id.value : null;
+        var atributos = [];
         try {
-            const attrInputs = row.querySelectorAll('input[name^="items[' + idx + '][atributos]"]');
-            const grouped = {};
-            attrInputs.forEach(inp => {
-                const m = inp.name.match(/atributos\]\[(\d+)\]\[(\w+)\]/);
+            var attrInputs = row.querySelectorAll('input[name^="items[' + idx + '][atributos]"]');
+            var grouped = {};
+            attrInputs.forEach(function(inp) {
+                var m = inp.name.match(/atributos\]\[(\d+)\]\[(\w+)\]/);
                 if (m) {
-                    const aid = m[1], key = m[2];
+                    var aid = m[1], key = m[2];
                     grouped[aid] = grouped[aid] || {};
                     grouped[aid][key] = inp.value;
                 }
             });
-            Object.keys(grouped).forEach(aid => {
-                const g = grouped[aid];
+            Object.keys(grouped).forEach(function(aid) {
+                var g = grouped[aid];
                 atributos.push({ id: aid, nombre: g.nombre || '', valor: g.valor || '', costo: parseFloat(g.costo || 0) });
             });
         } catch (e) {}
-        items.push({ producto_id: producto_id || null, nombre, descripcion, ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0, 10), precio: parseFloat(precio || 0), atributos });
+        items.push({ producto_id: producto_id || null, nombre: String(nombre).trim(), descripcion: String(descripcion).trim(), ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0, 10), precio: parseFloat(String(precio).replace(',', '.') || 0), atributos: atributos });
     });
     return items;
 }
@@ -1350,20 +1361,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const formCot = document.getElementById('formCotizacion');
     if (formCot) {
         formCot.addEventListener('submit', function(e) {
+            e.preventDefault();
             const rows = document.querySelectorAll('.item-row');
             if (!rows || rows.length === 0) {
-                e.preventDefault();
                 alert('Debes agregar al menos un item antes de guardar.');
                 return false;
             }
-            let input = formCot.querySelector('input[name="items_json"]');
+            var itemsArray = collectItemsForSubmit();
+            if (!itemsArray || itemsArray.length === 0) {
+                alert('No se pudieron leer los items. Revisa que cada item tenga nombre, cantidad y precio.');
+                return false;
+            }
+            var jsonStr = JSON.stringify(itemsArray);
+            var input = formCot.querySelector('input[name="items_json"]');
             if (!input) {
                 input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = 'items_json';
                 formCot.appendChild(input);
             }
-            input.value = JSON.stringify(collectItemsForSubmit());
+            input.value = jsonStr;
+            formCot.submit();
         });
     }
 });
