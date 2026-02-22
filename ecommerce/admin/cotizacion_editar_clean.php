@@ -160,14 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Obtener productos activos para el selector
-$stmt = $pdo->query("
-    SELECT id, nombre, tipo_precio, precio_base, categoria_id
-    FROM ecommerce_productos
-    WHERE activo = 1
-    ORDER BY nombre
-");
-$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Obtener productos activos para el selector (incluir tipo_origen si existe)
 $cols_prod = $pdo->query("SHOW COLUMNS FROM ecommerce_productos")->fetchAll(PDO::FETCH_COLUMN, 0);
 $select_tipo = in_array('tipo_origen', $cols_prod, true) ? 'tipo_origen' : "'fabricacion_propia' as tipo_origen";
@@ -548,8 +540,8 @@ function normalizarItemData(item) {
         alto: item.alto || '',
         cantidad: item.cantidad || 1,
         precio: precioBaseCalculado.toFixed(2),
-        atributos: Array.isArray(item.atributos) ? item.atributos.map(a => ({
-            id: a.id,
+        atributos: Array.isArray(item.atributos) ? item.atributos.map((a, i) => ({
+            id: a.id != null && a.id !== '' ? a.id : i,
             nombre: a.nombre,
             valor: a.valor,
             costo: parseFloat(a.costo_adicional ?? a.costo ?? 0) || 0
