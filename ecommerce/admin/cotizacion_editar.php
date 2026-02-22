@@ -2,7 +2,7 @@
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 
-$id = intval($_GET['id'] ?? 0);
+$id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
 
 $stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
 $stmt->execute([$id]);
@@ -59,8 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $items_nuevos = [];
         $subtotal = 0;
 
-        if (isset($_POST['items']) && is_array($_POST['items'])) {
-            foreach ($_POST['items'] as $item) {
+        // Aceptar items como JSON (más fiable) o como array POST
+        $items_post = $_POST['items'] ?? [];
+        if (!empty($_POST['items_json'])) {
+            $decoded = json_decode($_POST['items_json'], true);
+            if (is_array($decoded)) {
+                $items_post = $decoded;
+            }
+        }
+
+        if (!empty($items_post) && is_array($items_post)) {
+            foreach ($items_post as $item) {
                 if (empty($item['nombre']) || empty($item['cantidad']) || empty($item['precio'])) {
                     continue;
                 }
@@ -204,7 +213,8 @@ foreach ($lista_cat_rows as $row) {
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
-<form method="POST" id="formCotizacion">
+<form method="POST" id="formCotizacion" action="cotizacion_editar.php?id=<?= (int)$id ?>">
+    <input type="hidden" name="id" value="<?= (int)$id ?>">
     <style>
         .attr-option-item {
             border: 2px solid #ddd;
@@ -337,93 +347,84 @@ foreach ($lista_cat_rows as $row) {
         </div>
     </div>
 
-    <style>
-        .modal-backdrop.show {
-            opacity: 0.4;
-            backdrop-filter: blur(3px);
-            -webkit-backdrop-filter: blur(3px);
-        }
-        .modal-content {
-            border-radius: 12px;
-        }
-    </style>
-
-    <!-- Modal Agregar/Editar Item -->
-    <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header px-4 py-3">
-                    <h5 class="modal-title" id="itemModalLabel">Agregar item</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <form id="itemModalForm" novalidate>
-                        <div class="row mb-3">
-                            <div class="col-md-7">
-                                <label class="form-label">Producto del catálogo</label>
-                                <input type="text" class="form-control" list="productos-datalist" id="producto_input_modal" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeModalInput()">
-                                <input type="hidden" id="producto_id_modal">
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" value="1" id="filtrar_propios" checked>
-                                    <label class="form-check-label" for="filtrar_propios">Mostrar solo productos de fabricación propia</label>
-                                </div>
-                                <small class="text-muted">O completá manualmente los campos.</small>
-                            </div>
-                            <div class="col-md-5">
-                                <div id="precio-info-modal" class="alert alert-info mt-4" style="display:none; padding: 8px; margin: 0;"></div>
-                            </div>
-                        </div>
-
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Nombre del Producto *</label>
-                                <input type="text" class="form-control" id="nombre_modal" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Descripción</label>
-                                <input type="text" class="form-control" id="descripcion_modal">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Ancho (cm)</label>
-                                <input type="number" class="form-control" id="ancho_modal" step="0.01" min="0" onchange="actualizarPrecioItemModal()">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Alto (cm)</label>
-                                <input type="number" class="form-control" id="alto_modal" step="0.01" min="0" onchange="actualizarPrecioItemModal()">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Cant. *</label>
-                                <input type="number" class="form-control" id="cantidad_modal" value="1" min="1" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Precio Unit. *</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">$</span>
-                                    <input type="number" class="form-control" id="precio_modal" step="0.01" min="0" required onchange="actualizarBasePrecioModal()">
-                                </div>
-                                <small class="text-muted">Se guarda como precio base, sin atributos.</small>
-                            </div>
-                        </div>
-
-                        <div id="atributos-container-modal" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                            <h6 class="mb-3">🎨 Atributos del Producto</h6>
-                            <div id="atributos-list-modal"></div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer px-4 py-3">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="guardarItemBtn">Guardar item</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="text-center">
         <button type="submit" class="btn btn-primary btn-lg">💾 Guardar Cambios</button>
         <a href="cotizacion_detalle.php?id=<?= $id ?>" class="btn btn-secondary btn-lg">Cancelar</a>
     </div>
 </form>
+
+<style>
+    .modal-backdrop.show { opacity: 0.4; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .modal-content { border-radius: 12px; }
+</style>
+<!-- Modal fuera del form para evitar formularios anidados -->
+<div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header px-4 py-3">
+                <h5 class="modal-title" id="itemModalLabel">Agregar item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="itemModalForm" novalidate>
+                    <div class="row mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label">Producto del catálogo</label>
+                            <input type="text" class="form-control" list="productos-datalist" id="producto_input_modal" placeholder="Escriba para buscar..." oninput="cargarProductoDesdeModalInput()">
+                            <input type="hidden" id="producto_id_modal">
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" value="1" id="filtrar_propios" checked>
+                                <label class="form-check-label" for="filtrar_propios">Mostrar solo productos de fabricación propia</label>
+                            </div>
+                            <small class="text-muted">O completá manualmente los campos.</small>
+                        </div>
+                        <div class="col-md-5">
+                            <div id="precio-info-modal" class="alert alert-info mt-4" style="display:none; padding: 8px; margin: 0;"></div>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Nombre del Producto *</label>
+                            <input type="text" class="form-control" id="nombre_modal" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Descripción</label>
+                            <input type="text" class="form-control" id="descripcion_modal">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Ancho (cm)</label>
+                            <input type="number" class="form-control" id="ancho_modal" step="0.01" min="0" onchange="actualizarPrecioItemModal()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Alto (cm)</label>
+                            <input type="number" class="form-control" id="alto_modal" step="0.01" min="0" onchange="actualizarPrecioItemModal()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Cant. *</label>
+                            <input type="number" class="form-control" id="cantidad_modal" value="1" min="1" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Precio Unit. *</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="precio_modal" step="0.01" min="0" required onchange="actualizarBasePrecioModal()">
+                            </div>
+                            <small class="text-muted">Se guarda como precio base, sin atributos.</small>
+                        </div>
+                    </div>
+                    <div id="atributos-container-modal" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                        <h6 class="mb-3">🎨 Atributos del Producto</h6>
+                        <div id="atributos-list-modal"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer px-4 py-3">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="guardarItemBtn">Guardar item</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 let itemIndex = 0;
@@ -1293,6 +1294,41 @@ document.addEventListener('change', function(e) {
     }
 });
 
+function collectItemsForSubmit() {
+    const items = [];
+    document.querySelectorAll('.item-row').forEach(row => {
+        const idMatch = (row.id || '').match(/item_(\d+)/);
+        if (!idMatch) return;
+        const idx = idMatch[1];
+        const nombre = document.getElementById('nombre_' + idx)?.value || '';
+        const descripcion = document.getElementById('descripcion_' + idx)?.value || '';
+        const ancho = document.getElementById('ancho_' + idx)?.value || '';
+        const alto = document.getElementById('alto_' + idx)?.value || '';
+        const cantidad = document.getElementById('cantidad_' + idx)?.value || 0;
+        const precio = document.getElementById('precio_' + idx)?.value || 0;
+        const producto_id = document.getElementById('producto_id_' + idx)?.value || null;
+        const atributos = [];
+        try {
+            const attrInputs = row.querySelectorAll('input[name^="items[' + idx + '][atributos]"]');
+            const grouped = {};
+            attrInputs.forEach(inp => {
+                const m = inp.name.match(/atributos\]\[(\d+)\]\[(\w+)\]/);
+                if (m) {
+                    const aid = m[1], key = m[2];
+                    grouped[aid] = grouped[aid] || {};
+                    grouped[aid][key] = inp.value;
+                }
+            });
+            Object.keys(grouped).forEach(aid => {
+                const g = grouped[aid];
+                atributos.push({ id: aid, nombre: g.nombre || '', valor: g.valor || '', costo: parseFloat(g.costo || 0) });
+            });
+        } catch (e) {}
+        items.push({ producto_id: producto_id || null, nombre, descripcion, ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0, 10), precio: parseFloat(precio || 0), atributos });
+    });
+    return items;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     if (itemsExistentes.length > 0) {
         itemsExistentes.forEach(item => {
@@ -1309,6 +1345,25 @@ document.addEventListener('DOMContentLoaded', function() {
         formModal.addEventListener('submit', function(e) {
             e.preventDefault();
             guardarItemDesdeModal();
+        });
+    }
+    const formCot = document.getElementById('formCotizacion');
+    if (formCot) {
+        formCot.addEventListener('submit', function(e) {
+            const rows = document.querySelectorAll('.item-row');
+            if (!rows || rows.length === 0) {
+                e.preventDefault();
+                alert('Debes agregar al menos un item antes de guardar.');
+                return false;
+            }
+            let input = formCot.querySelector('input[name="items_json"]');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'items_json';
+                formCot.appendChild(input);
+            }
+            input.value = JSON.stringify(collectItemsForSubmit());
         });
     }
 });
