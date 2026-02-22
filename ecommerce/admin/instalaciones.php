@@ -11,7 +11,7 @@ try {
     $sql = "
         SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
                p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
-               p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_creacion,
+               p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_pedido AS fecha_creacion,
                c.nombre AS cliente_nombre
         FROM ecommerce_ordenes_produccion op
         JOIN ecommerce_pedidos p ON op.pedido_id = p.id
@@ -20,14 +20,14 @@ try {
     ";
     $params = [];
     if ($fecha_desde !== '') {
-        $sql .= " AND DATE(p.fecha_creacion) >= ?";
+        $sql .= " AND DATE(p.fecha_pedido) >= ?";
         $params[] = $fecha_desde;
     }
     if ($fecha_hasta !== '') {
-        $sql .= " AND DATE(p.fecha_creacion) <= ?";
+        $sql .= " AND DATE(p.fecha_pedido) <= ?";
         $params[] = $fecha_hasta;
     }
-    $sql .= " ORDER BY p.fecha_creacion DESC, op.pedido_id ASC";
+    $sql .= " ORDER BY p.fecha_pedido DESC, op.pedido_id ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);

@@ -18,11 +18,11 @@ $sql = "
 ";
 $params = [];
 if ($fecha_desde !== '') {
-    $sql .= " AND DATE(p.fecha_creacion) >= ?";
+    $sql .= " AND DATE(p.fecha_pedido) >= ?";
     $params[] = $fecha_desde;
 }
 if ($fecha_hasta !== '') {
-    $sql .= " AND DATE(p.fecha_creacion) <= ?";
+    $sql .= " AND DATE(p.fecha_pedido) <= ?";
     $params[] = $fecha_hasta;
 }
 
