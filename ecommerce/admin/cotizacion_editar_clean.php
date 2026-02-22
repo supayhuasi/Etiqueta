@@ -756,16 +756,12 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                         `;
                     }
 
-                    const attrHTML = `
-                        <div class="mb-2 modal-attr-item" data-attr-id="${attr.id}" data-attr-nombre="${attr.nombre}" data-required="${attr.es_obligatorio ? 1 : 0}">
-                            <label class="form-label small mb-1">
-                                ${attr.nombre}
-                                ${attr.costo_adicional > 0 ? `<span class="badge bg-warning text-dark">+$${parseFloat(attr.costo_adicional).toFixed(2)}</span>` : ''}
-                            </label>
-                            ${inputHTML}
-                            <input type="hidden" id="modal_attr_costo_${attr.id}" value="0" data-base="${attr.costo_adicional}">
-                        </div>
-                    `;
+                    var attrHTML = '<div class="mb-2 modal-attr-item" data-attr-id="' + attr.id + '" data-attr-nombre="' + attr.nombre + '" data-required="' + (attr.es_obligatorio ? 1 : 0) + '">' +
+                        '<label class="form-label small mb-1">' + attr.nombre +
+                        (attr.costo_adicional > 0 ? '<span class="badge bg-warning text-dark">+$' + parseFloat(attr.costo_adicional).toFixed(2) + '</span>' : '') +
+                        '</label>' + inputHTML +
+                        '<input type="hidden" id="modal_attr_costo_' + attr.id + '" value="0" data-base="' + attr.costo_adicional + '">' +
+                        '</div>';
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
 
                     if (attr.tipo === 'color') {
