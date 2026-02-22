@@ -1,17 +1,15 @@
-eno, this.value); marcarOpcionAtributo(this);">
-                                                <div class="attr-option position-relative" style="cursor: pointer; border: 2px solid #ddd; border-radius: 6px; padding: 4px; transition: all 0.2s ease; background: #fff;">
-                                                    ' + (colorBox || imgTag || placeholder) + '\n' +
-                                                    costoBadge + '\n' +
-                                                    label + '\n'
-                                                </div>
-                                            </label>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        `;
-                    }
 
+<?php
+// cotizacion_editar.php
+// ...aquí va el código PHP inicial si corresponde...
+
+?>
+<!-- Aquí comienza el HTML y luego el JavaScript -->
+<script>
+// ...existing code...
+
+                    var attrHTML = '<div class="mb-2 modal-attr-item" data-attr-id="' + attr.id + '" data-attr-nombre="' + attr.nombre + '" data-required="' + (attr.es_obligatorio ? 1 : 0) + '">' +
+                        '<label class="form-label small mb-1">' + attr.nombre +
                     var attrHTML = '<div class="mb-2 modal-attr-item" data-attr-id="' + attr.id + '" data-attr-nombre="' + attr.nombre + '" data-required="' + (attr.es_obligatorio ? 1 : 0) + '">' +
                         '<label class="form-label small mb-1">' + attr.nombre +
                         (attr.costo_adicional > 0 ? '<span class="badge bg-warning text-dark">+$' + parseFloat(attr.costo_adicional).toFixed(2) + '</span>' : '') +
@@ -19,8 +17,6 @@ eno, this.value); marcarOpcionAtributo(this);">
                         '<input type="hidden" id="modal_attr_costo_' + attr.id + '" value="0" data-base="' + attr.costo_adicional + '">' +
                         '</div>';
                     atributosContainer.insertAdjacentHTML('beforeend', attrHTML);
-
-                    if (attr.tipo === 'color') {
                         const colorInput = document.getElementById(`modal_attr_${attr.id}`);
                         const preview = document.getElementById(`modal_color_preview_${attr.id}`);
                         if (colorInput && preview) {
