@@ -26,11 +26,14 @@ if (empty($cfg['enabled'])) {
     return;
 }
 // Escape the JSON for inline usage
+$embed_raw = $cfg['embed_code'] ?? '';
+// Escape closing script tags to avoid breaking the surrounding <script> when inlined
+$embed_safe = str_replace('</script>', '<\/script>', $embed_raw);
 $jsCfg = json_encode([
-    'placement' => $cfg['placement'] ?? 'bottom-right',
-    'delay_seconds' => (int)($cfg['delay_seconds'] ?? 3),
-    'embed_code' => $cfg['embed_code'] ?? ''
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+  'placement' => $cfg['placement'] ?? 'bottom-right',
+  'delay_seconds' => (int)($cfg['delay_seconds'] ?? 3),
+  'embed_code' => $embed_safe
+], JSON_UNESCAPED_UNICODE);
 ?>
 <style>
   .typebot-wrapper { position: fixed; z-index: 999999; display: block; }
