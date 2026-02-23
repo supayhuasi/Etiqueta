@@ -11,9 +11,9 @@
 	@media (max-width:600px){ .top-promo-bar { font-size:13px; padding:8px 10px; } .top-promo-bar .hide-mobile { display: none; } }
 	body.has-top-promo { padding-top: 48px; }
 </style>
-    <?php include __DIR__ . '/typebot_widget.php'; ?>
 </head>
 <body>
+	<?php include __DIR__ . '/typebot_widget.php'; ?>
 
 <div id="topPromoBar" class="top-promo-bar" role="region" aria-label="Promociones principales">
 	<span>🚚 <strong>ENVÍO GRATIS</strong></span>
