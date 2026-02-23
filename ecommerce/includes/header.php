@@ -510,4 +510,6 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
   </div>
 </nav>
 
+<?php include __DIR__ . '/../../includes/typebot_widget.php'; ?>
+
 <main>
