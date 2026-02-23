@@ -27,12 +27,13 @@ if (empty($cfg['enabled'])) {
 }
 // Escape the JSON for inline usage
 $embed_raw = $cfg['embed_code'] ?? '';
-// Escape closing script tags to avoid breaking the surrounding <script> when inlined
+// Prepare a base64-encoded version of the raw embed to store safely in a data-attribute
+$embed_b64 = base64_encode($embed_raw);
+// Escape closing script tags in the raw for legacy flows (not used in JSON)
 $embed_safe = str_replace('</script>', '<\/script>', $embed_raw);
 $jsCfg = json_encode([
   'placement' => $cfg['placement'] ?? 'bottom-right',
-  'delay_seconds' => (int)($cfg['delay_seconds'] ?? 3),
-  'embed_code' => $embed_safe
+  'delay_seconds' => (int)($cfg['delay_seconds'] ?? 3)
 ], JSON_UNESCAPED_UNICODE);
 ?>
 <style>
@@ -44,16 +45,26 @@ $jsCfg = json_encode([
   .typebot-wrapper .tb-inner { max-width: 420px; max-height: 80vh; overflow: hidden; }
   @media (max-width:600px) { .typebot-wrapper { right: 12px; left: auto; bottom: 12px; } }
 </style>
-<div id="typebot-placeholder" aria-hidden="true"></div>
+<div id="typebot-placeholder" data-embed="<?php echo htmlspecialchars($embed_b64, ENT_QUOTES, 'UTF-8'); ?>" aria-hidden="true"></div>
 <script>
 (function(){
   try {
     var cfg = <?= $jsCfg ?>;
     var delay = (parseInt(cfg.delay_seconds,10) || 0) * 1000;
     var placement = cfg.placement || 'bottom-right';
-    var embed = cfg.embed_code || '';
-    // Unescape any escaped closing script tags produced when JSON-encoding
-    try { embed = embed.replace(/<\\\/script>/gi, '</script>'); } catch(e) { }
+    var embed = '';
+    // read the embed from the placeholder data attribute (base64) to avoid embedding raw closing script tags in the page
+    try {
+      var b64 = document.getElementById('typebot-placeholder').getAttribute('data-embed');
+      if (b64) {
+        // decode base64 to UTF-8 string
+        try {
+          embed = decodeURIComponent(Array.prototype.map.call(atob(b64), function(c){ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }).join(''));
+        } catch(e) { try { embed = atob(b64); } catch(e){ embed = ''; } }
+      }
+    } catch(e) { embed = ''; }
+    // Unescape any escaped closing script tags produced when JSON-encoding/storage
+    try { embed = embed.replace(/<\\\/script>/gi, '</' + 'script>'); } catch(e) { }
     // Si el embed es solo una URL, envolver en iframe para Typebot
     try {
       var t = embed.trim();
@@ -82,36 +93,40 @@ $jsCfg = json_encode([
     document.body.appendChild(wrapper);
     setTimeout(function(){
       try {
-          // If embed contains a module script, insert it as a real module in the top-level document
-          if (/\<script[^>]*type=["']?module["']?/i.test(embed)) {
-            try {
-              // Support both inline module scripts and module scripts with a src attribute.
-              var matchSrc = embed.match(/<script[^>]*type=["']?module["']?[^>]*src=["']([^"']+)["'][^>]*>/i);
-              var matchInline = embed.match(/<script[^>]*type=["']?module["']?[^>]*>([\s\S]*?)<\/script>/i);
-              if (matchSrc && matchSrc[1]) {
-                var mod = document.createElement('script');
-                mod.type = 'module';
-                mod.src = matchSrc[1];
-                document.head.appendChild(mod);
-                try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-                wrapper.style.display = '';
-                wrapper.removeAttribute('aria-hidden');
-                return;
-              } else if (matchInline && matchInline[1]) {
-                var moduleSource = matchInline[1];
-                var mod = document.createElement('script');
-                mod.type = 'module';
-                mod.textContent = moduleSource;
-                document.head.appendChild(mod);
-                try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-                wrapper.style.display = '';
-                wrapper.removeAttribute('aria-hidden');
-                return;
+          // If embed contains a module script, parse the HTML and insert it as a real module
+          try {
+            var tmpDoc = null;
+            try { tmpDoc = (new DOMParser()).parseFromString(embed, 'text/html'); } catch(e) { tmpDoc = null; }
+            if (tmpDoc) {
+              var modScript = tmpDoc.querySelector('script[type="module"]');
+              if (modScript) {
+                var src = modScript.getAttribute('src');
+                if (src) {
+                  var mod = document.createElement('script');
+                  mod.type = 'module';
+                  mod.src = src;
+                  document.head.appendChild(mod);
+                  try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                  wrapper.style.display = '';
+                  wrapper.removeAttribute('aria-hidden');
+                  return;
+                }
+                var moduleSource = modScript.textContent || modScript.innerText || '';
+                if (moduleSource) {
+                  var mod = document.createElement('script');
+                  mod.type = 'module';
+                  mod.textContent = moduleSource;
+                  document.head.appendChild(mod);
+                  try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                  wrapper.style.display = '';
+                  wrapper.removeAttribute('aria-hidden');
+                  return;
+                }
               }
-            } catch(e) { console.error('Typebot module injection failed', e); }
-          }
+            }
+          } catch(e) { console.error('Typebot module injection failed', e); }
           // If embed contains any other <script> tag, insert it inside an isolated iframe
-          if (/\<script/i.test(embed)) {
+          if (/<script/i.test(embed)) {
             var iframe = document.createElement('iframe');
             iframe.setAttribute('aria-label','Typebot frame');
             iframe.style.border = '0';
