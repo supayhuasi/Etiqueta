@@ -1,17 +1,26 @@
 <?php
+// Prefer includes config; if not available/readable, fall back to uploads copy created by admin
 $cfg_path = __DIR__ . '/typebot_config.json';
+$alt_path = __DIR__ . '/../uploads/typebot_config.json';
 $cfg = [
     'enabled' => false,
     'placement' => 'bottom-right',
     'delay_seconds' => 3,
     'embed_code' => ''
 ];
-if (file_exists($cfg_path)) {
-    try {
-        $raw = file_get_contents($cfg_path);
-        $parsed = json_decode($raw, true);
-        if (is_array($parsed)) $cfg = array_merge($cfg, $parsed);
-    } catch (Exception $e) {}
+// Cargar preferentemente desde includes; si no existe o no es legible, usar uploads
+if (file_exists($cfg_path) && is_readable($cfg_path)) {
+  try {
+    $raw = file_get_contents($cfg_path);
+    $parsed = json_decode($raw, true);
+    if (is_array($parsed)) $cfg = array_merge($cfg, $parsed);
+  } catch (Exception $e) {}
+} elseif (file_exists($alt_path) && is_readable($alt_path)) {
+  try {
+    $raw = file_get_contents($alt_path);
+    $parsed = json_decode($raw, true);
+    if (is_array($parsed)) $cfg = array_merge($cfg, $parsed);
+  } catch (Exception $e) {}
 }
 if (empty($cfg['enabled'])) {
     return;

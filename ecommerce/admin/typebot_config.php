@@ -21,12 +21,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new['placement'] = in_array($_POST['placement'] ?? '', ['bottom-right','bottom-left','top-right','top-left']) ? $_POST['placement'] : 'bottom-right';
     $new['delay_seconds'] = max(0, (int)($_POST['delay_seconds'] ?? 3));
     $new['embed_code'] = trim($_POST['embed_code'] ?? '');
-    $w = @file_put_contents($cfg_path, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    if ($w !== false) {
-        $msg = 'Guardado correctamente.';
+    // Intentar escribir primero en uploads (generalmente grabable por el servidor web)
+    $uploads_path = __DIR__ . '/../../uploads/typebot_config.json';
+    @mkdir(dirname($uploads_path), 0755, true);
+    $wu = @file_put_contents($uploads_path, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $w_includes = @file_put_contents($cfg_path, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+    if ($wu !== false) {
+        $msg = 'Guardado correctamente en uploads (' . $uploads_path . ').';
+        if ($w_includes !== false) {
+            $msg = 'Guardado correctamente en includes y uploads.';
+        } else {
+            $msg .= ' No fue posible escribir en la ruta principal (includes); se está usando la copia en uploads.';
+        }
         $cfg = $new;
     } else {
-        $msg = 'Error al guardar el archivo de configuración. Ver permisos.';
+        if ($w_includes !== false) {
+            $msg = 'Guardado correctamente en includes.';
+            $cfg = $new;
+        } else {
+            $real = file_exists($cfg_path) ? realpath($cfg_path) : $cfg_path;
+            $msg = 'Error al guardar el archivo de configuración. Ver permisos. Ruta esperada: ' . $real . '. Se intentó guardar en uploads sin éxito.';
+            error_log('Typebot config save failed for both uploads and includes. New content: ' . json_encode($new));
+            $raw_json_for_copy = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
     }
 }
 ?>
@@ -63,6 +81,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <button class="btn btn-primary">Guardar</button>
     </form>
+    <?php if (!empty($raw_json_for_copy)): ?>
+        <hr>
+        <div class="alert alert-warning">No fue posible guardar automáticamente. Copie manualmente el siguiente JSON y péguelo en <code>includes/typebot_config.json</code> (o ajuste permisos del servidor):</div>
+        <pre style="white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px;border:1px solid #ddd;"><?= htmlspecialchars($raw_json_for_copy) ?></pre>
+        <div class="mt-2"><strong>Comandos sugeridos (ejecutar en el servidor):</strong>
+            <pre>sudo chown -R www-data:www-data <?= dirname(__DIR__,2) . '/includes/typebot_config.json' ?>
+sudo chmod 664 <?= dirname(__DIR__,2) . '/includes/typebot_config.json' ?></pre>
+        </div>
+    <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
