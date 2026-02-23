@@ -102,25 +102,63 @@ $jsCfg = json_encode([
               if (modScript) {
                 var src = modScript.getAttribute('src');
                 if (src) {
+                  console.log('Typebot: injecting module script src=', src);
                   var mod = document.createElement('script');
                   mod.type = 'module';
                   mod.src = src;
+                  // report load / error to help debugging
+                  var moduleLoadTimeout = setTimeout(function(){
+                    try {
+                      var note = document.createElement('div');
+                      note.className = 'tb-error';
+                      note.textContent = 'El módulo tarda en cargar: revisá la pestaña Network y la consola (CSP/CORS).';
+                      inner.appendChild(note);
+                      wrapper.style.display = '';
+                      wrapper.removeAttribute('aria-hidden');
+                    } catch(e){}
+                  }, 8000);
+                  mod.onload = function(){
+                    clearTimeout(moduleLoadTimeout);
+                    console.log('Typebot: module loaded', src);
+                    try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                    wrapper.style.display = '';
+                    wrapper.removeAttribute('aria-hidden');
+                  };
+                  mod.onerror = function(ev){
+                    clearTimeout(moduleLoadTimeout);
+                    console.error('Typebot: module load error', src, ev);
+                    try {
+                      var errEl = document.createElement('div');
+                      errEl.className = 'tb-error';
+                      errEl.textContent = 'Error al cargar el módulo: ' + src + '. Revisa la consola y la pestaña Network (CSP / X-Frame-Options / CORS).';
+                      inner.appendChild(errEl);
+                      if (loading && loading.parentNode) loading.parentNode.removeChild(loading);
+                    } catch(e){}
+                    wrapper.style.display = '';
+                    wrapper.removeAttribute('aria-hidden');
+                  };
                   document.head.appendChild(mod);
-                  try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-                  wrapper.style.display = '';
-                  wrapper.removeAttribute('aria-hidden');
                   return;
                 }
                 var moduleSource = modScript.textContent || modScript.innerText || '';
                 if (moduleSource) {
-                  var mod = document.createElement('script');
-                  mod.type = 'module';
-                  mod.textContent = moduleSource;
-                  document.head.appendChild(mod);
-                  try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-                  wrapper.style.display = '';
-                  wrapper.removeAttribute('aria-hidden');
-                  return;
+                  try {
+                    console.log('Typebot: injecting inline module (len=' + moduleSource.length + ')');
+                    var mod = document.createElement('script');
+                    mod.type = 'module';
+                    mod.textContent = moduleSource;
+                    document.head.appendChild(mod);
+                    try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                    wrapper.style.display = '';
+                    wrapper.removeAttribute('aria-hidden');
+                    return;
+                  } catch(e) {
+                    console.error('Typebot: inline module exec failed', e);
+                    try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent = 'Error al ejecutar el módulo inline. Revisa la consola.'; inner.appendChild(errEl); } catch(e){}
+                    wrapper.style.display = '';
+                    wrapper.removeAttribute('aria-hidden');
+                    return;
+                  }
                 }
               }
             }
