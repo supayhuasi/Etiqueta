@@ -52,6 +52,8 @@ $jsCfg = json_encode([
     var delay = (parseInt(cfg.delay_seconds,10) || 0) * 1000;
     var placement = cfg.placement || 'bottom-right';
     var embed = cfg.embed_code || '';
+    // Unescape any escaped closing script tags produced when JSON-encoding
+    try { embed = embed.replace(/<\\\/script>/gi, '</script>'); } catch(e) { }
     // Si el embed es solo una URL, envolver en iframe para Typebot
     try {
       var t = embed.trim();
@@ -83,10 +85,20 @@ $jsCfg = json_encode([
           // If embed contains a module script, insert it as a real module in the top-level document
           if (/\<script[^>]*type=["']?module["']?/i.test(embed)) {
             try {
-              // extract inner content of the module script
-              var match = embed.match(/<script[^>]*type=["']?module["']?[^>]*>([\s\S]*?)<\/script>/i);
-              var moduleSource = match ? match[1] : '';
-              if (moduleSource) {
+              // Support both inline module scripts and module scripts with a src attribute.
+              var matchSrc = embed.match(/<script[^>]*type=["']?module["']?[^>]*src=["']([^"']+)["'][^>]*>/i);
+              var matchInline = embed.match(/<script[^>]*type=["']?module["']?[^>]*>([\s\S]*?)<\/script>/i);
+              if (matchSrc && matchSrc[1]) {
+                var mod = document.createElement('script');
+                mod.type = 'module';
+                mod.src = matchSrc[1];
+                document.head.appendChild(mod);
+                try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                wrapper.style.display = '';
+                wrapper.removeAttribute('aria-hidden');
+                return;
+              } else if (matchInline && matchInline[1]) {
+                var moduleSource = matchInline[1];
                 var mod = document.createElement('script');
                 mod.type = 'module';
                 mod.textContent = moduleSource;
@@ -141,7 +153,24 @@ $jsCfg = json_encode([
               wrapper.style.position = 'fixed';
               wrapper.appendChild(dbg);
               var openBtn = dbg.querySelector('#tb-open-debug');
-              if (openBtn) openBtn.addEventListener('click', function(){ if (__tb_blob) { window.open(__tb_blob,'_blank'); } else { try { var u = URL.createObjectURL(new Blob(['<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'],{type:'text/html'})); window.open(u,'_blank'); setTimeout(function(){ URL.revokeObjectURL(u); },5000);}catch(e){console.error('Typebot debug open failed',e);} } });
+              if (openBtn) openBtn.addEventListener('click', function(){
+                try {
+                  var html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>';
+                  var w = window.open('', '_blank');
+                  if (!w) {
+                    // fallback to data URL if popup blocked
+                    var data = 'data:text/html,' + encodeURIComponent(html);
+                    window.open(data, '_blank');
+                    return;
+                  }
+                  w.document.open();
+                  w.document.write(html);
+                  w.document.close();
+                } catch(e) {
+                  console.error('Typebot debug open failed', e);
+                  if (__tb_blob) { window.open(__tb_blob, '_blank'); }
+                }
+              });
             } catch(e){}
             wrapper.style.display = '';
             wrapper.removeAttribute('aria-hidden');
@@ -173,11 +202,18 @@ $jsCfg = json_encode([
             if (btn) {
               btn.addEventListener('click', function(){
                 try {
-                  var html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>';
-                  var blob = new Blob([html], {type:'text/html'});
-                  var url = URL.createObjectURL(blob);
-                  window.open(url, '_blank');
-                  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+                  try {
+                    var html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>';
+                    var nw = window.open('', '_blank');
+                    if (!nw) {
+                      var data = 'data:text/html,' + encodeURIComponent(html);
+                      window.open(data, '_blank');
+                      return;
+                    }
+                    nw.document.open();
+                    nw.document.write(html);
+                    nw.document.close();
+                  } catch(err) { console.error('Typebot open new tab failed', err); }
                 } catch(err) { console.error('Typebot open new tab failed', err); }
               });
             }
