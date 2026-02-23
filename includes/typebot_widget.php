@@ -75,40 +75,41 @@ $jsCfg = json_encode([
     document.body.appendChild(wrapper);
     setTimeout(function(){
       try {
-        // Parse the embed string; insert non-script nodes and recreate script tags so they execute
-        var parser = new DOMParser();
-        var doc = parser.parseFromString('<div>' + embed + '</div>', 'text/html');
-        var container = doc.body.firstChild;
-        // move non-script children
-        var fragment = document.createDocumentFragment();
-        var scriptsToRun = [];
-        Array.prototype.slice.call(container.childNodes).forEach(function(node){
-          if (node.tagName && node.tagName.toLowerCase() === 'script') {
-            scriptsToRun.push(node);
-          } else {
-            fragment.appendChild(document.importNode(node, true));
-          }
-        });
-        inner.appendChild(fragment);
-        // recreate and append scripts so they execute in page context
-        scriptsToRun.forEach(function(s){
-          var newS = document.createElement('script');
-          if (s.src) newS.src = s.src;
-          if (s.type) newS.type = s.type;
-          if (s.async) newS.async = true;
-          if (s.defer) newS.defer = true;
-          // copy other attributes
-          Array.prototype.slice.call(s.attributes || []).forEach(function(attr){
-            if (attr.name !== 'src' && attr.name !== 'type' && attr.name !== 'async' && attr.name !== 'defer') {
-              newS.setAttribute(attr.name, attr.value);
+          // If embed contains any <script> tag, insert it inside an isolated iframe
+          if (/\<script/i.test(embed)) {
+            var iframe = document.createElement('iframe');
+            iframe.setAttribute('aria-label','Typebot frame');
+            iframe.style.border = '0';
+            iframe.style.width = '100%';
+            iframe.style.height = Math.max(420, Math.min(window.innerHeight - 120, 800)) + 'px';
+            iframe.style.maxWidth = '100%';
+            iframe.style.background = 'transparent';
+            inner.appendChild(iframe);
+            try {
+              var idoc = iframe.contentWindow.document;
+              idoc.open();
+              idoc.write('<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>');
+              idoc.close();
+            } catch(e) {
+              // fallback: set srcdoc when direct document write not allowed
+              try { iframe.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'; } catch(er) { console.error('Typebot iframe fallback failed', er); }
             }
+            wrapper.style.display = '';
+            wrapper.removeAttribute('aria-hidden');
+            return;
+          }
+          // Otherwise treat embed as HTML (iframe or markup) and insert
+          var parser = new DOMParser();
+          var doc = parser.parseFromString('<div>' + embed + '</div>', 'text/html');
+          var container = doc.body.firstChild;
+          var fragment = document.createDocumentFragment();
+          Array.prototype.slice.call(container.childNodes).forEach(function(node){
+            fragment.appendChild(document.importNode(node, true));
           });
-          if (s.textContent && !s.src) newS.textContent = s.textContent;
-          inner.appendChild(newS);
-        });
-        wrapper.style.display = '';
-        wrapper.removeAttribute('aria-hidden');
-      } catch(e){ console.error('Typebot insert error', e); }
+          inner.appendChild(fragment);
+          wrapper.style.display = '';
+          wrapper.removeAttribute('aria-hidden');
+        } catch(e){ console.error('Typebot insert error', e); }
     }, delay);
   } catch(e) { console.error('Typebot widget init error', e); }
 })();
