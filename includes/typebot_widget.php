@@ -71,6 +71,11 @@ $jsCfg = json_encode([
     wrapper.style.display = 'none';
     var inner = document.createElement('div');
     inner.className = 'tb-inner';
+    // estado visible mientras carga
+    var loading = document.createElement('div');
+    loading.className = 'tb-loading';
+    loading.textContent = 'Cargando asistente...';
+    inner.appendChild(loading);
     wrapper.appendChild(inner);
     document.body.appendChild(wrapper);
     setTimeout(function(){
@@ -84,15 +89,21 @@ $jsCfg = json_encode([
             iframe.style.height = Math.max(420, Math.min(window.innerHeight - 120, 800)) + 'px';
             iframe.style.maxWidth = '100%';
             iframe.style.background = 'transparent';
+            // Allow common capabilities the widget may need (media, clipboard, autoplay)
+            try { iframe.setAttribute('allow', 'clipboard-write; microphone; camera; autoplay; encrypted-media; display-capture'); } catch(e) {}
+            try { iframe.allowFullscreen = true; } catch(e) {}
             inner.appendChild(iframe);
             try {
               var idoc = iframe.contentWindow.document;
               idoc.open();
               idoc.write('<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>');
               idoc.close();
+              // quitar loader si aún está
+              try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
             } catch(e) {
               // fallback: set srcdoc when direct document write not allowed
               try { iframe.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'; } catch(er) { console.error('Typebot iframe fallback failed', er); }
+              try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
             }
             wrapper.style.display = '';
             wrapper.removeAttribute('aria-hidden');
@@ -107,10 +118,34 @@ $jsCfg = json_encode([
             fragment.appendChild(document.importNode(node, true));
           });
           inner.appendChild(fragment);
+          try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
           wrapper.style.display = '';
           wrapper.removeAttribute('aria-hidden');
         } catch(e){ console.error('Typebot insert error', e); }
     }, delay);
+      // si algo falla después del timeout, mostrar botón de fallback
+      setTimeout(function(){
+        try {
+          if (inner && inner.children.length === 0) {
+            var err = document.createElement('div');
+            err.className = 'tb-error';
+            err.innerHTML = 'No se pudo cargar el asistente aquí. <button id="tb-open-new" class="btn btn-sm btn-primary">Abrir en nueva pestaña</button>';
+            inner.appendChild(err);
+            var btn = document.getElementById('tb-open-new');
+            if (btn) {
+              btn.addEventListener('click', function(){
+                try {
+                  var html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>';
+                  var blob = new Blob([html], {type:'text/html'});
+                  var url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+                } catch(err) { console.error('Typebot open new tab failed', err); }
+              });
+            }
+          }
+        } catch(e) {}
+      }, delay + 1000);
   } catch(e) { console.error('Typebot widget init error', e); }
 })();
 </script>
