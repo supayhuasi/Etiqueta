@@ -40,6 +40,16 @@ $jsCfg = json_encode([
     var delay = (parseInt(cfg.delay_seconds,10) || 0) * 1000;
     var placement = cfg.placement || 'bottom-right';
     var embed = cfg.embed_code || '';
+    // Si el embed es solo una URL, envolver en iframe para Typebot
+    try {
+      var t = embed.trim();
+      if (/^https?:\/\//i.test(t) && !/^<\s*(iframe|script)/i.test(t)) {
+        var url = t;
+        var w = 360;
+        var h = Math.max(400, Math.min(window.innerHeight - 120, 800));
+        embed = '<iframe src="' + url.replace(/\"/g,'') + '" width="' + w + '" height="' + h + '" style="border:0;max-width:100%" loading="lazy" allow="clipboard-write; microphone; camera; autoplay; encrypted-media"></iframe>';
+      }
+    } catch(e) { console.warn('Typebot: embed auto-wrap failed', e); }
     var placeholder = document.getElementById('typebot-placeholder');
     if (!placeholder) return;
     var wrapper = document.createElement('div');
@@ -53,7 +63,37 @@ $jsCfg = json_encode([
     document.body.appendChild(wrapper);
     setTimeout(function(){
       try {
-        inner.innerHTML = embed;
+        // Parse the embed string; insert non-script nodes and recreate script tags so they execute
+        var parser = new DOMParser();
+        var doc = parser.parseFromString('<div>' + embed + '</div>', 'text/html');
+        var container = doc.body.firstChild;
+        // move non-script children
+        var fragment = document.createDocumentFragment();
+        var scriptsToRun = [];
+        Array.prototype.slice.call(container.childNodes).forEach(function(node){
+          if (node.tagName && node.tagName.toLowerCase() === 'script') {
+            scriptsToRun.push(node);
+          } else {
+            fragment.appendChild(document.importNode(node, true));
+          }
+        });
+        inner.appendChild(fragment);
+        // recreate and append scripts so they execute in page context
+        scriptsToRun.forEach(function(s){
+          var newS = document.createElement('script');
+          if (s.src) newS.src = s.src;
+          if (s.type) newS.type = s.type;
+          if (s.async) newS.async = true;
+          if (s.defer) newS.defer = true;
+          // copy other attributes
+          Array.prototype.slice.call(s.attributes || []).forEach(function(attr){
+            if (attr.name !== 'src' && attr.name !== 'type' && attr.name !== 'async' && attr.name !== 'defer') {
+              newS.setAttribute(attr.name, attr.value);
+            }
+          });
+          if (s.textContent && !s.src) newS.textContent = s.textContent;
+          inner.appendChild(newS);
+        });
         wrapper.style.display = '';
         wrapper.removeAttribute('aria-hidden');
       } catch(e){ console.error('Typebot insert error', e); }
