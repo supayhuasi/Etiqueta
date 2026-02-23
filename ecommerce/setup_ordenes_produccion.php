@@ -29,6 +29,13 @@ try {
         echo "<br>✓ Columna materiales_descontados agregada";
     }
 
+    // Agregar columna fecha_instalacion si no existe (para programar instalaciones)
+    $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_ordenes_produccion LIKE 'fecha_instalacion'");
+    if ($stmt->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN fecha_instalacion DATE NULL AFTER fecha_entrega");
+        echo "<br>✓ Columna fecha_instalacion agregada";
+    }
+
     // Verificar si el ENUM de estado incluye 'cancelado'
     $stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_ordenes_produccion LIKE 'estado'");
     $column = $stmt->fetch(PDO::FETCH_ASSOC);
