@@ -161,13 +161,14 @@ $pagos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $stmt = $pdo->prepare("SELECT SUM(monto) AS total_pagado FROM ecommerce_pedido_pagos WHERE pedido_id = ?");
 $stmt->execute([$pedido_id]);
 $total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
+$total_pagado = round($total_pagado, 2);
 
 $estados_pagados = ['pagado', 'pago_autorizado', 'confirmado', 'esperando_envio', 'preparando', 'enviado', 'entregado'];
 if ($total_pagado <= 0 && in_array($pedido['estado'], $estados_pagados, true)) {
     $total_pagado = (float)$pedido['total'];
 }
 
-$saldo = (float)$pedido['total'] - $total_pagado;
+$saldo = round((float)$pedido['total'] - $total_pagado, 2);
 
 $error = '';
 
@@ -284,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
         } elseif ($accion === 'registrar_pago') {
-            $monto = (float)($_POST['monto'] ?? 0);
+            $monto = round((float)($_POST['monto'] ?? 0), 2);
             $metodo = trim($_POST['metodo'] ?? '');
             $referencia = trim($_POST['referencia'] ?? '');
             $notas = trim($_POST['notas'] ?? '');
@@ -292,7 +293,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($monto <= 0) {
                 throw new Exception('El monto debe ser mayor a 0');
             }
-            if ($monto > $saldo) {
+            // Allow small floating-point tolerance by comparing rounded cents
+            $saldo_cmp = round($saldo, 2);
+            if ($monto > $saldo_cmp) {
                 throw new Exception('El monto excede el saldo');
             }
             if ($metodo === '') {
