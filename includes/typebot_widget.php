@@ -143,11 +143,29 @@ $jsCfg = json_encode([
                 var moduleSource = modScript.textContent || modScript.innerText || '';
                 if (moduleSource) {
                   try {
-                    console.log('Typebot: injecting inline module (len=' + moduleSource.length + ')');
-                    var mod = document.createElement('script');
-                    mod.type = 'module';
-                    mod.textContent = moduleSource;
-                    document.head.appendChild(mod);
+                    console.log('Typebot: injecting inline module via blob (len=' + moduleSource.length + ')');
+                    var blobUrl = null;
+                    try {
+                      var blob = new Blob([moduleSource], {type: 'text/javascript'});
+                      blobUrl = URL.createObjectURL(blob);
+                    } catch(e) { blobUrl = null; }
+                    if (blobUrl) {
+                      var mod = document.createElement('script');
+                      mod.type = 'module';
+                      mod.src = blobUrl;
+                      var blobTimeout = setTimeout(function(){
+                        try { var note = document.createElement('div'); note.className='tb-error'; note.textContent='El módulo tarda en ejecutarse (blob). Revisa Network/Console.'; inner.appendChild(note); wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); } catch(e){}
+                      }, 8000);
+                      mod.onload = function(){ clearTimeout(blobTimeout); console.log('Typebot: blob module executed'); try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){} wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); setTimeout(function(){ try { URL.revokeObjectURL(blobUrl); } catch(e){} }, 5000); };
+                      mod.onerror = function(ev){ clearTimeout(blobTimeout); console.error('Typebot: blob module error', ev); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='Error al ejecutar el módulo (blob). Revisa la consola.'; inner.appendChild(errEl); if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){} wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); };
+                      document.head.appendChild(mod);
+                      return;
+                    }
+                    // Fallback: append inline module directly (may fail if parser previously broken)
+                    var modInline = document.createElement('script');
+                    modInline.type = 'module';
+                    modInline.textContent = moduleSource;
+                    document.head.appendChild(modInline);
                     try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
                     wrapper.style.display = '';
                     wrapper.removeAttribute('aria-hidden');
@@ -163,72 +181,43 @@ $jsCfg = json_encode([
               }
             }
           } catch(e) { console.error('Typebot module injection failed', e); }
-          // If embed contains any other <script> tag, insert it inside an isolated iframe
-          if (/<script/i.test(embed)) {
-            var iframe = document.createElement('iframe');
-            iframe.setAttribute('aria-label','Typebot frame');
-            iframe.style.border = '0';
-            iframe.style.width = '100%';
-            iframe.style.height = Math.max(420, Math.min(window.innerHeight - 120, 800)) + 'px';
-            iframe.style.maxWidth = '100%';
-            iframe.style.background = 'transparent';
-            // debug border for visibility
-            iframe.style.outline = '2px dashed rgba(0,0,0,0.12)';
-            // Allow common capabilities the widget may need (media, clipboard, autoplay)
-            try { iframe.setAttribute('allow', 'clipboard-write; microphone; camera; autoplay; encrypted-media; display-capture'); } catch(e) {}
-            try { iframe.allowFullscreen = true; } catch(e) {}
-            inner.appendChild(iframe);
-            // prepare blob url for debug open
-            var __tb_blob = null;
-            try {
-              var idoc = iframe.contentWindow.document;
-              idoc.open();
-              idoc.write('<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>');
-              idoc.close();
-              try { __tb_blob = URL.createObjectURL(new Blob(['<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'], {type:'text/html'})); } catch(e) { console.warn('Typebot: blob creation failed', e); }
-              // quitar loader si aún está
-              try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-            } catch(e) {
-              // fallback: set srcdoc when direct document write not allowed
-              try { iframe.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'; } catch(er) { console.error('Typebot iframe fallback failed', er); }
-              try { __tb_blob = URL.createObjectURL(new Blob(['<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>'], {type:'text/html'})); } catch(e) { console.warn('Typebot: blob creation failed', e); }
-              try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-            }
-            // attach listeners to report load/error
-            try {
-              iframe.addEventListener('load', function(){ console.log('Typebot iframe loaded'); try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){} });
-              iframe.addEventListener('error', function(ev){ console.error('Typebot iframe error', ev); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='Error al cargar el iframe. Revisa la consola.'; inner.appendChild(errEl);} catch(e){} });
-            } catch(e){}
-            // add debug toolbar button
-            try {
-              var dbg = document.createElement('div'); dbg.style.position='absolute'; dbg.style.right='8px'; dbg.style.top='8px'; dbg.style.zIndex='1000001';
-              dbg.innerHTML = '<button id="tb-open-debug" class="btn btn-sm btn-outline-secondary">Abrir asistente (nueva pestaña)</button>';
-              wrapper.style.position = 'fixed';
-              wrapper.appendChild(dbg);
-              var openBtn = dbg.querySelector('#tb-open-debug');
-              if (openBtn) openBtn.addEventListener('click', function(){
+          // Inject all scripts and content into the top-level document (no iframe fallback)
+          try {
+            var tmp = (new DOMParser()).parseFromString(embed, 'text/html');
+            if (tmp && tmp.body) {
+              // Inject scripts first
+              var scripts = tmp.body.querySelectorAll('script');
+              Array.prototype.forEach.call(scripts, function(s){
                 try {
-                  var html = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + embed + '</body></html>';
-                  var w = window.open('', '_blank');
-                  if (!w) {
-                    // fallback to data URL if popup blocked
-                    var data = 'data:text/html,' + encodeURIComponent(html);
-                    window.open(data, '_blank');
-                    return;
+                  var newScript = document.createElement('script');
+                  var type = s.getAttribute('type');
+                  if (type) newScript.type = type;
+                  var src = s.getAttribute('src');
+                  if (src) {
+                    newScript.src = src;
+                    // attach handlers for debugging
+                    newScript.onload = function(){ console.log('Typebot: injected script loaded', src); };
+                    newScript.onerror = function(ev){ console.error('Typebot: injected script error', src, ev); };
+                    document.head.appendChild(newScript);
+                  } else {
+                    newScript.textContent = s.textContent || '';
+                    document.head.appendChild(newScript);
                   }
-                  w.document.open();
-                  w.document.write(html);
-                  w.document.close();
-                } catch(e) {
-                  console.error('Typebot debug open failed', e);
-                  if (__tb_blob) { window.open(__tb_blob, '_blank'); }
-                }
+                } catch(e) { console.error('Typebot: script injection failed', e); }
               });
-            } catch(e){}
-            wrapper.style.display = '';
-            wrapper.removeAttribute('aria-hidden');
-            return;
-          }
+              // Then import non-script nodes into the widget inner container
+              var frag = document.createDocumentFragment();
+              Array.prototype.forEach.call(tmp.body.childNodes, function(node){
+                if (node.nodeName && node.nodeName.toLowerCase() === 'script') return;
+                try { frag.appendChild(document.importNode(node, true)); } catch(e) {}
+              });
+              inner.appendChild(frag);
+              try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+              wrapper.style.display = '';
+              wrapper.removeAttribute('aria-hidden');
+              return;
+            }
+          } catch(e) { console.error('Typebot top-level injection failed', e); }
           // Otherwise treat embed as HTML (iframe or markup) and insert
           var parser = new DOMParser();
           var doc = parser.parseFromString('<div>' + embed + '</div>', 'text/html');
