@@ -396,6 +396,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php if ($can_access('google_analytics')): ?>
                         <a href="<?= $admin_url ?>google_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'google_analytics.php' ? 'active' : '' ?>"><i class="bi bi-graph-up"></i> Google Analytics</a>
                         <?php endif; ?>
+                        <?php if ($can_access('google_analytics') || $can_access('empresa')): ?>
+                        <a href="<?= $admin_url ?>typebot_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'typebot_config.php' ? 'active' : '' ?>"><i class="bi bi-chat-dots"></i> Typebot</a>
+                        <?php endif; ?>
                         <?php if ($can_access('email_config')): ?>
                         <a href="<?= $admin_url ?>email_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email_config.php' ? 'active' : '' ?>"><i class="bi bi-envelope"></i> Email (SMTP)</a>
                         <?php endif; ?>
