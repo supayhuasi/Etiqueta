@@ -143,32 +143,40 @@ $jsCfg = json_encode([
                 var moduleSource = modScript.textContent || modScript.innerText || '';
                 if (moduleSource) {
                   try {
-                    console.log('Typebot: injecting inline module via blob (len=' + moduleSource.length + ')');
-                    var blobUrl = null;
-                    try {
-                      var blob = new Blob([moduleSource], {type: 'text/javascript'});
-                      blobUrl = URL.createObjectURL(blob);
-                    } catch(e) { blobUrl = null; }
-                    if (blobUrl) {
-                      var mod = document.createElement('script');
-                      mod.type = 'module';
-                      mod.src = blobUrl;
-                      var blobTimeout = setTimeout(function(){
-                        try { var note = document.createElement('div'); note.className='tb-error'; note.textContent='El módulo tarda en ejecutarse (blob). Revisa Network/Console.'; inner.appendChild(note); wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); } catch(e){}
-                      }, 8000);
-                      mod.onload = function(){ clearTimeout(blobTimeout); console.log('Typebot: blob module executed'); try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){} wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); setTimeout(function(){ try { URL.revokeObjectURL(blobUrl); } catch(e){} }, 5000); };
-                      mod.onerror = function(ev){ clearTimeout(blobTimeout); console.error('Typebot: blob module error', ev); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='Error al ejecutar el módulo (blob). Revisa la consola.'; inner.appendChild(errEl); if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){} wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); };
-                      document.head.appendChild(mod);
-                      return;
-                    }
-                    // Fallback: append inline module directly (may fail if parser previously broken)
-                    var modInline = document.createElement('script');
-                    modInline.type = 'module';
-                    modInline.textContent = moduleSource;
-                    document.head.appendChild(modInline);
-                    try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
-                    wrapper.style.display = '';
-                    wrapper.removeAttribute('aria-hidden');
+                    // Force loading official Typebot module first, then execute user's inline module
+                    var cdnSrc = 'https://cdn.jsdelivr.net/npm/@typebot.io/js@0/dist/web.js';
+                    console.log('Typebot: loading CDN module', cdnSrc);
+                    var boot = document.createElement('script');
+                    boot.type = 'module';
+                    boot.src = cdnSrc;
+                    var bootTimeout = setTimeout(function(){ try { var note = document.createElement('div'); note.className='tb-error'; note.textContent='Carga inicial del módulo tardó demasiado. Revisa Network/Console.'; inner.appendChild(note); wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); } catch(e){} }, 8000);
+                    boot.onload = function(){
+                      clearTimeout(bootTimeout);
+                      try { if (loading && loading.parentNode) loading.parentNode.removeChild(loading); } catch(e){}
+                      console.log('Typebot: CDN module loaded, executing inline module');
+                      // execute inline module (via blob when possible)
+                      try {
+                        var blobUrl = null;
+                        try { blobUrl = URL.createObjectURL(new Blob([moduleSource], {type:'text/javascript'})); } catch(e) { blobUrl = null; }
+                        if (blobUrl) {
+                          var mod = document.createElement('script');
+                          mod.type = 'module';
+                          mod.src = blobUrl;
+                          mod.onload = function(){ try { setTimeout(function(){ try { URL.revokeObjectURL(blobUrl); } catch(e){} }, 5000); } catch(e){} };
+                          mod.onerror = function(ev){ console.error('Typebot: inline blob module error', ev); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='Error al ejecutar el módulo inline (blob). Revisa la consola.'; inner.appendChild(errEl); } catch(e){} };
+                          document.head.appendChild(mod);
+                        } else {
+                          var modInline = document.createElement('script');
+                          modInline.type = 'module';
+                          modInline.textContent = moduleSource;
+                          document.head.appendChild(modInline);
+                        }
+                      } catch(e) { console.error('Typebot: executing inline module failed', e); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='Error al ejecutar el módulo inline. Revisa la consola.'; inner.appendChild(errEl); } catch(e){} }
+                      wrapper.style.display = '';
+                      wrapper.removeAttribute('aria-hidden');
+                    };
+                    boot.onerror = function(ev){ clearTimeout(bootTimeout); console.error('Typebot: CDN module load error', ev); try { var errEl = document.createElement('div'); errEl.className='tb-error'; errEl.textContent='No se pudo cargar el módulo CDN. Revisa Network/Console (CORS/MIME).'; inner.appendChild(errEl); } catch(e){} wrapper.style.display=''; wrapper.removeAttribute('aria-hidden'); };
+                    document.head.appendChild(boot);
                     return;
                   } catch(e) {
                     console.error('Typebot: inline module exec failed', e);
