@@ -79,16 +79,16 @@ try {
     ");
 
     echo '<pre style="color:blue">DEBUG: Antes de crear tabla sueldo_base_mensual</pre>';
-    $pdo->exec("\
-        CREATE TABLE IF NOT EXISTS sueldo_base_mensual (\
-            id INT PRIMARY KEY AUTO_INCREMENT,\
-            empleado_id INT NOT NULL,\
-            mes VARCHAR(7) NOT NULL,\
-            sueldo_base DECIMAL(10,2) NOT NULL,\
-            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,\
-            UNIQUE KEY unique_emp_mes (empleado_id, mes),\
-            FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE CASCADE\
-        )\
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS sueldo_base_mensual (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            empleado_id INT NOT NULL,
+            mes VARCHAR(7) NOT NULL,
+            sueldo_base DECIMAL(10,2) NOT NULL,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_emp_mes (empleado_id, mes),
+            FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE CASCADE
+        )
     ");
 
     echo '<pre style="color:blue">DEBUG: Antes de insertar conceptos por defecto</pre>';
