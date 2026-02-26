@@ -20,32 +20,45 @@ $empleado_id = $_GET['id'] ?? 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $stmt = $pdo->prepare("
-            UPDATE empleados 
-            SET nombre = ?, email = ?, documento = ?, tipo_documento = ?, telefono = ?,
-                direccion = ?, ciudad = ?, provincia = ?, codigo_postal = ?,
-                puesto = ?, departamento = ?, fecha_ingreso = ?, sueldo_base = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([
-            $_POST['nombre'],
-            $_POST['email'],
-            $_POST['documento'] ?? null,
-            $_POST['tipo_documento'] ?? 'DNI',
-            $_POST['telefono'] ?? null,
-            $_POST['direccion'] ?? null,
-            $_POST['ciudad'] ?? null,
-            $_POST['provincia'] ?? null,
-            $_POST['codigo_postal'] ?? null,
-            $_POST['puesto'] ?? null,
-            $_POST['departamento'] ?? null,
-            $_POST['fecha_ingreso'] ?? null,
-            floatval($_POST['sueldo_base']),
-            $empleado_id
-        ]);
-        
-        header("Location: sueldos.php?success=Empleado actualizado");
-        exit;
+        if (isset($_POST['action']) && $_POST['action'] === 'set_sueldo_mensual') {
+            $mes = trim($_POST['mes'] ?? ''); // YYYY-MM
+            $sueldo_m = floatval($_POST['sueldo_mensual'] ?? 0);
+            if ($mes !== '' && $sueldo_m > 0) {
+                $ins = $pdo->prepare("INSERT INTO sueldo_base_mensual (empleado_id, mes, sueldo_base) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE sueldo_base = VALUES(sueldo_base)");
+                $ins->execute([$empleado_id, $mes, $sueldo_m]);
+                header("Location: empleados_editar.php?id=" . urlencode($empleado_id) . "&success=" . urlencode('Sueldo mensual guardado'));
+                exit;
+            } else {
+                $error = 'Mes o sueldo inválido para sueldo mensual';
+            }
+        } else {
+            $stmt = $pdo->prepare("\
+                UPDATE empleados \
+                SET nombre = ?, email = ?, documento = ?, tipo_documento = ?, telefono = ?,\
+                    direccion = ?, ciudad = ?, provincia = ?, codigo_postal = ?,\
+                    puesto = ?, departamento = ?, fecha_ingreso = ?, sueldo_base = ?\
+                WHERE id = ?\
+            ");
+            $stmt->execute([
+                $_POST['nombre'],
+                $_POST['email'],
+                $_POST['documento'] ?? null,
+                $_POST['tipo_documento'] ?? 'DNI',
+                $_POST['telefono'] ?? null,
+                $_POST['direccion'] ?? null,
+                $_POST['ciudad'] ?? null,
+                $_POST['provincia'] ?? null,
+                $_POST['codigo_postal'] ?? null,
+                $_POST['puesto'] ?? null,
+                $_POST['departamento'] ?? null,
+                $_POST['fecha_ingreso'] ?? null,
+                floatval($_POST['sueldo_base']),
+                $empleado_id
+            ]);
+            
+            header("Location: sueldos.php?success=Empleado actualizado");
+            exit;
+        }
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
     }
@@ -175,6 +188,27 @@ if (!$empleado) {
                     <a href="sueldos.php" class="btn btn-secondary">Cancelar</a>
                 </div>
             </form>
+
+            <!-- Formulario para establecer sueldo base mensual (sobrescritura) -->
+            <div class="card mt-3">
+                <div class="card-header"><h5>Sueldo Base Mensual (sobrescritura)</h5></div>
+                <div class="card-body">
+                    <form method="POST" class="row g-2 align-items-end">
+                        <input type="hidden" name="action" value="set_sueldo_mensual">
+                        <div class="col-md-4">
+                            <label class="form-label">Mes</label>
+                            <input type="month" name="mes" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Sueldo Base ($)</label>
+                            <input type="number" name="sueldo_mensual" step="0.01" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-secondary">Guardar Sueldo Mensual</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>
