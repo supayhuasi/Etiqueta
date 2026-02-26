@@ -68,6 +68,9 @@ $pdo->exec("
 ");
 
 // Tabla para sobrescribir sueldo base por mes (sueldo base mensual)
+/*
+// NOTE: moved to ecommerce/admin/sueldos/setup_sueldos.php
+// Tabla para sobrescribir sueldo base por mes (sueldo base mensual)
 $pdo->exec("\
     CREATE TABLE IF NOT EXISTS sueldo_base_mensual (\
         id INT PRIMARY KEY AUTO_INCREMENT,\
@@ -79,6 +82,7 @@ $pdo->exec("\
         FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE CASCADE\
     )\
 ");
+*/
 
 // Insertar conceptos por defecto si la tabla está vacía
 $stmt = $pdo->query("SELECT COUNT(*) FROM conceptos");
