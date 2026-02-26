@@ -32,11 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Mes o sueldo inválido para sueldo mensual';
             }
         } else {
+            $activo = isset($_POST['activo']) ? 1 : 0;
             $stmt = $pdo->prepare("\
                 UPDATE empleados \
                 SET nombre = ?, email = ?, documento = ?, tipo_documento = ?, telefono = ?,\
                     direccion = ?, ciudad = ?, provincia = ?, codigo_postal = ?,\
-                    puesto = ?, departamento = ?, fecha_ingreso = ?, sueldo_base = ?\
+                    puesto = ?, departamento = ?, fecha_ingreso = ?, sueldo_base = ?, activo = ?\
                 WHERE id = ?\
             ");
             $stmt->execute([
@@ -53,9 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_POST['departamento'] ?? null,
                 $_POST['fecha_ingreso'] ?? null,
                 floatval($_POST['sueldo_base']),
+                $activo,
                 $empleado_id
             ]);
-            
             header("Location: sueldos.php?success=Empleado actualizado");
             exit;
         }
@@ -85,6 +86,10 @@ if (!$empleado) {
             
             <form method="POST">
                 <!-- Datos Personales -->
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="activo" name="activo" value="1" <?= ($empleado['activo'] ?? 1) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="activo">Empleado activo (si está desmarcado, no se liquida sueldo)</label>
+                </div>
                 <div class="card mb-3">
                     <div class="card-header">
                         <h5>Datos Personales</h5>
