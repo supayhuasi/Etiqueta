@@ -1,12 +1,20 @@
 
-define('SECURITY_CHECK', true);
-require_once __DIR__ . '/../../config.php';
-// ...existing code...
+// Forzar visualización de errores para debug
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+echo '<pre style="color:blue">DEBUG: Inicio de script</pre>';
 
-// Manejo de errores para debug temporal
+define('SECURITY_CHECK', true);
+echo '<pre style="color:blue">DEBUG: Antes de require config.php</pre>';
+require_once __DIR__ . '/../../config.php';
+echo '<pre style="color:blue">DEBUG: Conexión a base de datos OK</pre>';
+
 try {
+    echo '<pre style="color:blue">DEBUG: Entrando a bloque try</pre>';
     // Crear tablas si no existen
     // Tabla de Empleados
+    echo '<pre style="color:blue">DEBUG: Antes de crear tabla empleados</pre>';
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS empleados (
             id INT PRIMARY KEY AUTO_INCREMENT,
@@ -29,7 +37,7 @@ try {
         )
     ");
 
-    // Agregar columnas si la tabla ya existía
+    echo '<pre style="color:blue">DEBUG: Antes de verificar columnas empleados</pre>';
     $col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'documento'");
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE empleados ADD COLUMN documento VARCHAR(20) AFTER email");
@@ -44,7 +52,7 @@ try {
         $pdo->exec("ALTER TABLE empleados ADD COLUMN fecha_ingreso DATE AFTER departamento");
     }
 
-    // Tabla de Conceptos (Bonificaciones y Descuentos)
+    echo '<pre style="color:blue">DEBUG: Antes de crear tabla conceptos</pre>';
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS conceptos (
             id INT PRIMARY KEY AUTO_INCREMENT,
@@ -56,7 +64,7 @@ try {
         )
     ");
 
-    // Tabla de Conceptos por Empleado
+    echo '<pre style="color:blue">DEBUG: Antes de crear tabla sueldo_conceptos</pre>';
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS sueldo_conceptos (
             id INT PRIMARY KEY AUTO_INCREMENT,
@@ -70,7 +78,7 @@ try {
         )
     ");
 
-    // Tabla para sobrescribir sueldo base por mes (sueldo base mensual)
+    echo '<pre style="color:blue">DEBUG: Antes de crear tabla sueldo_base_mensual</pre>';
     $pdo->exec("\
         CREATE TABLE IF NOT EXISTS sueldo_base_mensual (\
             id INT PRIMARY KEY AUTO_INCREMENT,\
@@ -83,7 +91,7 @@ try {
         )\
     ");
 
-    // Insertar conceptos por defecto si la tabla está vacía
+    echo '<pre style="color:blue">DEBUG: Antes de insertar conceptos por defecto</pre>';
     $stmt = $pdo->query("SELECT COUNT(*) FROM conceptos");
     if ($stmt->fetchColumn() == 0) {
         $pdo->exec("
@@ -97,14 +105,10 @@ try {
         ");
     }
 
-    echo "✓ Base de datos configurada correctamente";
-} catch (PDOException $e) {
+    echo '<pre style="color:green">✓ Base de datos configurada correctamente</pre>';
+} catch (Throwable $e) {
     // Mostrar error para debug temporalmente
-    echo '<pre style="color:red">Error SQL: ' . $e->getMessage() . '</pre>';
+    echo '<pre style="color:red">ERROR: ' . $e->getMessage() . '</pre>';
+    echo '<pre style="color:red">TRACE: ' . $e->getTraceAsString() . '</pre>';
     exit;
 }
-?>
-// Forzar visualización de errores para debug
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
