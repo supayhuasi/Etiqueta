@@ -51,7 +51,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $activo,
             $id
         ]);
-        header("Location: empleados.php?success=Empleado actualizado");
+        // Redirigir a la página de origen si existe, si no a empleados.php
+        $redirect = 'empleados.php?success=Empleado actualizado';
+        if (!empty($_SERVER['HTTP_REFERER']) && strpos($_SERVER['HTTP_REFERER'], 'empleados') !== false) {
+            $redirect = $_SERVER['HTTP_REFERER'];
+        }
+        header("Location: $redirect");
         exit;
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
