@@ -1,17 +1,32 @@
 <?php
+// Debug: mostrar errores
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+echo '<!-- INICIO empleados.php -->';
+
 require '../includes/header.php';
+echo '<!-- HEADER OK -->';
 
 // Verificar sesión y rol admin
 session_start();
+echo '<!-- SESSION OK -->';
 if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
     http_response_code(403);
     echo '<div class="container mt-4"><div class="alert alert-danger">Acceso solo permitido para administradores.</div></div>';
     exit;
 }
+echo '<!-- ROL OK -->';
 
-// Obtener empleados
-$stmt = $pdo->query("SELECT * FROM empleados ORDER BY nombre ASC");
-$empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    // Obtener empleados
+    $stmt = $pdo->query("SELECT * FROM empleados ORDER BY nombre ASC");
+    $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo '<!-- QUERY OK -->';
+} catch (Throwable $e) {
+    echo '<div class="alert alert-danger">Error al obtener empleados: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    exit;
+}
 ?>
 <div class="container mt-4">
     <div class="row mb-4">
