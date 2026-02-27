@@ -9,7 +9,9 @@ require '../includes/header.php';
 echo '<!-- HEADER OK -->';
 
 // Verificar sesión y rol admin
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 echo '<!-- SESSION OK -->';
 if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
     http_response_code(403);
