@@ -63,11 +63,11 @@ try {
                     <tbody>
                         <?php foreach ($empleados as $emp): ?>
                         <tr>
-                            <td><?= htmlspecialchars($emp['nombre']) ?></td>
-                            <td><?= htmlspecialchars($emp['email']) ?></td>
-                            <td><?= htmlspecialchars($emp['documento']) ?></td>
-                            <td><?= htmlspecialchars($emp['puesto']) ?></td>
-                            <td><?= htmlspecialchars($emp['departamento']) ?></td>
+                            <td><?= htmlspecialchars($emp['nombre'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($emp['email'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($emp['documento'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($emp['puesto'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($emp['departamento'] ?? '') ?></td>
                             <td>$<?= number_format($emp['sueldo_base'], 2, ',', '.') ?></td>
                             <td><?= $emp['activo'] ? '<span class="badge bg-success">Sí</span>' : '<span class="badge bg-danger">No</span>' ?></td>
                             <td>
