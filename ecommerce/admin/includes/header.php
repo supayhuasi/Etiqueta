@@ -492,6 +492,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php if ($can_access('sueldos')): ?>
                         <a href="<?= $admin_url ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php']) ? 'active' : '' ?>"><i class="bi bi-cash-coin"></i> Sueldos</a>
                         <?php endif; ?>
+                        <?php if ($role === 'admin'): ?>
+                        <a href="<?= $admin_url ?>empleados.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empleados.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Empleados</a>
+                        <?php endif; ?>
                         <?php if ($can_access('plantillas')): ?>
                         <a href="<?= $admin_url ?>sueldos/plantillas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'plantillas.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark"></i> Plantillas</a>
                         <?php endif; ?>
