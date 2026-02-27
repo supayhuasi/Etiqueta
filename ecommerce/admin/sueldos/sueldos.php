@@ -170,7 +170,7 @@ foreach ($empleados as $emp) {
             <h2>Gestión de Sueldos</h2>
         </div>
         <div class="col-md-6 text-end">
-            <a href="empleados_crear.php" class="btn btn-primary">+ Nuevo Empleado</a>
+            <a href="../empleados_crear.php" class="btn btn-primary">+ Nuevo Empleado</a>
             <a href="plantillas.php" class="btn btn-success">📋 Plantillas</a>
         </div>
     </div>
@@ -347,7 +347,7 @@ foreach ($empleados as $emp) {
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <a href="pagar_sueldo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-success" title="Registrar/Actualizar pago">💵</a>
-                                    <a href="empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
+                                    <a href="../empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
                                     <a href="sueldo_conceptos.php?id=<?= $emp['id'] ?>" class="btn btn-info" title="Conceptos y plantilla">💰</a>
                                     <a href="sueldo_recibo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-primary" title="Ver recibo">🧾</a>
                                 </div>
@@ -376,7 +376,7 @@ foreach ($empleados as $emp) {
                 <div class="card-body">
                     <h5 class="card-title">👥 Empleados</h5>
                     <p class="card-text">Crear y editar empleados</p>
-                    <a href="empleados_crear.php" class="btn btn-primary">Nuevo Empleado</a>
+                    <a href="../empleados_crear.php" class="btn btn-primary">Nuevo Empleado</a>
                 </div>
             </div>
         </div>
