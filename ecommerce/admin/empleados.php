@@ -1,10 +1,11 @@
 <?php
 require '../includes/header.php';
 
-// Verificar sesión
+// Verificar sesión y rol admin
 session_start();
-if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
+if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo '<div class="container mt-4"><div class="alert alert-danger">Acceso solo permitido para administradores.</div></div>';
     exit;
 }
 
