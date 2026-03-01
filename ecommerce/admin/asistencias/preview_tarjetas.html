@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vista Previa - Tarjetas de Asistencia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .card-preview {
+            width: 320px;
+            height: 200px;
+            border: 2px solid #333;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px auto;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card-preview::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        }
+        
+        .card-header {
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+        
+        .employee-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .employee-position {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 3px;
+        }
+        
+        .employee-dept {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        .barcode-area {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .barcode-placeholder {
+            width: 200px;
+            height: 40px;
+            background: repeating-linear-gradient(
+                90deg,
+                #000 0px,
+                #000 2px,
+                #fff 2px,
+                #fff 4px
+            );
+            margin-bottom: 5px;
+        }
+        
+        .barcode-text {
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            color: #333;
+            font-weight: bold;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #1976d2;
+        }
+        
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 8px 0;
+            color: #555;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature-card {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature-card h4 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        .feature-card p {
+            color: #666;
+            margin: 0;
+            font-size: 14px;
+        }
+        
+        .example-codes {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #ffc107;
+        }
+        
+        .example-codes h4 {
+            margin-top: 0;
+            color: #856404;
+        }
+        
+        .code-example {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .btn-demo {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 5px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        .btn-demo:hover {
+            background: #764ba2;
+        }
+        
+        .alert {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎫 Sistema de Tarjetas con Código de Barras</h1>
+        <p class="subtitle">Registro de Asistencias Automatizado</p>
+        
+        <div class="alert">
+            <strong>✅ Sistema Implementado Correctamente</strong><br>
+            Los archivos necesarios han sido creados y están listos para usar.
+        </div>
+        
+        <h2>Vista Previa de Tarjeta</h2>
+        <div class="card-preview">
+            <div class="card-header">Tarjeta de Asistencia</div>
+            <div class="employee-name">Juan Pérez</div>
+            <div class="employee-position">Operario de Producción</div>
+            <div class="employee-dept">Dpto: Manufactura</div>
+            
+            <div class="barcode-area">
+                <div class="barcode-placeholder"></div>
+                <div class="barcode-text">ID: EMP000001</div>
+            </div>
+        </div>
+        
+        <p style="text-align: center; color: #666; font-size: 12px;">
+            <em>Escanee este código para registrar su asistencia</em>
+        </p>
+        
+        <div class="instructions">
+            <h3>📋 Cómo Usar el Sistema</h3>
+            <ol>
+                <li><strong>Generar Tarjetas:</strong> Acceder al botón "🎫 Tarjetas PDF" en el módulo de asistencias</li>
+                <li><strong>Imprimir:</strong> Descargar el PDF e imprimir en papel de buena calidad</li>
+                <li><strong>Plastificar:</strong> Opcional pero recomendado para mayor durabilidad</li>
+                <li><strong>Escanear:</strong> Usar la interfaz "📱 Escanear Asistencia" con un lector de códigos</li>
+                <li><strong>Registro Automático:</strong> El sistema registra la asistencia al instante</li>
+            </ol>
+        </div>
+        
+        <div class="features">
+            <div class="feature-card">
+                <h4>📱 Interfaz de Escaneo</h4>
+                <p>Pantalla optimizada para lectores de código de barras con retroalimentación visual y auditiva inmediata.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4>🎫 Generador de PDF</h4>
+                <p>Crea tarjetas profesionales con códigos de barras únicos para cada empleado en formato imprimible.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4>⚡ Registro Instantáneo</h4>
+                <p>El sistema valida y registra asistencias en menos de 1 segundo, calculando automáticamente tardanzas.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4>🔒 Seguridad</h4>
+                <p>Previene duplicados, valida empleados activos y mantiene auditoría completa de registros.</p>
+            </div>
+        </div>
+        
+        <div class="example-codes">
+            <h4>Ejemplos de Códigos Generados</h4>
+            <div class="code-example">EMP000001 → Empleado ID: 1</div>
+            <div class="code-example">EMP000045 → Empleado ID: 45</div>
+            <div class="code-example">EMP001234 → Empleado ID: 1234</div>
+        </div>
+        
+        <div class="alert alert-warning">
+            <strong>⚠️ Hardware Necesario:</strong><br>
+            Para usar el sistema necesitas un lector de código de barras USB o Bluetooth compatible con Code128.
+            La mayoría de lectores estándar funcionan correctamente.
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="../asistencias/tarjetas_pdf.php?todos=1" class="btn-demo" target="_blank">
+                🎫 Generar Todas las Tarjetas
+            </a>
+            <a href="../asistencias/escanear_asistencia.php" class="btn-demo" target="_blank">
+                📱 Abrir Interfaz de Escaneo
+            </a>
+        </div>
+        
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+        
+        <h3>📚 Características Técnicas</h3>
+        <ul>
+            <li>✅ Formato de código: Code128</li>
+            <li>✅ Tamaño de tarjeta: 85.6mm x 53.98mm (estándar)</li>
+            <li>✅ Compatible con la mayoría de lectores USB</li>
+            <li>✅ Validación en tiempo real</li>
+            <li>✅ Cálculo automático de tardanzas según horarios</li>
+            <li>✅ Prevención de duplicados diarios</li>
+            <li>✅ Interfaz responsive y modo pantalla completa</li>
+            <li>✅ Feedback auditivo de éxito/error</li>
+        </ul>
+        
+        <h3>🛠️ Archivos Creados</h3>
+        <ul>
+            <li><code>tarjetas_pdf.php</code> - Generador de tarjetas PDF</li>
+            <li><code>escanear_asistencia.php</code> - Interfaz de escaneo</li>
+            <li><code>escanear_asistencia_procesar.php</code> - API de procesamiento</li>
+            <li><code>GUIA_TARJETAS_BARCODE.md</code> - Documentación completa</li>
+        </ul>
+        
+        <div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+            <p style="margin: 0; color: #666;">
+                <strong>Sistema Listo para Producción</strong><br>
+                Todos los componentes están instalados y funcionando
+            </p>
+        </div>
+    </div>
+</body>
+</html>

@@ -85,10 +85,27 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             <p class="text-muted">Gestiona las asistencias de los empleados</p>
         </div>
         <div class="col-md-6 text-end">
-            <a href="asistencias_crear.php" class="btn btn-primary">➕ Cargar Asistencia</a>
-            <a href="asistencias_rango.php" class="btn btn-primary">📅 Cargar Rango</a>
-            <a href="asistencias_horarios.php" class="btn btn-info">⏰ Gestionar Horarios</a>
-            <a href="asistencias_reporte.php?mes=<?= $mes_filtro ?>&empleado_id=<?= $empleado_filtro ?>" class="btn btn-success" target="_blank">📊 Generar Reporte</a>
+            <div class="btn-group mb-2" role="group">
+                <a href="escanear_asistencia.php" class="btn btn-success">📱 Escanear Asistencia</a>
+                <a href="asistencias_crear.php" class="btn btn-primary">➕ Cargar Manual</a>
+                <a href="asistencias_rango.php" class="btn btn-primary">📅 Cargar Rango</a>
+            </div>
+            <div class="btn-group mb-2" role="group">
+                <a href="asistencias_horarios.php" class="btn btn-info">⏰ Gestionar Horarios</a>
+                <a href="asistencias_reporte.php?mes=<?= $mes_filtro ?>&empleado_id=<?= $empleado_filtro ?>" class="btn btn-success" target="_blank">📊 Generar Reporte</a>
+            </div>
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    🎫 Tarjetas PDF
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="tarjetas_pdf.php?todos=1" target="_blank">Todas las Tarjetas</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <?php foreach ($empleados as $emp): ?>
+                        <li><a class="dropdown-item" href="tarjetas_pdf.php?empleado_id=<?= $emp['id'] ?>" target="_blank"><?= htmlspecialchars($emp['nombre']) ?></a></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         </div>
     </div>
 

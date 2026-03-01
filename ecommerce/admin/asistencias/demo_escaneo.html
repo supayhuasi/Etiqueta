@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo - Escaneo de Asistencias</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .demo-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .demo-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .demo-card h3 {
+            margin: 0 0 10px 0;
+            color: #667eea;
+            font-size: 18px;
+        }
+        
+        .demo-card p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .demo-card .code {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            color: #155724;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+            color: #721c24;
+        }
+        
+        .result.warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            color: #856404;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .info-box h4 {
+            margin-top: 0;
+            color: #1976d2;
+        }
+        
+        .btn-reset {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .btn-reset:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Demo - Escaneo de Asistencias</h1>
+        <p class="subtitle">Simulador sin hardware físico</p>
+        
+        <div class="info-box">
+            <h4>💡 Cómo usar este demo</h4>
+            <p>Haz clic en cualquiera de las tarjetas de ejemplo para simular el escaneo de un código de barras. 
+            El sistema procesará la asistencia automáticamente.</p>
+        </div>
+        
+        <h3 style="margin-top: 30px; color: #333;">Empleados de Ejemplo:</h3>
+        
+        <div class="demo-card" onclick="simularEscaneo('EMP000001', 'Juan Pérez')">
+            <h3>👤 Juan Pérez</h3>
+            <p>Operario de Producción</p>
+            <span class="code">EMP000001</span>
+        </div>
+        
+        <div class="demo-card" onclick="simularEscaneo('EMP000002', 'María González')">
+            <h3>👤 María González</h3>
+            <p>Supervisora de Calidad</p>
+            <span class="code">EMP000002</span>
+        </div>
+        
+        <div class="demo-card" onclick="simularEscaneo('EMP000003', 'Carlos Rodríguez')">
+            <h3>👤 Carlos Rodríguez</h3>
+            <p>Técnico de Mantenimiento</p>
+            <span class="code">EMP000003</span>
+        </div>
+        
+        <div class="demo-card" onclick="simularEscaneo('EMP000045', 'Ana Martínez')">
+            <h3>👤 Ana Martínez</h3>
+            <p>Operaria de Línea</p>
+            <span class="code">EMP000045</span>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Procesando asistencia...</p>
+        </div>
+        
+        <div id="result" class="result"></div>
+        
+        <button class="btn-reset" onclick="location.reload()">🔄 Reiniciar Demo</button>
+        
+        <div class="info-box" style="margin-top: 30px; background: #fff3cd; border-color: #ffc107;">
+            <h4>⚠️ Nota Importante</h4>
+            <p>Este es un simulador para demostración. En producción, usa un lector de código de barras real 
+            conectado a la interfaz de escaneo (<code>escanear_asistencia.php</code>).</p>
+        </div>
+    </div>
+    
+    <script>
+        function simularEscaneo(codigo, nombreEmpleado) {
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            
+            // Mostrar loading
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            
+            // Simular tiempo de procesamiento
+            setTimeout(() => {
+                loading.style.display = 'none';
+                
+                // Simulación de respuesta (en producción esto viene del servidor)
+                const ahora = new Date();
+                const hora = ahora.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+                
+                // Simular diferentes escenarios
+                const escenario = Math.random();
+                
+                if (escenario > 0.7) {
+                    // Empleado ya registró hoy
+                    result.className = 'result error';
+                    result.innerHTML = `
+                        <h3>❌ Error</h3>
+                        <p><strong>${nombreEmpleado}</strong> ya registró su asistencia hoy a las 08:15</p>
+                    `;
+                } else if (escenario > 0.4) {
+                    // Llegada tardía
+                    result.className = 'result warning';
+                    result.innerHTML = `
+                        <h3>⚠️ Llegada Tardía</h3>
+                        <p><strong>${nombreEmpleado}</strong></p>
+                        <p>Hora de registro: ${hora}</p>
+                        <p>Código: ${codigo}</p>
+                        <p style="margin-top: 10px; font-size: 12px;">La asistencia fue registrada pero se marcó como llegada tardía.</p>
+                    `;
+                    playSound('warning');
+                } else {
+                    // Registro exitoso
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <h3>✅ Asistencia Registrada</h3>
+                        <p><strong>${nombreEmpleado}</strong></p>
+                        <p>Hora de registro: ${hora}</p>
+                        <p>Código: ${codigo}</p>
+                        <p>Estado: <strong>PRESENTE</strong></p>
+                    `;
+                    playSound('success');
+                }
+                
+                result.style.display = 'block';
+                
+                // Auto-scroll al resultado
+                result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 1000);
+        }
+        
+        function playSound(type) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            if (type === 'success') {
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+            } else {
+                oscillator.frequency.value = 400;
+                oscillator.type = 'square';
+            }
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+    </script>
+</body>
+</html>

@@ -308,15 +308,35 @@ if (!empty($items)) {
 
 <div class="row mb-4">
     <div class="col-md-12">
-        <a href="ordenes_produccion.php" class="btn btn-outline-secondary">← Volver a Órdenes</a>
-        <a href="orden_produccion_imprimir.php?pedido_id=<?= $pedido_id ?>" class="btn btn-outline-primary" target="_blank">🖨️ Imprimir</a>
-        <?php if ($orden && $orden['estado'] !== 'cancelado' && $orden['estado'] !== 'entregado'): ?>
-            <form method="POST" style="display:inline;" onsubmit="return confirm('¿Cancelar esta orden de producción?');">
-                <input type="hidden" name="accion" value="cancelar">
-                <button type="submit" class="btn btn-danger">❌ Cancelar Orden</button>
-            </form>
-        <?php endif; ?>
-        <h1 class="mt-3">🏭 Orden de Producción</h1>
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <a href="ordenes_produccion.php" class="btn btn-outline-secondary">← Volver a Órdenes</a>
+                <a href="orden_produccion_imprimir.php?pedido_id=<?= $pedido_id ?>" class="btn btn-outline-primary" target="_blank">🖨️ Imprimir Orden</a>
+            </div>
+            <div>
+                <?php if ($orden): ?>
+                    <?php if (!$orden['items_generados']): ?>
+                        <a href="orden_produccion_etiquetas_pdf.php?pedido_id=<?= $pedido_id ?>&generar=1" class="btn btn-success">
+                            🏷️ Generar Etiquetas Individuales
+                        </a>
+                    <?php else: ?>
+                        <a href="orden_produccion_etiquetas_pdf.php?pedido_id=<?= $pedido_id ?>" class="btn btn-primary" target="_blank">
+                            📄 Descargar Etiquetas PDF
+                        </a>
+                        <a href="orden_produccion_etiquetas_pdf.php?pedido_id=<?= $pedido_id ?>&generar=1" class="btn btn-warning" onclick="return confirm('¿Regenerar todas las etiquetas? Esto creará nuevos códigos.')">
+                            🔄 Regenerar Etiquetas
+                        </a>
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($orden && $orden['estado'] !== 'cancelado' && $orden['estado'] !== 'entregado'): ?>
+                    <form method="POST" style="display:inline;" onsubmit="return confirm('¿Cancelar esta orden de producción?');">
+                        <input type="hidden" name="accion" value="cancelar">
+                        <button type="submit" class="btn btn-danger">❌ Cancelar Orden</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+        <h1>🏭 Orden de Producción</h1>
         <p class="text-muted mb-0">Pedido: <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
     </div>
 </div>
