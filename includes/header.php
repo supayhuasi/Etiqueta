@@ -1,3 +1,18 @@
+<?php
+// iniciar sesión y verificar permisos generales
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// Para roles ventas/operario, solo permitir acceso al escaneo de asistencias
+if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])) {
+    $allowed = ['escanear_asistencia.php', 'escanear_asistencia_procesar.php'];
+    $current = basename($_SERVER['PHP_SELF']);
+    if (!in_array($current, $allowed)) {
+        header('Location: ecommerce/admin/asistencias/escanear_asistencia.php');
+        exit;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>

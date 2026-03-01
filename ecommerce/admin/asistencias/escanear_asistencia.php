@@ -6,6 +6,13 @@
 
 require '../includes/header.php';
 
+// Permisos: solo ventas y operario pueden acceder
+if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario'])) {
+    // Si no tiene permiso redirigir a inicio
+    header('Location: ../index.php');
+    exit;
+}
+
 // Obtener configuración de horarios
 $stmt = $pdo->query("
     SELECT 

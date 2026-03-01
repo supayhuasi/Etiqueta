@@ -19,6 +19,11 @@ if (session_status() === PHP_SESSION_NONE) {
 
       <ul class="navbar-nav me-auto">
 
+        <?php if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])): ?>
+        <li class="nav-item">
+          <a class="nav-link" href="ecommerce/admin/asistencias/escanear_asistencia.php">Escaneo Asistencia</a>
+        </li>
+        <?php else: ?>
         <li class="nav-item">
           <a class="nav-link" href="index.php">Inicio</a>
         </li>
@@ -57,6 +62,7 @@ if (session_status() === PHP_SESSION_NONE) {
         <li class="nav-item">
           <a class="nav-link" href="ecommerce/admin/asistencias/asistencias.php">📋 Asistencias</a>
         </li>
+        <?php endif; ?>
         <?php endif; ?>
 
       </ul>
