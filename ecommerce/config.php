@@ -1,9 +1,13 @@
 <?php
-// Incluir la configuración principal
-require '../config.php';
+// Evitar recursión infinita al incluir config.php
+if (!defined('CONFIG_LOADED')) {
+	require_once dirname(__DIR__) . '/config.php';
+}
 
 // Variable para controlar si estamos en ecommerce
-define('ECOMMERCE_MODE', true);
+if (!defined('ECOMMERCE_MODE')) {
+	define('ECOMMERCE_MODE', true);
+}
 
 // Configuración de OAuth con Google (usar variables de entorno)
 $google_oauth = [

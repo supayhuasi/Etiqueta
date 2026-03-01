@@ -5,10 +5,14 @@ $sql = "
     SELECT c.id, c.nombre, c.email, c.telefono,
            COALESCE(ped.total_pedidos, 0) AS total_pedidos,
            COALESCE(pag.total_pagado, 0) AS total_pagado,
-           COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0) AS saldo
+           COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0) AS saldo,
+           p_last.id AS ultimo_pedido_id,
+           p_last.numero_pedido AS ultimo_numero_pedido,
+           op.fecha_creacion AS orden_fecha_creacion,
+           op.fecha_entrega AS orden_fecha_entrega
     FROM ecommerce_clientes c
     LEFT JOIN (
-        SELECT cliente_id, SUM(total) AS total_pedidos
+        SELECT cliente_id, SUM(total) AS total_pedidos, MAX(id) AS ultimo_pedido_id
         FROM ecommerce_pedidos
         WHERE estado != 'cancelado'
         GROUP BY cliente_id
@@ -20,6 +24,8 @@ $sql = "
         WHERE p.estado != 'cancelado'
         GROUP BY p.cliente_id
     ) pag ON pag.cliente_id = c.id
+    LEFT JOIN ecommerce_pedidos p_last ON p_last.id = ped.ultimo_pedido_id
+    LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p_last.id
     WHERE COALESCE(ped.total_pedidos, 0) > 0
     ORDER BY c.nombre
 ";
@@ -88,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th style="width: 40px;"></th>
                             <th>Cliente</th>
                             <th>Contacto</th>
+                            <th>Pedido / Orden</th>
                             <th class="text-end">Total pedidos</th>
                             <th class="text-end">Total pagado</th>
                             <th class="text-end">Saldo</th>
@@ -103,6 +110,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td>
                                     <?= htmlspecialchars($c['email'] ?? '-') ?><br>
                                     <small class="text-muted"><?= htmlspecialchars($c['telefono'] ?? '-') ?></small>
+                                </td>
+                                <td>
+                                    <?php if (!empty($c['ultimo_pedido_id'])): ?>
+                                        <a href="pedidos_detalle.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>" class="btn btn-sm btn-outline-primary">Ver pedido #<?= htmlspecialchars($c['ultimo_numero_pedido']) ?></a>
+                                        <a href="orden_produccion_detalle.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>" class="btn btn-sm btn-outline-secondary">Ver orden</a>
+                                        <?php if (!empty($c['orden_fecha_creacion'])): ?>
+                                            <div class="small text-muted mt-1">Orden: <?= htmlspecialchars(date('d/m/Y', strtotime($c['orden_fecha_creacion']))) ?></div>
+                                        <?php elseif (!empty($c['orden_fecha_entrega'])): ?>
+                                            <div class="small text-muted mt-1">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($c['orden_fecha_entrega']))) ?></div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted small">-</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-end">$<?= number_format($c['total_pedidos'], 2, ',', '.') ?></td>
                                 <td class="text-end">$<?= number_format($c['total_pagado'], 2, ',', '.') ?></td>

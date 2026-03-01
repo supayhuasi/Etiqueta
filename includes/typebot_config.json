@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "placement": "bottom-right",
+  "delay_seconds": 5,
+  "embed_code": "<script type=\"module\">\n  import Typebot from 'https://cdn.jsdelivr.net/npm/@typebot.io/js@0/dist/web.js'\n\n  Typebot.initBubble({\n    typebot: \"tucu-roller-ytge0p1\",\n    theme: {\n      button: { backgroundColor: \"#1D1D1D\" },\n      chatWindow: { backgroundColor: \"#F8F8F8\" },\n    },\n  });\n<\\/script>"
+}

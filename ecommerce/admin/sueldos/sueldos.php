@@ -8,16 +8,56 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
+// Acción: aplicar aumento porcentual a sueldos
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'aplicar_aumento') {
+    $porcentaje = floatval($_POST['porcentaje'] ?? 0);
+    $mes_target = trim($_POST['mes_target'] ?? ''); // formato YYYY-MM
+    $aplicar_global = !empty($_POST['aplicar_global']);
+    $aplicar_mensual = !empty($_POST['aplicar_mensual']) && $mes_target !== '';
+
+    if ($porcentaje > 0) {
+        try {
+            $pdo->beginTransaction();
+            $stmt_emp = $pdo->query("SELECT id, sueldo_base FROM empleados");
+            $emps = $stmt_emp->fetchAll(PDO::FETCH_ASSOC);
+            $up_emp = $pdo->prepare("UPDATE empleados SET sueldo_base = ? WHERE id = ?");
+            $ins_month = $pdo->prepare("INSERT INTO sueldo_base_mensual (empleado_id, mes, sueldo_base) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE sueldo_base = VALUES(sueldo_base)");
+            foreach ($emps as $e) {
+                $nuevo = round(((float)$e['sueldo_base']) * (1 + $porcentaje / 100), 2);
+                if ($aplicar_global) {
+                    $up_emp->execute([$nuevo, $e['id']]);
+                }
+                if ($aplicar_mensual) {
+                    $ins_month->execute([$e['id'], $mes_target, $nuevo]);
+                }
+            }
+            $pdo->commit();
+            header('Location: sueldos.php?success=' . urlencode('Aumento aplicado') . '&mes=' . urlencode($mes_target));
+            exit;
+        } catch (Exception $ex) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $error_msg = $ex->getMessage();
+        }
+    } else {
+        $error_msg = 'Porcentaje inválido';
+    }
+}
+
 function calcularSueldoTotal(PDO $pdo, int $empleado_id, string $mes): float
 {
-    $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
-    $stmt->execute([$empleado_id]);
-    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$empleado) {
-        return 0.0;
+    // Priorizar sueldo base mensual si existe para el mes indicado
+    $stmt_month = $pdo->prepare("SELECT sueldo_base FROM sueldo_base_mensual WHERE empleado_id = ? AND mes = ? LIMIT 1");
+    $stmt_month->execute([$empleado_id, $mes]);
+    $row_month = $stmt_month->fetch(PDO::FETCH_ASSOC);
+    if ($row_month) {
+        $sueldo_base = (float)$row_month['sueldo_base'];
+    } else {
+        $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
+        $stmt->execute([$empleado_id]);
+        $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empleado) return 0.0;
+        $sueldo_base = (float)$empleado['sueldo_base'];
     }
-
-    $sueldo_base = (float)$empleado['sueldo_base'];
     $bonificaciones = 0.0;
     $descuentos = 0.0;
 
@@ -130,8 +170,43 @@ foreach ($empleados as $emp) {
             <h2>Gestión de Sueldos</h2>
         </div>
         <div class="col-md-6 text-end">
-            <a href="empleados_crear.php" class="btn btn-primary">+ Nuevo Empleado</a>
+            <a href="../empleados_crear.php" class="btn btn-primary">+ Nuevo Empleado</a>
             <a href="plantillas.php" class="btn btn-success">📋 Plantillas</a>
+        </div>
+    </div>
+
+    <?php if (!empty($error_msg)): ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+    <?php endif; ?>
+    <?php if (!empty($_GET['success'])): ?>
+        <div class="alert alert-success"><?= htmlspecialchars($_GET['success']) ?></div>
+    <?php endif; ?>
+
+    <!-- Acción: aplicar aumento porcentual -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="POST" class="row g-2 align-items-end">
+                <input type="hidden" name="action" value="aplicar_aumento">
+                <div class="col-auto">
+                    <label class="form-label">Porcentaje (%)</label>
+                    <input type="number" name="porcentaje" step="0.01" class="form-control" placeholder="e.g. 5" required>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label">Mes objetivo (opcional)</label>
+                    <input type="month" name="mes_target" class="form-control">
+                </div>
+                <div class="col-auto form-check">
+                    <input class="form-check-input mt-3" type="checkbox" name="aplicar_mensual" id="aplicar_mensual">
+                    <label class="form-check-label" for="aplicar_mensual">Crear sobrescritura mensual</label>
+                </div>
+                <div class="col-auto form-check">
+                    <input class="form-check-input mt-3" type="checkbox" name="aplicar_global" id="aplicar_global">
+                    <label class="form-check-label" for="aplicar_global">Actualizar sueldo base global</label>
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-warning">Aplicar Aumento</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -272,7 +347,7 @@ foreach ($empleados as $emp) {
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <a href="pagar_sueldo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-success" title="Registrar/Actualizar pago">💵</a>
-                                    <a href="empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
+                                    <a href="../empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
                                     <a href="sueldo_conceptos.php?id=<?= $emp['id'] ?>" class="btn btn-info" title="Conceptos y plantilla">💰</a>
                                     <a href="sueldo_recibo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-primary" title="Ver recibo">🧾</a>
                                 </div>
@@ -301,7 +376,7 @@ foreach ($empleados as $emp) {
                 <div class="card-body">
                     <h5 class="card-title">👥 Empleados</h5>
                     <p class="card-text">Crear y editar empleados</p>
-                    <a href="empleados_crear.php" class="btn btn-primary">Nuevo Empleado</a>
+                    <a href="../empleados_crear.php" class="btn btn-primary">Nuevo Empleado</a>
                 </div>
             </div>
         </div>

@@ -396,6 +396,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php if ($can_access('google_analytics')): ?>
                         <a href="<?= $admin_url ?>google_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'google_analytics.php' ? 'active' : '' ?>"><i class="bi bi-graph-up"></i> Google Analytics</a>
                         <?php endif; ?>
+                        <?php if ($can_access('google_analytics') || $can_access('empresa')): ?>
+                        <a href="<?= $admin_url ?>typebot_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'typebot_config.php' ? 'active' : '' ?>"><i class="bi bi-chat-dots"></i> Typebot</a>
+                        <?php endif; ?>
                         <?php if ($can_access('email_config')): ?>
                         <a href="<?= $admin_url ?>email_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email_config.php' ? 'active' : '' ?>"><i class="bi bi-envelope"></i> Email (SMTP)</a>
                         <?php endif; ?>
@@ -488,6 +491,9 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                     <div class="collapse menu-items" id="menuRRHH">
                         <?php if ($can_access('sueldos')): ?>
                         <a href="<?= $admin_url ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php']) ? 'active' : '' ?>"><i class="bi bi-cash-coin"></i> Sueldos</a>
+                        <?php endif; ?>
+                        <?php if ($role === 'admin'): ?>
+                        <a href="<?= $admin_url ?>empleados.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empleados.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Empleados</a>
                         <?php endif; ?>
                         <?php if ($can_access('plantillas')): ?>
                         <a href="<?= $admin_url ?>sueldos/plantillas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'plantillas.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark"></i> Plantillas</a>
