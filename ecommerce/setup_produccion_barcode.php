@@ -15,7 +15,7 @@ try {
             pedido_item_id INT NOT NULL,
             numero_item INT NOT NULL COMMENT 'Número secuencial del item (1 de 5, 2 de 5, etc)',
             codigo_barcode VARCHAR(50) NOT NULL UNIQUE,
-            estado ENUM('pendiente','en_proceso','terminado','entregado','rechazado') DEFAULT 'pendiente',
+            estado ENUM('en_corte','armado','terminado','entregado','rechazado') DEFAULT 'en_corte',
             usuario_inicio INT NULL COMMENT 'Quién inició este item',
             fecha_inicio DATETIME NULL,
             usuario_termino INT NULL COMMENT 'Quién terminó este item',

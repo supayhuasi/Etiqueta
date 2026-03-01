@@ -69,7 +69,7 @@ try {
             throw new Exception('ID de item inválido');
         }
         
-        // Verificar que esté en estado pendiente
+        // Verificar que esté en estado en_corte
         $stmt = $pdo->prepare("SELECT estado FROM ecommerce_produccion_items_barcode WHERE id = ?");
         $stmt->execute([$item_id]);
         $item = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -78,14 +78,14 @@ try {
             throw new Exception('Item no encontrado');
         }
         
-        if ($item['estado'] !== 'pendiente') {
+        if ($item['estado'] !== 'en_corte') {
             throw new Exception('Este item ya fue iniciado');
         }
         
-        // Actualizar a en_proceso
+        // Actualizar a armado
         $stmt = $pdo->prepare("
             UPDATE ecommerce_produccion_items_barcode 
-            SET estado = 'en_proceso',
+            SET estado = 'armado',
                 usuario_inicio = ?,
                 fecha_inicio = NOW()
             WHERE id = ?
@@ -105,7 +105,7 @@ try {
             throw new Exception('ID de item inválido');
         }
         
-        // Verificar que esté en proceso
+        // Verificar que esté en estado armado
         $stmt = $pdo->prepare("SELECT estado FROM ecommerce_produccion_items_barcode WHERE id = ?");
         $stmt->execute([$item_id]);
         $item = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -114,8 +114,8 @@ try {
             throw new Exception('Item no encontrado');
         }
         
-        if ($item['estado'] !== 'en_proceso') {
-            throw new Exception('Este item no está en proceso');
+        if ($item['estado'] !== 'armado') {
+            throw new Exception('Este item no está en armado');
         }
         
         // Actualizar a terminado

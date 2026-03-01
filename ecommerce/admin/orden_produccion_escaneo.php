@@ -6,7 +6,7 @@
 
 require 'includes/header.php';
 
-// Obtener items pendientes y en proceso
+// Obtener items en corte y armado
 $stmt = $pdo->query("
     SELECT 
         pib.*,
@@ -23,7 +23,7 @@ $stmt = $pdo->query("
     JOIN ecommerce_pedidos p ON op.pedido_id = p.id
     LEFT JOIN usuarios u_inicio ON pib.usuario_inicio = u_inicio.id
     LEFT JOIN usuarios u_termino ON pib.usuario_termino = u_termino.id
-    WHERE pib.estado IN ('pendiente', 'en_proceso')
+    WHERE pib.estado IN ('en_corte', 'armado')
     ORDER BY pib.fecha_creacion DESC
     LIMIT 50
 ");
@@ -34,8 +34,8 @@ $stmt = $pdo->query("
     SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados,
-        SUM(CASE WHEN estado = 'en_proceso' THEN 1 ELSE 0 END) as en_proceso,
-        SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes
+        SUM(CASE WHEN estado = 'armado' THEN 1 ELSE 0 END) as armado,
+        SUM(CASE WHEN estado = 'en_corte' THEN 1 ELSE 0 END) as en_corte
     FROM ecommerce_produccion_items_barcode
     WHERE DATE(fecha_creacion) = CURDATE()
 ");
@@ -134,7 +134,8 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
         }
         
         .stat-card.pendiente { border-color: #6c757d; }
-        .stat-card.en-proceso { border-color: #ffc107; }
+        .stat-card.en-corte { border-color: #dc3545; }
+        .stat-card.armado { border-color: #ffc107; }
         .stat-card.terminado { border-color: #28a745; }
         
         .stat-number {
@@ -196,8 +197,8 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             align-items: center;
         }
         
-        .item-row.pendiente { border-color: #6c757d; }
-        .item-row.en_proceso { border-color: #ffc107; }
+        .item-row.en_corte { border-color: #dc3545; }
+        .item-row.armado { border-color: #ffc107; }
         
         .fullscreen-btn {
             position: fixed;
@@ -221,13 +222,13 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
     
     <!-- Estadísticas -->
     <div class="stats-grid">
-        <div class="stat-card pendiente">
-            <div class="stat-label">Pendientes</div>
-            <div class="stat-number"><?= $stats['pendientes'] ?? 0 ?></div>
+        <div class="stat-card en-corte">
+            <div class="stat-label">En Corte</div>
+            <div class="stat-number"><?= $stats['en_corte'] ?? 0 ?></div>
         </div>
-        <div class="stat-card en-proceso">
-            <div class="stat-label">En Proceso</div>
-            <div class="stat-number"><?= $stats['en_proceso'] ?? 0 ?></div>
+        <div class="stat-card armado">
+            <div class="stat-label">En Armado</div>
+            <div class="stat-number"><?= $stats['armado'] ?? 0 ?></div>
         </div>
         <div class="stat-card terminado">
             <div class="stat-label">Terminados Hoy</div>
@@ -271,7 +272,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                             </small>
                         </div>
                         <div>
-                            <span class="badge bg-<?= $item['estado'] == 'en_proceso' ? 'warning' : 'secondary' ?>">
+                            <span class="badge bg-<?= $item['estado'] == 'armado' ? 'warning' : 'danger' ?>">
                                 <?= strtoupper(str_replace('_', ' ', $item['estado'])) ?>
                             </span>
                         </div>
@@ -363,8 +364,8 @@ function buscarItem(codigo) {
 
 function mostrarInfoItem(item) {
     let estadoColor = {
-        'pendiente': 'secondary',
-        'en_proceso': 'warning',
+        'en_corte': 'danger',
+        'armado': 'warning',
         'terminado': 'success',
         'rechazado': 'danger'
     };
@@ -383,13 +384,13 @@ function mostrarInfoItem(item) {
 function mostrarAcciones(item) {
     actionButtons.innerHTML = '';
     
-    if (item.estado === 'pendiente') {
+    if (item.estado === 'en_corte') {
         actionButtons.innerHTML = `
             <button class="btn-action btn-iniciar" onclick="cambiarEstado('iniciar')">
-                ▶️ Iniciar Producción
+                ▶️ Pasar a Armado
             </button>
         `;
-    } else if (item.estado === 'en_proceso') {
+    } else if (item.estado === 'armado') {
         actionButtons.innerHTML = `
             <button class="btn-action btn-terminar" onclick="cambiarEstado('terminar')">
                 ✅ Marcar como Terminado

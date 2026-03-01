@@ -42,18 +42,38 @@ try {
     
     // Verificar si ya registró asistencia hoy
     $stmt = $pdo->prepare("
-        SELECT id, hora_entrada 
+        SELECT id, hora_entrada, hora_salida
         FROM asistencias 
         WHERE empleado_id = ? AND fecha = CURDATE()
     ");
     $stmt->execute([$empleado_id]);
     $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    if ($asistencia_existente) {
+    $hora_actual = date('H:i:s');
+    
+    // Si ya existe registro de entrada pero no de salida, registrar salida
+    if ($asistencia_existente && !$asistencia_existente['hora_salida']) {
+        // Registrar hora de salida
+        $stmt = $pdo->prepare("
+            UPDATE asistencias 
+            SET hora_salida = ? 
+            WHERE id = ?
+        ");
+        $stmt->execute([$hora_actual, $asistencia_existente['id']]);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => '✓ Salida registrada correctamente',
+            'empleado' => $empleado,
+            'tipo' => 'salida',
+            'hora_salida' => date('H:i', strtotime($hora_actual))
+        ]);
+        exit;
+    } elseif ($asistencia_existente && $asistencia_existente['hora_salida']) {
+        // Ya tiene entrada y salida registradas
         echo json_encode([
             'success' => false,
-            'message' => 'Este empleado ya registró su asistencia hoy a las ' . 
-                        date('H:i', strtotime($asistencia_existente['hora_entrada'])),
+            'message' => 'Este empleado ya completó su jornada hoy',
             'empleado' => $empleado
         ]);
         exit;
@@ -89,7 +109,7 @@ try {
         }
     }
     
-    // Registrar asistencia
+    // Registrar asistencia (solo entrada)
     $stmt = $pdo->prepare("
         INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion)
         VALUES (?, CURDATE(), ?, ?, ?, NOW())
@@ -108,14 +128,15 @@ try {
     
     // Respuesta exitosa
     $mensaje = $estado === 'presente' 
-        ? '✓ Asistencia registrada correctamente' 
-        : '⚠ Llegada tardía registrada';
+        ? '✓ Entrada registrada correctamente' 
+        : '⚠ Entrada tardía registrada';
     
     echo json_encode([
         'success' => true,
         'message' => $mensaje,
         'empleado' => $empleado,
         'hora_entrada' => date('H:i', strtotime($hora_actual)),
+        'tipo' => 'entrada',
         'estado' => $estado
     ]);
     

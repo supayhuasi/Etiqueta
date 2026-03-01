@@ -46,7 +46,7 @@ if ($generar) {
         $stmt_insert = $pdo->prepare("
             INSERT INTO ecommerce_produccion_items_barcode 
             (orden_produccion_id, pedido_item_id, numero_item, codigo_barcode, estado)
-            VALUES (?, ?, ?, ?, 'pendiente')
+            VALUES (?, ?, ?, ?, 'en_corte')
         ");
         
         foreach ($items as $item) {
@@ -83,7 +83,7 @@ if ($generar) {
 
 // Obtener códigos generados
 $stmt = $pdo->prepare("
-    SELECT pib.*, pi.producto_id, pr.nombre as producto_nombre
+    SELECT pib.*, pi.producto_id, pi.ancho_cm, pi.alto_cm, pr.nombre as producto_nombre
     FROM ecommerce_produccion_items_barcode pib
     JOIN ecommerce_pedido_items pi ON pib.pedido_item_id = pi.id
     JOIN ecommerce_productos pr ON pi.producto_id = pr.id
@@ -120,7 +120,7 @@ $pdf->Ln(5);
 
 // Configuración de etiquetas
 $etiqueta_ancho = 90;
-$etiqueta_alto = 40;
+$etiqueta_alto = 50;
 $margen_x = 10;
 $margen_y = 35;
 $espacio_x = 5;
@@ -128,7 +128,7 @@ $espacio_y = 5;
 $columnas = 2;
 
 $contador = 0;
-$items_por_pagina = 12; // 2 columnas x 6 filas
+$items_por_pagina = 10; // 2 columnas x 5 filas
 
 foreach ($codigos_generados as $codigo) {
     // Calcular posición
@@ -157,18 +157,29 @@ foreach ($codigos_generados as $codigo) {
     $pdf->SetXY($x + 2, $y + 8);
     $pdf->Cell($etiqueta_ancho - 4, 4, utf8_decode('Item ' . $codigo['numero_item']), 0, 0, 'L');
     
+    // Medidas de la cortina
+    $pdf->SetFont('Arial', '', 8);
+    $pdf->SetXY($x + 2, $y + 13);
+    $medidas = '';
+    if (!empty($codigo['ancho_cm']) || !empty($codigo['alto_cm'])) {
+        $medidas = ($codigo['ancho_cm'] ?? '-') . ' x ' . ($codigo['alto_cm'] ?? '-') . ' cm';
+    } else {
+        $medidas = 'S/m';
+    }
+    $pdf->Cell($etiqueta_ancho - 4, 3, utf8_decode('Medidas: ' . $medidas), 0, 0, 'L');
+    
     // Código de barras
-    $barcode_y = $y + 14;
-    $pdf->Code128($x + 5, $barcode_y, $codigo['codigo_barcode'], $etiqueta_ancho - 10, 12);
+    $barcode_y = $y + 17;
+    $pdf->Code128($x + 5, $barcode_y, $codigo['codigo_barcode'], $etiqueta_ancho - 10, 10);
     
     // Texto del código
-    $pdf->SetFont('Arial', '', 7);
-    $pdf->SetXY($x + 2, $y + $etiqueta_alto - 7);
-    $pdf->Cell($etiqueta_ancho - 4, 4, $codigo['codigo_barcode'], 0, 0, 'C');
+    $pdf->SetFont('Arial', '', 6);
+    $pdf->SetXY($x + 2, $y + $etiqueta_alto - 8);
+    $pdf->Cell($etiqueta_ancho - 4, 3, $codigo['codigo_barcode'], 0, 0, 'C');
     
     // Orden de producción
     $pdf->SetFont('Arial', 'I', 6);
-    $pdf->SetXY($x + 2, $y + $etiqueta_alto - 3);
+    $pdf->SetXY($x + 2, $y + $etiqueta_alto - 4);
     $pdf->Cell($etiqueta_ancho - 4, 3, utf8_decode('Orden: ' . $orden['numero_pedido']), 0, 0, 'C');
     
     $contador++;

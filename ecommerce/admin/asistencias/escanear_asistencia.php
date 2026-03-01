@@ -258,9 +258,20 @@ function registrarAsistencia(codigo) {
             // Mostrar info del empleado
             let infoHtml = `
                 <h5>${data.empleado.nombre}</h5>
-                <p><strong>Hora de entrada:</strong> ${data.hora_entrada}</p>
-                <p><strong>Estado:</strong> <span class="badge bg-${data.estado == 'presente' ? 'success' : 'warning'}">${data.estado.toUpperCase()}</span></p>
             `;
+            
+            if (data.tipo === 'entrada') {
+                infoHtml += `
+                    <p><strong>Hora de entrada:</strong> ${data.hora_entrada}</p>
+                    <p><strong>Estado:</strong> <span class="badge bg-${data.estado == 'presente' ? 'success' : 'warning'}">${data.estado.toUpperCase()}</span></p>
+                `;
+            } else if (data.tipo === 'salida') {
+                infoHtml += `
+                    <p><strong>Hora de salida:</strong> ${data.hora_salida}</p>
+                    <p><em>✓ Jornada completada</em></p>
+                `;
+            }
+            
             employeeInfo.innerHTML = infoHtml;
             employeeInfo.style.display = 'block';
             
