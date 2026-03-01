@@ -6,8 +6,8 @@
 
 require '../includes/header.php';
 
-// Permisos: solo ventas y operario pueden acceder
-if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario'])) {
+// Permisos: ventas, operario y admin pueden acceder
+if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario','admin'])) {
     // Si no tiene permiso redirigir a inicio
     header('Location: ../index.php');
     exit;
