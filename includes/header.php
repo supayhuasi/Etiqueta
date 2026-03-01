@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 // Para roles ventas/operario, solo permitir acceso al escaneo de asistencias
+// El admin puede acceder a cualquier lugar
 if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])) {
     $allowed = ['escanear_asistencia.php', 'escanear_asistencia_procesar.php'];
     $current = basename($_SERVER['PHP_SELF']);

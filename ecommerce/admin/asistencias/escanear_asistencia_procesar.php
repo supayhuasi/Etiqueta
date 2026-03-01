@@ -6,9 +6,9 @@
 
 require_once __DIR__ . '/../../../config.php';
 
-// Permisos: sólo ventas y operario pueden usar esta API
+// Permisos: ventas, operario y admin pueden usar esta API
 session_start();
-if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario'])) {
+if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario','admin'])) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Acceso denegado']);
     exit;
