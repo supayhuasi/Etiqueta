@@ -1,6 +1,23 @@
 <?php
 require __DIR__ . '/config.php';
 
+// Verificar sesión y permisos
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Permitir acceso a admin y operario
+if (!isset($_SESSION['usuario_id'])) {
+    header('Location: auth/login.php');
+    exit;
+}
+
+// Solo admin y operario pueden acceder
+$roles_permitidos = ['admin', 'operario'];
+if (!isset($_SESSION['rol']) || !in_array($_SESSION['rol'], $roles_permitidos)) {
+    die('Acceso denegado. Solo administradores y operarios pueden acceder a esta página.');
+}
+
 $mensaje = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
