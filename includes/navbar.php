@@ -19,23 +19,21 @@ if (session_status() === PHP_SESSION_NONE) {
 
       <ul class="navbar-nav me-auto">
 
-        <?php if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])): ?>
+        <?php if (isset($_SESSION['rol'])): ?>
         <li class="nav-item">
-          <a class="nav-link" href="ecommerce/admin/asistencias/escanear_asistencia.php">Escaneo Asistencia</a>
+          <a class="nav-link" href="/scan.php">Escaneo</a>
         </li>
-        <?php else: ?>
+        <?php if (!in_array($_SESSION['rol'], ['ventas','operario'])): ?>
         <li class="nav-item">
           <a class="nav-link" href="index.php">Inicio</a>
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="scan.php">Escaneo</a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link" href="dashboard.php">📊 Dashboard</a>
         </li>
+        <?php endif; ?>
 
-        <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
+        <?php if ($_SESSION['rol'] === 'admin'): ?>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
             Usuarios

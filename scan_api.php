@@ -1,0 +1,235 @@
+<?php
+/**
+ * API unificada de escaneo
+ * detecta el tipo de código y delega al módulo correspondiente:
+ *  - asistencias (código EMP...)
+ *  - producción (tabla ecommerce_produccion_items_barcode)
+ *  - entrega de productos (tabla productos)
+ *  - detalles adicionales (placeholder)
+ * También maneja acciones de producción (iniciar, terminar, rechazar) cuando se envía
+ * el campo `accion`.
+ */
+
+require_once __DIR__ . '/config.php';
+
+header('Content-Type: application/json');
+
+session_start();
+$usuario_id = $_SESSION['user_id'] ?? null;
+$rol = $_SESSION['rol'] ?? null;
+
+if (!$usuario_id) {
+    http_response_code(403);
+    echo json_encode([ 'success' => false, 'message' => 'Usuario no autenticado' ]);
+    exit;
+}
+
+try {
+    $json = file_get_contents('php://input');
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        throw new Exception('JSON inválido');
+    }
+
+    // Si se indica una acción, la procesamos primero (mismo formato que la API de producción)
+    if (isset($data['accion'])) {
+        $accion = $data['accion'];
+        // Copiado/adaptado de orden_produccion_escaneo_api.php
+        if (in_array($accion, ['iniciar','terminar','rechazar'])) {
+            $item_id = $data['item_id'] ?? 0;
+            if ($item_id <= 0) {
+                throw new Exception('ID de item inválido');
+            }
+
+            // cargar estado actual del item
+            $stmt = $pdo->prepare("SELECT estado FROM ecommerce_produccion_items_barcode WHERE id = ?");
+            $stmt->execute([$item_id]);
+            $item = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$item) {
+                throw new Exception('Item no encontrado');
+            }
+
+            if ($accion === 'iniciar') {
+                if ($item['estado'] !== 'en_corte') {
+                    throw new Exception('Este item ya fue iniciado');
+                }
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
+                    SET estado = 'armado', usuario_inicio = ?, fecha_inicio = NOW() WHERE id = ?");
+                $stmt->execute([$usuario_id, $item_id]);
+                echo json_encode(['success'=>true,'message'=>'✅ Producción iniciada correctamente']);
+                exit;
+            }
+
+            if ($accion === 'terminar') {
+                if ($item['estado'] !== 'armado') {
+                    throw new Exception('Este item no está en armado');
+                }
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
+                    SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW() WHERE id = ?");
+                $stmt->execute([$usuario_id, $item_id]);
+
+                // verificar si la orden completa se terminó
+                $stmt = $pdo->prepare("SELECT COUNT(*) as total, \
+                       SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados \
+                    FROM ecommerce_produccion_items_barcode \
+                    WHERE orden_produccion_id = (
+                        SELECT orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ?
+                    )");
+                $stmt->execute([$item_id]);
+                $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                $mensaje = '✅ Item terminado correctamente';
+                if ($stats['total'] == $stats['terminados']) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion \
+                        SET estado = 'terminado' \
+                        WHERE id = (
+                            SELECT orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ?
+                        )");
+                    $stmt->execute([$item_id]);
+                    $mensaje = '🎉 Item terminado. ¡Orden de producción completada!';
+                }
+
+                echo json_encode(['success'=>true,'message'=>$mensaje]);
+                exit;
+            }
+
+            if ($accion === 'rechazar') {
+                $observaciones = $data['observaciones'] ?? 'Rechazado por operario';
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
+                    SET estado = 'rechazado', observaciones = ?, usuario_termino = ?, fecha_termino = NOW() \
+                    WHERE id = ?");
+                $stmt->execute([$observaciones, $usuario_id, $item_id]);
+                echo json_encode(['success'=>true,'message'=>'❌ Item rechazado. Motivo registrado.']);
+                exit;
+            }
+        }
+
+        throw new Exception('Acción no válida');
+    }
+
+    if (!isset($data['codigo']) || trim($data['codigo']) === '') {
+        throw new Exception('Código de barras no proporcionado');
+    }
+
+    $codigo = trim($data['codigo']);
+
+    // 1) Asistencias - formato EMP000001
+    if (preg_match('/^EMP(\d{6})$/', $codigo, $m)) {
+        if (!in_array($rol, ['ventas','operario','admin'])) {
+            throw new Exception('Sin permiso para registrar asistencias');
+        }
+        $empleado_id = (int)$m[1];
+        $stmt = $pdo->prepare("SELECT id, nombre, puesto, departamento FROM empleados WHERE id = ? AND activo = 1");
+        $stmt->execute([$empleado_id]);
+        $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empleado) {
+            throw new Exception('Empleado no encontrado o inactivo');
+        }
+        // verificar asistencia existente
+        $stmt = $pdo->prepare("SELECT id, hora_entrada, hora_salida FROM asistencias WHERE empleado_id = ? AND fecha = CURDATE()");
+        $stmt->execute([$empleado_id]);
+        $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+        $hora_actual = date('H:i:s');
+        if ($asistencia_existente && !$asistencia_existente['hora_salida']) {
+            $stmt = $pdo->prepare("UPDATE asistencias SET hora_salida = ? WHERE id = ?");
+            $stmt->execute([$hora_actual, $asistencia_existente['id']]);
+            echo json_encode([
+                'success'=>true,
+                'message'=>'✓ Salida registrada correctamente',
+                'empleado'=>$empleado,
+                'tipo'=>'asistencia',
+                'subtipo'=>'salida',
+                'hora_salida'=>date('H:i', strtotime($hora_actual))
+            ]);
+            exit;
+        } elseif ($asistencia_existente && $asistencia_existente['hora_salida']) {
+            echo json_encode([
+                'success'=>false,
+                'message'=>'Este empleado ya completó su jornada hoy',
+                'empleado'=>$empleado
+            ]);
+            exit;
+        }
+        // determinar estado
+        $stmt = $pdo->prepare("SELECT \
+            COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada, \
+            COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida, \
+            COALESCE(ehd.tolerancia_minutos, ehd.tolerancia_minutos, 10) as tolerancia_minutos \
+        FROM empleados e 
+        LEFT JOIN empleados_horarios eh ON e.id = eh.empleado_id AND eh.activo = 1
+        LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id 
+            AND ehd.dia_semana = DAYOFWEEK(CURDATE()) - 1 
+            AND ehd.activo = 1
+        WHERE e.id = ?");
+        $stmt->execute([$empleado_id]);
+        $horario = $stmt->fetch(PDO::FETCH_ASSOC);
+        $estado = 'presente';
+        if ($horario && $horario['hora_entrada']) {
+            $hora_entrada_esperada = strtotime($horario['hora_entrada']);
+            $hora_entrada_real = strtotime($hora_actual);
+            $tolerancia_segundos = ($horario['tolerancia_minutos'] ?? 10) * 60;
+            if ($hora_entrada_real > ($hora_entrada_esperada + $tolerancia_segundos)) {
+                $estado = 'tarde';
+            }
+        }
+        $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion) VALUES (?, CURDATE(), ?, ?, ?, NOW())");
+        $stmt->execute([$empleado_id, $hora_actual, $estado, $usuario_id]);
+        $mensaje = $estado === 'presente' ? '✓ Entrada registrada correctamente' : '⚠ Entrada tardía registrada';
+        echo json_encode([
+            'success'=>true,
+            'message'=>$mensaje,
+            'empleado'=>$empleado,
+            'hora_entrada'=>date('H:i', strtotime($hora_actual)),
+            'tipo'=>'asistencia',
+            'subtipo'=>'entrada',
+            'estado'=>$estado
+        ]);
+        exit;
+    }
+
+    // 2) Producción - buscar item por barcode
+    $stmt = $pdo->prepare("SELECT 
+                pib.*, pi.producto_id, pr.nombre as producto_nombre, op.pedido_id, p.numero_pedido,
+                u_inicio.nombre as usuario_inicio_nombre, u_termino.nombre as usuario_termino_nombre
+            FROM ecommerce_produccion_items_barcode pib
+            JOIN ecommerce_pedido_items pi ON pib.pedido_item_id = pi.id
+            JOIN ecommerce_productos pr ON pi.producto_id = pr.id
+            JOIN ecommerce_ordenes_produccion op ON pib.orden_produccion_id = op.id
+            JOIN ecommerce_pedidos p ON op.pedido_id = p.id
+            LEFT JOIN usuarios u_inicio ON pib.usuario_inicio = u_inicio.id
+            LEFT JOIN usuarios u_termino ON pib.usuario_termino = u_termino.id
+            WHERE pib.codigo_barcode = ?");
+    $stmt->execute([$codigo]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($item) {
+        echo json_encode(['success'=>true,'tipo'=>'produccion','item'=>$item]);
+        exit;
+    }
+
+    // 3) Detalle genérico (se puede adaptar a la tabla que se use)
+    $stmt = $pdo->prepare("SELECT * FROM ecommerce_pedido_items WHERE codigo_barcode = ?");
+    $stmt->execute([$codigo]);
+    $detalle = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($detalle) {
+        echo json_encode(['success'=>true,'tipo'=>'detalle','detalle'=>$detalle]);
+        exit;
+    }
+
+    // 4) Entrega de producto (tabla productos)
+    $stmt = $pdo->prepare("SELECT id, estado_id FROM productos WHERE codigo_barra = ?");
+    $stmt->execute([$codigo]);
+    $producto = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($producto) {
+        $pdo->prepare("UPDATE productos SET estado_id = 4 WHERE id = ?")->execute([$producto['id']]);
+        $pdo->prepare("INSERT INTO historial_estados (producto_id, estado_id) VALUES (?, 4)")->execute([$producto['id']]);
+        echo json_encode(['success'=>true,'tipo'=>'entrega','message'=>'✅ Producto ENTREGADO correctamente']);
+        exit;
+    }
+
+    throw new Exception('Código no reconocido en ningún módulo');
+
+} catch (Exception $e) {
+    $code = $e->getCode() ?: 400;
+    http_response_code($code);
+    echo json_encode(['success'=>false,'message'=>$e->getMessage()]);
+}

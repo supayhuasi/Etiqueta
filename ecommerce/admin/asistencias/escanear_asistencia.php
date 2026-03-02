@@ -6,9 +6,12 @@
 
 require '../includes/header.php';
 
-// Permisos: ventas, operario y admin pueden acceder
+// ya que la interfaz de escaneo fue unificada, redirigimos
+header('Location: /scan.php');
+exit;
+
+// permisos originales (aún vigentes en la API)
 if (!in_array($_SESSION['rol'] ?? '', ['ventas','operario','admin'])) {
-    // Si no tiene permiso redirigir a inicio
     header('Location: ../index.php');
     exit;
 }

@@ -6,6 +6,10 @@
 
 require 'includes/header.php';
 
+// migramos el escaneo de producción al punto único
+header('Location: /scan.php');
+exit;
+
 // Obtener items en corte y armado
 $stmt = $pdo->query("
     SELECT 
