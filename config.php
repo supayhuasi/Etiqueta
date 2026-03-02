@@ -38,3 +38,7 @@ $email_config = [
     'smtp_secure' => getenv('SMTP_SECURE') ?: 'ssl',
     'smtp_auth' => (getenv('SMTP_AUTH') === false) ? true : filter_var(getenv('SMTP_AUTH'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true
 ];
+
+// clave que debe enviar el robot en el header X-API-KEY para autenticarse
+// puede definirse como variable de entorno GASTOS_API_KEY o cambiar el valor aquí.
+$robot_api_key = getenv('GASTOS_API_KEY') ?: '3020450830204508';
