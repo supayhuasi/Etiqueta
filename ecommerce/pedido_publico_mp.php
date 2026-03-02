@@ -65,6 +65,18 @@ try {
         ];
     }
 
+    // si el pedido tiene descuento registrado, agregamos un item negativo para que
+    // Mercado Pago calcule el importe correctamente (y también para que el detalle
+    // muestre el descuento aplicado).
+    if (!empty($pedido['descuento_monto']) && $pedido['descuento_monto'] > 0) {
+        $items_mp[] = [
+            'title' => 'Descuento',
+            'description' => 'Cupón o descuento aplicado',
+            'quantity' => 1,
+            'unit_price' => -(float)$pedido['descuento_monto']
+        ];
+    }
+
     if (empty($items_mp)) {
         $items_mp[] = [
             'title' => 'Pedido ' . ($pedido['numero_pedido'] ?? ''),
