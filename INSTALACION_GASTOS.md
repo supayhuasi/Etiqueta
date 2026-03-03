@@ -149,6 +149,53 @@ En navbar → Gastos → Nuevo Gasto
 
 ---
 
+## 🤖 API REST para Automatización
+
+El archivo `ecommerce/admin/gastos/gastos_api.php` expone un endpoint POST para crear gastos desde scripts o robots externos.
+
+### Autenticación
+
+Existen dos formas de autenticarse:
+
+**1. Via header `X-API-KEY` (recomendado para robots/automatizaciones)**
+
+El valor de la clave se define en `config.php` como la variable `$robot_api_key`, o mediante la variable de entorno `GASTOS_API_KEY`.  
+Enviar en cada request:
+```
+X-API-KEY: <valor de $robot_api_key en config.php>
+```
+Al usar esta autenticación, el gasto queda registrado bajo el primer usuario **admin** activo del sistema (para mantener la auditoría).
+
+**2. Via sesión web (usuario logueado)**
+
+Un usuario con sesión activa y rol **admin** o **usuario** puede consumir la API directamente.  
+Roles con acceso al módulo de gastos:
+- `admin` — acceso total al sistema
+- `usuario` — acceso al módulo de gastos (y otros módulos estándar)
+
+### Ejemplo de uso con cURL
+
+```bash
+curl -X POST https://tu-servidor/ecommerce/admin/gastos/gastos_api.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: <valor de robot_api_key>" \
+  -d '{
+    "fecha": "2026-03-02",
+    "tipo_gasto_id": 1,
+    "estado_gasto_id": 1,
+    "descripcion": "Compra de materiales",
+    "monto": 1500.75
+  }'
+```
+
+### Respuesta
+
+```json
+{ "success": true, "gasto_id": 123 }
+```
+
+---
+
 ## 🔒 Seguridad
 
 ✅ Solo acceso admin  

@@ -102,6 +102,15 @@ try {
     $numero = "G-" . str_pad($res['total'] + 1, 6, '0', STR_PAD_LEFT);
 
     $usuario_id = $_SESSION['user']['id'] ?? null;
+    // Cuando se autentica vía API key (sin sesión), usar el primer usuario admin activo
+    if ($usuario_id === null) {
+        $stmt_admin = $pdo->query("SELECT u.id FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE r.nombre = 'admin' AND u.activo = 1 ORDER BY u.id LIMIT 1");
+        $row = $stmt_admin->fetch();
+        $usuario_id = $row['id'] ?? null;
+        if ($usuario_id === null) {
+            throw new Exception('No hay usuario admin activo para registrar el gasto via API');
+        }
+    }
 
     $stmt = $pdo->prepare("INSERT INTO gastos
         (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion,
