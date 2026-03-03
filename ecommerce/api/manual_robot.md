@@ -143,8 +143,7 @@ Endpoint: `/ecommerce/api/sueldos_faltantes.php`
 
 Parámetro obligatorio:
 
-- `nombre`: texto a buscar en el nombre del empleado.
-
+- `nombre`: texto a buscar en el nombre del empleado.- `mes` – mes YYYY-MM para limitar resultados (por defecto, mes actual)
 Ejemplo:
 ```bash
 curl 'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan'

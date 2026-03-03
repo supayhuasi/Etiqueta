@@ -4,7 +4,8 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 $nombre = trim($_GET['nombre'] ?? '');
-$mes = trim($_GET['mes'] ?? ''); // opcional, formato YYYY-MM
+// mes opcional; por defecto utilizar mes actual
+$mes = trim($_GET['mes'] ?? date('Y-m'));
 
 if ($nombre === '') {
     http_response_code(400);
