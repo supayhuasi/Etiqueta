@@ -15,11 +15,17 @@
  *   "monto": 1500.75,
  *   "empleado_id": 5,            // opcional
  *   "observaciones": "Nota interna",
+ *   "usuario_id": 1,             // opcional: ID del usuario que registra (solo al usar X-API-KEY)
+ *                                //           si se omite, se usa el usuario admin por defecto
  *   "archivo": {                // opcional
  *       "filename": "factura.pdf",
  *       "content": "<base64>"
  *   }
  * }
+ *
+ * Autenticación via API key (header X-API-KEY):
+ *   - El valor de la clave está en config.php → $robot_api_key (por defecto: '3020450830204508')
+ *   - También puede configurarse con la variable de entorno GASTOS_API_KEY
  *
  * Respuesta JSON:
  *   { "success": true, "gasto_id": 123 }
@@ -128,6 +134,23 @@ try {
         if ($usuario_id === null) {
             throw new Exception('No hay ningún usuario activo para registrar el gasto via API');
         }
+    // Resolver usuario: sesión > campo del body > admin por defecto
+    if (isset($_SESSION['user']['id'])) {
+        $usuario_id = $_SESSION['user']['id'];
+    } elseif (!empty($data['usuario_id'])) {
+        $usuario_id = intval($data['usuario_id']);
+    } else {
+        $stmt_admin = $pdo->query(
+            "SELECT u.id FROM usuarios u
+             JOIN roles r ON u.rol_id = r.id
+             WHERE r.nombre = 'admin' AND u.activo = 1
+             ORDER BY u.id LIMIT 1"
+        );
+        $admin_row = $stmt_admin->fetch();
+        if (!$admin_row) {
+            throw new Exception('No se encontró un usuario admin activo para registrar el gasto');
+        }
+        $usuario_id = $admin_row['id'];
     }
 
     $stmt = $pdo->prepare("INSERT INTO gastos
