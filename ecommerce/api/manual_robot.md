@@ -109,6 +109,72 @@ La alerta se calcula según el mismo criterio que en el panel de inventario
 
 ---
 
+## 3. Informe de ventas por mes
+
+Endpoint: `/ecommerce/api/ventas_mes.php`
+
+Parámetro obligatorio:
+
+- `mes` en formato `YYYY-MM`.
+
+Ejemplo:
+```bash
+curl 'https://tucuroller.com.ar/ecommerce/api/ventas_mes.php?mes=2026-03'
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "mes": "2026-03",
+  "total_ventas": 450000.00,
+  "falta_cobrar": 125000.00
+}
+```
+
+`total_ventas` suma de todos los pedidos de ese mes, y `falta_cobrar` la porción
+cuyos estados no sean `pagado`.
+
+---
+
+## 4. Sueldos pendientes por empleado
+
+Endpoint: `/ecommerce/api/sueldos_faltantes.php`
+
+Parámetro obligatorio:
+
+- `nombre`: texto a buscar en el nombre del empleado.
+
+Ejemplo:
+```bash
+curl 'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan'
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "nombre": "Juan",
+  "registros": [
+    {
+      "empleado_id": 3,
+      "empleado_nombre": "Juan Pérez",
+      "mes_pago": "2026-02",
+      "sueldo_total": 50000.00,
+      "monto_pagado": 25000.00,
+      "fecha_pago": "2026-03-01 10:15:00",
+      "faltante": 25000.00
+    },
+    …
+  ]
+}
+```
+
+Cada fila corresponde a un mes registrado y el campo `faltante` indica el
+monto restante por pagar.
+
+---
+
 ## Ejemplos de código para el robot
 
 ### Python
