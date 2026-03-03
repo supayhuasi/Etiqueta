@@ -12,8 +12,8 @@ if ($nombre === '') {
 
 try {
     $stmt = $pdo->prepare(
-        "SELECT ps.empleado_id, e.nombre as empleado_nombre, ps.mes_pago, \
-                ps.sueldo_total, ps.monto_pagado, ps.fecha_pago, \
+        "SELECT ps.empleado_id, e.nombre as empleado_nombre, ps.mes_pago, 
+                ps.sueldo_total, ps.monto_pagado, ps.fecha_pago, 
                 (ps.sueldo_total - ps.monto_pagado) as faltante
          FROM pagos_sueldos ps
          JOIN empleados e ON ps.empleado_id = e.id
@@ -25,6 +25,8 @@ try {
 
     echo json_encode(['success'=>true,'nombre'=>$nombre,'registros'=>$rows]);
 } catch (Exception $e) {
+    // registrar en log para diagnóstico
+    error_log('sueldos_faltantes error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success'=>false,'message'=>'Error interno']);
 }
