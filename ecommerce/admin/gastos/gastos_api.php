@@ -102,13 +102,31 @@ try {
     $numero = "G-" . str_pad($res['total'] + 1, 6, '0', STR_PAD_LEFT);
 
     $usuario_id = $_SESSION['user']['id'] ?? null;
-    // Cuando se autentica vía API key (sin sesión), usar el primer usuario admin activo
+    // Cuando se autentica vía API key (sin sesión), resolver el usuario que registra.
+    // Estrategia 1: primer usuario con rol 'admin' activo.
+    // Estrategia 2 (fallback): cualquier usuario activo (por si la tabla roles aún no fue creada).
     if ($usuario_id === null) {
-        $stmt_admin = $pdo->query("SELECT u.id FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE r.nombre = 'admin' AND u.activo = 1 ORDER BY u.id LIMIT 1");
-        $row = $stmt_admin->fetch();
-        $usuario_id = $row['id'] ?? null;
+        try {
+            $stmt_admin = $pdo->query("SELECT u.id FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE r.nombre = 'admin' AND u.activo = 1 ORDER BY u.id LIMIT 1");
+            $row = $stmt_admin->fetch();
+            $usuario_id = isset($row['id']) ? (int)$row['id'] : null;
+        } catch (PDOException $e) {
+            error_log('gastos_api: admin lookup failed: ' . $e->getMessage());
+            $usuario_id = null; // la tabla roles puede no existir aún
+        }
         if ($usuario_id === null) {
-            throw new Exception('No hay usuario admin activo para registrar el gasto via API');
+            // Fallback: cualquier usuario activo
+            try {
+                $stmt_any = $pdo->query("SELECT id FROM usuarios WHERE activo = 1 ORDER BY id LIMIT 1");
+                $row = $stmt_any->fetch();
+                $usuario_id = isset($row['id']) ? (int)$row['id'] : null;
+            } catch (PDOException $e) {
+                error_log('gastos_api: fallback user lookup failed: ' . $e->getMessage());
+                $usuario_id = null;
+            }
+        }
+        if ($usuario_id === null) {
+            throw new Exception('No hay ningún usuario activo para registrar el gasto via API');
         }
     }
 
