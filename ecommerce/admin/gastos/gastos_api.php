@@ -134,6 +134,7 @@ try {
         if ($usuario_id === null) {
             throw new Exception('No hay ningún usuario activo para registrar el gasto via API');
         }
+    }
     // Resolver usuario: sesión > campo del body > admin por defecto
     if (isset($_SESSION['user']['id'])) {
         $usuario_id = $_SESSION['user']['id'];
