@@ -65,9 +65,19 @@ try {
         ];
     }
 
+    // incluir el costo de envío como ítem (Mercado Pago no lo agrega automáticamente)
+    if (!empty($pedido['envio']) && $pedido['envio'] > 0) {
+        $items_mp[] = [
+            'title' => 'Envío',
+            'description' => 'Costo de envío',
+            'quantity' => 1,
+            'unit_price' => (float)$pedido['envio']
+        ];
+    }
+
     // si el pedido tiene descuento registrado, agregamos un item negativo para que
-    // Mercado Pago calcule el importe correctamente (y también para que el detalle
-    // muestre el descuento aplicado).
+    // Mercado Pago calcule el importe correctamente y el monto coincida con el total
+    // que incluye envío y descuentos.
     if (!empty($pedido['descuento_monto']) && $pedido['descuento_monto'] > 0) {
         $items_mp[] = [
             'title' => 'Descuento',
