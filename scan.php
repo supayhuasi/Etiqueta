@@ -6,15 +6,18 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Permitir acceso a admin y operario
-if (!isset($_SESSION['usuario_id'])) {
-    header('Location: auth/login.php');
+// Permitir acceso a admin y operario (compatibilidad de sesión)
+$usuario_id = $_SESSION['user_id'] ?? ($_SESSION['usuario_id'] ?? ($_SESSION['user']['id'] ?? null));
+$rol_usuario = strtolower(trim((string)($_SESSION['rol'] ?? '')));
+
+if (!$usuario_id) {
+    header('Location: ecommerce/admin/auth/login.php');
     exit;
 }
 
 // Solo admin y operario pueden acceder
 $roles_permitidos = ['admin', 'operario'];
-if (!isset($_SESSION['rol']) || !in_array($_SESSION['rol'], $roles_permitidos)) {
+if (!in_array($rol_usuario, $roles_permitidos, true)) {
     die('Acceso denegado. Solo administradores y operarios pueden acceder a esta página.');
 }
 
