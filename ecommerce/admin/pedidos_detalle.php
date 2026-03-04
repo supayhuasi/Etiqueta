@@ -361,6 +361,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$pedido_id]);
             header("Location: pedidos_detalle.php?id=" . $pedido_id);
             exit;
+        } elseif ($accion === 'eliminar_pago') {
+            $pago_id = (int)($_POST['pago_id'] ?? 0);
+            if ($pago_id <= 0) {
+                throw new Exception('ID de pago inválido');
+            }
+
+            // Obtener datos del pago antes de eliminarlo
+            $stmt_pago = $pdo->prepare("SELECT * FROM ecommerce_pedido_pagos WHERE id = ? AND pedido_id = ?");
+            $stmt_pago->execute([$pago_id, $pedido_id]);
+            $pago_a_eliminar = $stmt_pago->fetch(PDO::FETCH_ASSOC);
+
+            if (!$pago_a_eliminar) {
+                throw new Exception('Pago no encontrado');
+            }
+
+            // Eliminar el pago
+            $stmt_del = $pdo->prepare("DELETE FROM ecommerce_pedido_pagos WHERE id = ?");
+            $stmt_del->execute([$pago_id]);
+
+            // Eliminar del flujo de caja si existe
+            try {
+                $stmt_fc_del = $pdo->prepare("DELETE FROM flujo_caja WHERE id_referencia = ? AND categoria = 'Pago Pedido'");
+                $stmt_fc_del->execute([$pago_id]);
+            } catch (Exception $e) {
+                // Si falla, no afecta la eliminación del pago
+            }
+
+            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            exit;
         }
     } catch (Exception $e) {
         if ($pdo->inTransaction()) {
@@ -509,6 +538,11 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= htmlspecialchars($pago['referencia'] ?? '-') ?></td>
                                 <td>
                                     <a href="pedido_pago_recibo.php?pago_id=<?= $pago['id'] ?>" class="btn btn-sm btn-outline-secondary" target="_blank">Recibo</a>
+                                    <form method="POST" style="display: inline;" onsubmit="return confirm('¿Eliminar este pago? Se revertirá el monto pagado y se eliminará del flujo de caja.')">
+                                        <input type="hidden" name="accion" value="eliminar_pago">
+                                        <input type="hidden" name="pago_id" value="<?= $pago['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
