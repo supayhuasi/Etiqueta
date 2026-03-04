@@ -15,8 +15,10 @@ require_once __DIR__ . '/config.php';
 header('Content-Type: application/json');
 
 session_start();
-$usuario_id = $_SESSION['user_id'] ?? ($_SESSION['usuario_id'] ?? null);
-$rol = $_SESSION['rol'] ?? null;
+$usuario_id = $_SESSION['user_id']
+    ?? ($_SESSION['usuario_id']
+    ?? ($_SESSION['user']['id'] ?? null));
+$rol = strtolower(trim((string)($_SESSION['rol'] ?? ($_SESSION['user']['rol'] ?? ''))));
 
 if (!$usuario_id) {
     http_response_code(403);
@@ -149,10 +151,10 @@ try {
         throw new Exception('Código de barras no proporcionado');
     }
 
-    $codigo = trim($data['codigo']);
+    $codigo = strtoupper(preg_replace('/\s+/', '', (string)$data['codigo']));
 
     // 1) Asistencias - formato EMP000001
-    if (preg_match('/^EMP(\d{6})$/', $codigo, $m)) {
+    if (preg_match('/^EMP(\d{1,6})$/', $codigo, $m)) {
         if (!in_array($rol, ['ventas','operario','admin'])) {
             throw new Exception('Sin permiso para registrar asistencias');
         }
@@ -192,7 +194,7 @@ try {
         $stmt = $pdo->prepare("SELECT \
             COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada, \
             COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida, \
-            COALESCE(ehd.tolerancia_minutos, ehd.tolerancia_minutos, 10) as tolerancia_minutos \
+            COALESCE(ehd.tolerancia_minutos, eh.tolerancia_minutos, 10) as tolerancia_minutos \
         FROM empleados e 
         LEFT JOIN empleados_horarios eh ON e.id = eh.empleado_id AND eh.activo = 1
         LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id 

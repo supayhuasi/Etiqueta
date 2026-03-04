@@ -539,7 +539,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <a href="<?= $relative_root ?>index.php"><i class="bi bi-house"></i> Inicio Principal</a>
                         <?php endif; ?>
                         <?php if ($can_access('scan')): ?>
-                        <a href="<?= $relative_root ?>scan.php"><i class="bi bi-upc-scan"></i> Escaneo</a>
+                        <a href="<?= $public_base ?>/scan.php"><i class="bi bi-upc-scan"></i> Escaneo</a>
                         <?php endif; ?>
                         <?php if ($can_access('dashboard_principal')): ?>
                         <a href="<?= $relative_root ?>dashboard.php"><i class="bi bi-speedometer"></i> Dashboard</a>
