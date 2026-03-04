@@ -43,11 +43,11 @@ if ($generar) {
         $stmt = $pdo->prepare("DELETE FROM ecommerce_produccion_items_barcode WHERE orden_produccion_id = ?");
         $stmt->execute([$orden['id']]);
         
-        $stmt_insert = $pdo->prepare("
-            INSERT INTO ecommerce_produccion_items_barcode 
-            (orden_produccion_id, pedido_item_id, numero_item, codigo_barcode, estado)
-            VALUES (?, ?, ?, ?, 'en_corte')
-        ");
+            $stmt_insert = $pdo->prepare("
+                INSERT INTO ecommerce_produccion_items_barcode 
+                (orden_produccion_id, pedido_item_id, numero_item, codigo_barcode)
+                VALUES (?, ?, ?, ?)
+            ");
         
         foreach ($items as $item) {
             $cantidad = (int)$item['cantidad'];
