@@ -15,13 +15,36 @@ require_once __DIR__ . '/config.php';
 header('Content-Type: application/json');
 
 session_start();
-$usuario_id = $_SESSION['user_id'] ?? null;
+$usuario_id = $_SESSION['user_id'] ?? ($_SESSION['usuario_id'] ?? null);
 $rol = $_SESSION['rol'] ?? null;
 
 if (!$usuario_id) {
     http_response_code(403);
     echo json_encode([ 'success' => false, 'message' => 'Usuario no autenticado' ]);
     exit;
+}
+
+function ensure_produccion_scans_schema(PDO $pdo): void {
+    static $initialized = false;
+    if ($initialized) {
+        return;
+    }
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_produccion_scans (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        produccion_item_id INT NOT NULL,
+        orden_produccion_id INT NOT NULL,
+        pedido_id INT NOT NULL,
+        usuario_id INT NOT NULL,
+        etapa ENUM('corte','armado','terminado') NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_item (produccion_item_id),
+        INDEX idx_usuario (usuario_id),
+        INDEX idx_orden (orden_produccion_id),
+        INDEX idx_fecha (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $initialized = true;
 }
 
 try {
@@ -33,6 +56,7 @@ try {
 
     // Si se indica una acción, la procesamos primero (mismo formato que la API de producción)
     if (isset($data['accion'])) {
+        ensure_produccion_scans_schema($pdo);
         $accion = $data['accion'];
         // Copiado/adaptado de orden_produccion_escaneo_api.php
         if (in_array($accion, ['iniciar','terminar','rechazar'])) {
@@ -56,6 +80,13 @@ try {
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
                     SET estado = 'armado', usuario_inicio = ?, fecha_inicio = NOW() WHERE id = ?");
                 $stmt->execute([$usuario_id, $item_id]);
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
+                    (produccion_item_id, orden_produccion_id, pedido_id, usuario_id, etapa)
+                    SELECT pib.id, pib.orden_produccion_id, op.pedido_id, ?, 'armado'
+                    FROM ecommerce_produccion_items_barcode pib
+                    JOIN ecommerce_ordenes_produccion op ON op.id = pib.orden_produccion_id
+                    WHERE pib.id = ?");
+                $stmt->execute([$usuario_id, $item_id]);
                 echo json_encode(['success'=>true,'message'=>'✅ Producción iniciada correctamente']);
                 exit;
             }
@@ -66,6 +97,13 @@ try {
                 }
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
                     SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW() WHERE id = ?");
+                $stmt->execute([$usuario_id, $item_id]);
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
+                    (produccion_item_id, orden_produccion_id, pedido_id, usuario_id, etapa)
+                    SELECT pib.id, pib.orden_produccion_id, op.pedido_id, ?, 'terminado'
+                    FROM ecommerce_produccion_items_barcode pib
+                    JOIN ecommerce_ordenes_produccion op ON op.id = pib.orden_produccion_id
+                    WHERE pib.id = ?");
                 $stmt->execute([$usuario_id, $item_id]);
 
                 // verificar si la orden completa se terminó
@@ -202,7 +240,112 @@ try {
     $stmt->execute([$codigo]);
     $item = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($item) {
-        echo json_encode(['success'=>true,'tipo'=>'produccion','item'=>$item]);
+        ensure_produccion_scans_schema($pdo);
+
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT id, estado, orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ? FOR UPDATE");
+            $stmt->execute([(int)$item['id']]);
+            $item_lock = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$item_lock) {
+                throw new Exception('Item de producción no encontrado');
+            }
+
+            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM ecommerce_produccion_scans WHERE produccion_item_id = ?");
+            $stmt->execute([(int)$item['id']]);
+            $total_scans = (int)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+            if ($total_scans >= 3 || $item_lock['estado'] === 'terminado') {
+                $pdo->commit();
+                echo json_encode([
+                    'success' => true,
+                    'tipo' => 'produccion',
+                    'message' => 'Este item ya está terminado',
+                    'item' => $item,
+                    'etapa' => 'terminado',
+                    'auto' => true
+                ]);
+                exit;
+            }
+
+            $etapa = $total_scans === 0 ? 'corte' : ($total_scans === 1 ? 'armado' : 'terminado');
+
+            if ($etapa === 'corte') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
+                    SET estado = 'en_corte',
+                        usuario_inicio = COALESCE(usuario_inicio, ?),
+                        fecha_inicio = COALESCE(fecha_inicio, NOW())
+                    WHERE id = ?");
+                $stmt->execute([$usuario_id, (int)$item['id']]);
+                $mensaje = '🪚 Corte registrado';
+            } elseif ($etapa === 'armado') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
+                    SET estado = 'armado'
+                    WHERE id = ?");
+                $stmt->execute([(int)$item['id']]);
+                $mensaje = '🧩 Armado registrado';
+            } else {
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
+                    SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW()
+                    WHERE id = ?");
+                $stmt->execute([$usuario_id, (int)$item['id']]);
+
+                $stmt = $pdo->prepare("SELECT COUNT(*) as total,
+                    SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados
+                    FROM ecommerce_produccion_items_barcode
+                    WHERE orden_produccion_id = ?");
+                $stmt->execute([(int)$item_lock['orden_produccion_id']]);
+                $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ((int)($stats['total'] ?? 0) > 0 && (int)($stats['total'] ?? 0) === (int)($stats['terminados'] ?? 0)) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = 'terminado' WHERE id = ?");
+                    $stmt->execute([(int)$item_lock['orden_produccion_id']]);
+                }
+
+                $mensaje = '✅ Item terminado';
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
+                (produccion_item_id, orden_produccion_id, pedido_id, usuario_id, etapa)
+                VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([
+                (int)$item['id'],
+                (int)$item_lock['orden_produccion_id'],
+                (int)$item['pedido_id'],
+                (int)$usuario_id,
+                $etapa
+            ]);
+
+            $stmt = $pdo->prepare("SELECT 
+                    pib.*, pi.producto_id, pr.nombre as producto_nombre, op.pedido_id, p.numero_pedido,
+                    u_inicio.nombre as usuario_inicio_nombre, u_termino.nombre as usuario_termino_nombre
+                FROM ecommerce_produccion_items_barcode pib
+                JOIN ecommerce_pedido_items pi ON pib.pedido_item_id = pi.id
+                JOIN ecommerce_productos pr ON pi.producto_id = pr.id
+                JOIN ecommerce_ordenes_produccion op ON pib.orden_produccion_id = op.id
+                JOIN ecommerce_pedidos p ON op.pedido_id = p.id
+                LEFT JOIN usuarios u_inicio ON pib.usuario_inicio = u_inicio.id
+                LEFT JOIN usuarios u_termino ON pib.usuario_termino = u_termino.id
+                WHERE pib.id = ?");
+            $stmt->execute([(int)$item['id']]);
+            $item_actualizado = $stmt->fetch(PDO::FETCH_ASSOC) ?: $item;
+
+            $pdo->commit();
+
+            echo json_encode([
+                'success' => true,
+                'tipo' => 'produccion',
+                'message' => $mensaje,
+                'item' => $item_actualizado,
+                'etapa' => $etapa,
+                'auto' => true,
+                'escaneos' => $total_scans + 1
+            ]);
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
         exit;
     }
 

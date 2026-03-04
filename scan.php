@@ -165,7 +165,7 @@ function handleResponse(data) {
             renderAsistencia(data);
             break;
         case 'produccion':
-            renderProduccion(data.item);
+            renderProduccion(data.item, data);
             break;
         case 'entrega':
             // nothing else to show
@@ -190,7 +190,7 @@ function renderAsistencia(data) {
     playSuccessSound();
 }
 
-function renderProduccion(item) {
+function renderProduccion(item, data = {}) {
     currentItem = item;
     let estadoColor = { en_corte:'danger', armado:'warning', terminado:'success', rechazado:'danger' };
     let html = `
@@ -198,11 +198,21 @@ function renderProduccion(item) {
         <p><strong>Item:</strong> ${item.numero_item} | <strong>Orden:</strong> ${item.numero_pedido}</p>
         <p><strong>Código:</strong> <code>${item.codigo_barcode}</code></p>
         <p><strong>Estado:</strong> <span class="badge bg-${estadoColor[item.estado]}">${item.estado.toUpperCase().replace('_',' ')}</span></p>
+        ${data.etapa ? `<p><strong>Etapa registrada:</strong> <span class="badge bg-info">${data.etapa.toUpperCase()}</span></p>` : ''}
+        ${data.escaneos ? `<p><small>Escaneos registrados: ${data.escaneos}/3</small></p>` : ''}
         ${item.fecha_inicio ? `<p><small>Iniciado: ${item.fecha_inicio} por ${item.usuario_inicio_nombre||'N/A'}</small></p>` : ''}
         ${item.fecha_termino ? `<p><small>Terminado: ${item.fecha_termino} por ${item.usuario_termino_nombre||'N/A'}</small></p>` : ''}
     `;
     itemInfo.innerHTML = html;
     itemInfo.style.display = 'block';
+
+    if (data.auto) {
+        actionButtons.innerHTML = `<p class="text-muted mb-0">Escaneo automático aplicado</p>`;
+        actionButtons.style.display = 'flex';
+        playSuccessSound();
+        return;
+    }
+
     // actions
     let buttons = '';
     if (item.estado === 'en_corte') {
