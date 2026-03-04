@@ -1,41 +1,52 @@
 # Manual de APIs para Robot
 
-## Endpoints disponibles
+Este manual resume los endpoints que puede consumir el robot y deja ejemplos listos para usar.
 
-| Nombre                  | URL                                                              | Descripción                                           |
-|-------------------------|------------------------------------------------------------------|-------------------------------------------------------|
-| Ordenes de producción   | `api/ordenes_produccion.php`                          | Devuelve órdenes filtrables por estado o por pedido   |
-| Stock faltante          | `api/stock_faltante.php`                              | Lista materiales/productos con stock bajo             |
+## Base de URLs
 
-> Las URLs se construyen sobre el dominio principal.  
-> Ejemplo base: `https://tucuroller.com.arapi/...`
+- Dominio: `https://tucuroller.com.ar`
+- Endpoints de ecommerce: `https://tucuroller.com.ar/ecommerce/api/...`
+- Endpoint de gastos (admin): `https://tucuroller.com.ar/ecommerce/admin/gastos/gastos_api.php`
 
-Ambos endpoints aceptan **peticiones GET** y responden JSON con
-`{ success: true, ... }`.
+Formato general de respuesta:
+
+```json
+{ "success": true, "...": "..." }
+```
+
+En error:
+
+```json
+{ "success": false, "message": "Detalle del error" }
+```
 
 ---
 
-## 1. Órdenes de producción
+## 1) Órdenes de producción
 
-### Parámetros
+Endpoint: `/ecommerce/api/ordenes_produccion.php`
 
-- `estado` – (`pendiente`, `en_produccion`, `terminado`, `entregado`, `cancelado`)
-- `pedido_id` – entero (opcional)
+Método: `GET`
 
-### Ejemplos
+Parámetros:
+
+- `estado` (opcional): `pendiente`, `en_produccion`, `terminado`, `entregado`, `cancelado`
+- `pedido_id` (opcional): entero
+
+Ejemplos:
 
 ```bash
 # todas las órdenes
-curl 'https://tucuroller.com.arapi/ordenes_produccion.php'
+curl 'https://tucuroller.com.ar/ecommerce/api/ordenes_produccion.php'
 
 # sólo las en producción
-curl 'https://tucuroller.com.arapi/ordenes_produccion.php?estado=en_produccion'
+curl 'https://tucuroller.com.ar/ecommerce/api/ordenes_produccion.php?estado=en_produccion'
 
 # búsqueda por pedido
-curl 'https://tucuroller.com.arapi/ordenes_produccion.php?pedido_id=123'
+curl 'https://tucuroller.com.ar/ecommerce/api/ordenes_produccion.php?pedido_id=123'
 ```
 
-### Respuesta
+Respuesta ejemplo:
 
 ```json
 {
@@ -56,36 +67,34 @@ curl 'https://tucuroller.com.arapi/ordenes_produccion.php?pedido_id=123'
 }
 ```
 
-En caso de error:
-
-```json
-{ "success": false, "message": "Error interno" }
-```
-
 ---
 
-## 2. Stock faltante
+## 2) Stock faltante
 
-### Parámetros
+Endpoint: `/ecommerce/api/stock_faltante.php`
 
-- `tipo` – `materiales`, `productos`, `todos` (por defecto `todos`)
-- `alerta` – `bajo_minimo`, `negativo`, `sin_stock`, `todos` (por defecto `bajo_minimo`)
-- `buscar` – texto (opcional) que busca en el nombre
+Método: `GET`
 
-### Ejemplos
+Parámetros:
+
+- `tipo` (opcional): `materiales`, `productos`, `todos` (default: `todos`)
+- `alerta` (opcional): `bajo_minimo`, `negativo`, `sin_stock`, `todos` (default: `bajo_minimo`)
+- `buscar` (opcional): texto a buscar en el nombre
+
+Ejemplos:
 
 ```bash
 # materiales con stock bajo
-curl 'https://tucuroller.com.arapi/stock_faltante.php?tipo=materiales&alerta=bajo_minimo'
+curl 'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?tipo=materiales&alerta=bajo_minimo'
 
 # productos sin stock
-curl 'https://tucuroller.com.arapi/stock_faltante.php?tipo=productos&alerta=sin_stock'
+curl 'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?tipo=productos&alerta=sin_stock'
 
-# filtrar por nombre conteniendo “tornillo”
-curl 'https://tucuroller.com.arapi/stock_faltante.php?buscar=tornillo&alerta=negativo'
+# filtrar por nombre
+curl 'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?buscar=tornillo&alerta=negativo'
 ```
 
-### Respuesta
+Respuesta ejemplo:
 
 ```json
 {
@@ -104,25 +113,28 @@ curl 'https://tucuroller.com.arapi/stock_faltante.php?buscar=tornillo&alerta=neg
 }
 ```
 
-La alerta se calcula según el mismo criterio que en el panel de inventario
-(`normal`, `bajo_minimo`, `negativo`, `sin_stock`).
+La alerta sigue el mismo criterio que inventario: `normal`, `bajo_minimo`, `negativo`, `sin_stock`.
 
 ---
 
-## 3. Informe de ventas por mes
+## 3) Informe de ventas por mes
 
 Endpoint: `/ecommerce/api/ventas_mes.php`
 
+Método: `GET`
+
 Parámetro obligatorio:
 
-- `mes` en formato `YYYY-MM`.
+- `mes` en formato `YYYY-MM`
 
 Ejemplo:
+
 ```bash
 curl 'https://tucuroller.com.ar/ecommerce/api/ventas_mes.php?mes=2026-03'
 ```
 
-Respuesta:
+Respuesta ejemplo:
+
 ```json
 {
   "success": true,
@@ -132,24 +144,29 @@ Respuesta:
 }
 ```
 
-`total_ventas` suma de todos los pedidos de ese mes, y `falta_cobrar` la porción
-cuyos estados no sean `pagado`.
+`total_ventas` es la suma de pedidos del mes. `falta_cobrar` corresponde a pedidos aún no pagados.
 
 ---
 
-## 4. Sueldos pendientes por empleado
+## 4) Sueldos pendientes por empleado
 
 Endpoint: `/ecommerce/api/sueldos_faltantes.php`
 
-Parámetro obligatorio:
+Método: `GET`
 
-- `nombre`: texto a buscar en el nombre del empleado.- `mes` – mes YYYY-MM para limitar resultados (por defecto, mes actual)
+Parámetros:
+
+- `nombre` (obligatorio): texto a buscar en nombre del empleado
+- `mes` (opcional): `YYYY-MM` (default: mes actual)
+
 Ejemplo:
+
 ```bash
 curl 'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan'
 ```
 
-Respuesta:
+Respuesta ejemplo:
+
 ```json
 {
   "success": true,
@@ -163,14 +180,86 @@ Respuesta:
       "monto_pagado": 25000.00,
       "fecha_pago": "2026-03-01 10:15:00",
       "faltante": 25000.00
-    },
-    …
+    }
   ]
 }
 ```
 
-Cada fila corresponde a un mes registrado y el campo `faltante` indica el
-monto restante por pagar.
+Cada fila representa un mes y `faltante` indica lo pendiente por pagar.
+
+---
+
+## 5) Crear gasto (API de gastos)
+
+Endpoint: `/ecommerce/admin/gastos/gastos_api.php`
+
+Método: `POST`
+
+Headers recomendados:
+
+- `Content-Type: application/json`
+- `X-API-KEY: <tu_clave>`
+
+Campos obligatorios:
+
+- `fecha` (formato `YYYY-MM-DD`)
+- `descripcion` (texto)
+- `monto` (número > 0)
+- tipo de gasto: `tipo_gasto_id` o alias (`tipo`, `tipo_id`, `tipo_gasto`)
+- estado: `estado_gasto_id` o alias (`estado`, `estado_id`, `estado_gasto`)
+
+Campos opcionales:
+
+- `empleado_id`
+- `observaciones`
+- `archivo` (objeto con `filename` y `content` en base64)
+
+Payload recomendado (OpenClaw):
+
+```json
+{
+  "fecha": "2026-03-04",
+  "tipo_gasto_id": 2,
+  "estado_gasto_id": 1,
+  "descripcion": "Compra de insumos para producción",
+  "monto": 18500.50,
+  "empleado_id": 3,
+  "observaciones": "Registrado por robot"
+}
+```
+
+Payload alternativo válido (por nombre):
+
+```json
+{
+  "fecha": "2026-03-04",
+  "tipo": "Insumos",
+  "estado": "Pendiente",
+  "descripcion": "Compra de insumos para producción",
+  "monto": 18500.50
+}
+```
+
+Ejemplo curl:
+
+```bash
+curl -X POST 'https://tucuroller.com.ar/ecommerce/admin/gastos/gastos_api.php' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-KEY: 3020450830204508' \
+  -d '{
+    "fecha":"2026-03-04",
+    "tipo_gasto_id":2,
+    "estado_gasto_id":1,
+    "descripcion":"Compra de insumos",
+    "monto":18500.50
+  }'
+```
+
+Respuesta exitosa:
+
+```json
+{ "success": true, "gasto_id": 123 }
+```
 
 ---
 
@@ -181,19 +270,20 @@ monto restante por pagar.
 ```python
 import requests
 
-BASE = "https://tucuroller.com.arapi"
+BASE = "https://tucuroller.com.ar/ecommerce/api"
 
 def consultar_ordenes(estado=None, pedido_id=None):
     params = {}
-    if estado: params['estado'] = estado
-    if pedido_id: params['pedido_id'] = pedido_id
-    return requests.get(f"{BASE}/ordenes_produccion.php", params=params).json()
+    if estado:
+        params["estado"] = estado
+    if pedido_id:
+        params["pedido_id"] = pedido_id
+    return requests.get(f"{BASE}/ordenes_produccion.php", params=params, timeout=30).json()
 
 def stock_faltante(tipo="todos", alerta="bajo_minimo", buscar=""):
-    params = {'tipo':tipo,'alerta':alerta,'buscar':buscar}
-    return requests.get(f"{BASE}/stock_faltante.php", params=params).json()
+    params = {"tipo": tipo, "alerta": alerta, "buscar": buscar}
+    return requests.get(f"{BASE}/stock_faltante.php", params=params, timeout=30).json()
 
-# uso
 print(consultar_ordenes(estado="en_produccion"))
 print(stock_faltante(tipo="materiales", alerta="negativo"))
 ```
@@ -201,26 +291,23 @@ print(stock_faltante(tipo="materiales", alerta="negativo"))
 ### PowerShell
 
 ```powershell
-$base = "https://tucuroller.com.arapi"
+$base = "https://tucuroller.com.ar/ecommerce/api"
 
-# órdenes
+# Órdenes
 Invoke-RestMethod -Uri "$base/ordenes_produccion.php?estado=pendiente"
 
-# stock
+# Stock
 Invoke-RestMethod -Uri "$base/stock_faltante.php?tipo=productos&alerta=sin_stock"
 ```
 
 ---
 
-## Seguridad (opcional)
+## Notas de seguridad
 
-Ambos endpoints son públicos. Para protegerlos podés:
-
-1. exigir un encabezado `X-API-KEY` y comparar con una clave en `config.php`
-2. o verificar la sesión y permisos con `$can_access('produccion')` / `('inventario')`
+- Para endpoints sensibles, exigir `X-API-KEY`.
+- Alternativamente, validar sesión/permisos en servidor.
+- No exponer la clave en logs o repositorios.
 
 ---
 
-Con este documento el robot podrá consultar las órdenes de producción y el
-stock faltante. Podes adjuntar este archivo `.md` a su manual o incorporarlo
-donde necesites.
+Con este manual, el robot puede consultar producción/stock, obtener indicadores y crear gastos con payload consistente.
