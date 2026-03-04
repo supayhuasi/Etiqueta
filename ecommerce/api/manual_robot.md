@@ -263,6 +263,65 @@ Respuesta exitosa:
 
 ---
 
+## 6) Tareas de producción por usuario
+
+Endpoint: `/ecommerce/api/produccion_tareas_usuarios.php`
+
+Método: `GET`
+
+Autenticación:
+
+- Sesión activa en el sistema, **o**
+- Header `X-API-KEY: <tu_clave>`
+
+Parámetros opcionales:
+
+- `usuario_id` (entero): filtra por un usuario específico
+- `solo_activos` (`0` o `1`): si es `1`, excluye usuarios cuya última etapa es `terminado`
+
+Ejemplos:
+
+```bash
+# ver última tarea de todos los usuarios
+curl 'https://tucuroller.com.ar/ecommerce/api/produccion_tareas_usuarios.php' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# ver sólo un usuario
+curl 'https://tucuroller.com.ar/ecommerce/api/produccion_tareas_usuarios.php?usuario_id=3' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# ver sólo usuarios activos (no terminados)
+curl 'https://tucuroller.com.ar/ecommerce/api/produccion_tareas_usuarios.php?solo_activos=1' \
+  -H 'X-API-KEY: 3020450830204508'
+```
+
+Respuesta ejemplo:
+
+```json
+{
+  "success": true,
+  "total": 2,
+  "usuarios": [
+    {
+      "usuario_id": 7,
+      "usuario_nombre": "Operario 1",
+      "etapa": "armado",
+      "created_at": "2026-03-04 11:25:10",
+      "estado_item": "armado",
+      "numero_item": 2,
+      "codigo_barcode": "OP000042-IT000311-002",
+      "producto_nombre": "Cortina Roller Blackout",
+      "pedido_id": 50,
+      "numero_pedido": "PED-000050"
+    }
+  ]
+}
+```
+
+`etapa` refleja la tarea registrada por escaneo: `corte`, `armado`, `terminado`.
+
+---
+
 ## Ejemplos de código para el robot
 
 ### Python

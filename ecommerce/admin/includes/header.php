@@ -428,6 +428,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('ordenes_produccion')): ?>
                         <a href="<?= $admin_url ?>ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>"><i class="bi bi-gear"></i> Órdenes de Producción</a>
+                        <a href="<?= $admin_url ?>produccion_tareas_usuarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'produccion_tareas_usuarios.php' ? 'active' : '' ?>"><i class="bi bi-person-workspace"></i> Tareas por Usuario</a>
                         <?php endif; ?>
                         <?php if ($can_access('instalaciones')): ?>
                         <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones</a>
