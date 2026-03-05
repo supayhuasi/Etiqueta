@@ -226,109 +226,55 @@ try {
             throw new Exception('Sin permiso para registrar asistencias');
         }
 
-        if (!table_exists($pdo, 'empleados') || !table_exists($pdo, 'asistencias')) {
-            throw new Exception('El módulo de asistencias no está instalado correctamente');
-        }
-
         $empleado_id = (int)$m[1];
-        $asist_col_empleado = first_existing_column($pdo, 'asistencias', ['empleado_id', 'id_empleado', 'empleado', 'empleadoid']);
-        $asist_col_pk = first_existing_column($pdo, 'asistencias', ['id', 'asistencia_id', 'id_asistencia']);
-        $asist_col_fecha = first_existing_column($pdo, 'asistencias', ['fecha', 'fecha_asistencia', 'dia']);
-        $asist_col_fecha_creacion = first_existing_column($pdo, 'asistencias', ['fecha_creacion', 'created_at']);
-        $asist_col_hora_entrada = first_existing_column($pdo, 'asistencias', ['hora_entrada', 'hora_ingreso', 'entrada']);
-        $asist_col_hora_salida = first_existing_column($pdo, 'asistencias', ['hora_salida', 'hora_egreso', 'salida']);
-        $asist_col_estado = first_existing_column($pdo, 'asistencias', ['estado']);
-        $asist_col_creado_por = first_existing_column($pdo, 'asistencias', ['creado_por', 'usuario_id']);
 
-        if (!$asist_col_empleado) {
-            throw new Exception('No se encontró la columna de empleado en asistencias');
-        }
-
-        $sql_empleado = "SELECT id, nombre FROM empleados WHERE id = ?";
-        if (column_exists($pdo, 'empleados', 'activo')) {
-            $sql_empleado .= " AND activo = 1";
-        }
-        $stmt = $pdo->prepare($sql_empleado);
+        $stmt = $pdo->prepare("SELECT id, nombre, puesto, departamento FROM empleados WHERE id = ? AND activo = 1");
         $stmt->execute([$empleado_id]);
         $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$empleado) {
             throw new Exception('Empleado no encontrado o inactivo');
         }
 
-        // verificar asistencia existente
-        $asistencia_existente = null;
-        $select_pk = $asist_col_pk ? qi($asist_col_pk) . " as registro_id" : "NULL as registro_id";
-        $select_hora_entrada = $asist_col_hora_entrada ? qi($asist_col_hora_entrada) . " as hora_entrada" : "NULL as hora_entrada";
-        $select_hora_salida = $asist_col_hora_salida ? qi($asist_col_hora_salida) . " as hora_salida" : "NULL as hora_salida";
-        if ($asist_col_fecha) {
-            $stmt = $pdo->prepare("SELECT {$select_pk}, {$select_hora_entrada}, {$select_hora_salida} FROM asistencias WHERE " . qi($asist_col_empleado) . " = ? AND " . qi($asist_col_fecha) . " = CURDATE() LIMIT 1");
-            $stmt->execute([$empleado_id]);
-            $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
-        } elseif ($asist_col_fecha_creacion) {
-            $stmt = $pdo->prepare("SELECT {$select_pk}, {$select_hora_entrada}, {$select_hora_salida} FROM asistencias WHERE " . qi($asist_col_empleado) . " = ? AND DATE(" . qi($asist_col_fecha_creacion) . ") = CURDATE() LIMIT 1");
-            $stmt->execute([$empleado_id]);
-            $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
-        } elseif ($asist_col_hora_salida) {
-            $stmt = $pdo->prepare("SELECT {$select_pk}, {$select_hora_entrada}, {$select_hora_salida} FROM asistencias WHERE " . qi($asist_col_empleado) . " = ? AND " . qi($asist_col_hora_salida) . " IS NULL ORDER BY " . qi($asist_col_fecha_creacion ?: $asist_col_pk ?: $asist_col_empleado) . " DESC LIMIT 1");
-            $stmt->execute([$empleado_id]);
-            $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
-        }
+        $stmt = $pdo->prepare("SELECT id, hora_entrada, hora_salida FROM asistencias WHERE empleado_id = ? AND fecha = CURDATE()");
+        $stmt->execute([$empleado_id]);
+        $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $hora_actual = date('H:i:s');
-        if ($asistencia_existente && empty($asistencia_existente['hora_salida'])) {
-            if (!$asist_col_hora_salida) {
-                throw new Exception('La tabla asistencias no tiene columna hora_salida');
-            }
-            if (!empty($asistencia_existente['registro_id']) && $asist_col_pk) {
-                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($asist_col_hora_salida) . " = ? WHERE " . qi($asist_col_pk) . " = ?");
-                $stmt->execute([$hora_actual, $asistencia_existente['registro_id']]);
-            } elseif ($asist_col_fecha) {
-                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($asist_col_hora_salida) . " = ? WHERE " . qi($asist_col_empleado) . " = ? AND " . qi($asist_col_fecha) . " = CURDATE() AND (" . qi($asist_col_hora_salida) . " IS NULL OR " . qi($asist_col_hora_salida) . " = '00:00:00') LIMIT 1");
-                $stmt->execute([$hora_actual, $empleado_id]);
-            } elseif ($asist_col_fecha_creacion) {
-                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($asist_col_hora_salida) . " = ? WHERE " . qi($asist_col_empleado) . " = ? AND DATE(" . qi($asist_col_fecha_creacion) . ") = CURDATE() AND (" . qi($asist_col_hora_salida) . " IS NULL OR " . qi($asist_col_hora_salida) . " = '00:00:00') LIMIT 1");
-                $stmt->execute([$hora_actual, $empleado_id]);
-            } else {
-                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($asist_col_hora_salida) . " = ? WHERE " . qi($asist_col_empleado) . " = ? AND (" . qi($asist_col_hora_salida) . " IS NULL OR " . qi($asist_col_hora_salida) . " = '00:00:00') LIMIT 1");
-                $stmt->execute([$hora_actual, $empleado_id]);
-            }
+
+        if ($asistencia_existente && !$asistencia_existente['hora_salida']) {
+            $stmt = $pdo->prepare("UPDATE asistencias SET hora_salida = ? WHERE id = ?");
+            $stmt->execute([$hora_actual, $asistencia_existente['id']]);
+
             echo json_encode([
-                'success'=>true,
-                'message'=>'✓ Salida registrada correctamente',
-                'empleado'=>$empleado,
-                'tipo'=>'asistencia',
-                'subtipo'=>'salida',
-                'hora_salida'=>date('H:i', strtotime($hora_actual))
+                'success' => true,
+                'message' => '✓ Salida registrada correctamente',
+                'empleado' => $empleado,
+                'tipo' => 'asistencia',
+                'subtipo' => 'salida',
+                'hora_salida' => date('H:i', strtotime($hora_actual))
             ]);
             exit;
-        } elseif ($asistencia_existente && !empty($asistencia_existente['hora_salida'])) {
+        } elseif ($asistencia_existente && $asistencia_existente['hora_salida']) {
             echo json_encode([
-                'success'=>false,
-                'message'=>'Este empleado ya completó su jornada hoy',
-                'empleado'=>$empleado
+                'success' => false,
+                'message' => 'Este empleado ya completó su jornada hoy',
+                'empleado' => $empleado
             ]);
             exit;
         }
-        // determinar estado
-        $horario = null;
-        if (table_exists($pdo, 'empleados_horarios') && table_exists($pdo, 'empleados_horarios_dias')) {
-            try {
-                $stmt = $pdo->prepare("SELECT \
-                    COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada, \
-                    COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida, \
-                    COALESCE(ehd.tolerancia_minutos, eh.tolerancia_minutos, 10) as tolerancia_minutos \
-                FROM empleados e 
-                LEFT JOIN empleados_horarios eh ON e.id = eh.empleado_id AND eh.activo = 1
-                LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id 
-                    AND ehd.dia_semana = DAYOFWEEK(CURDATE()) - 1 
-                    AND ehd.activo = 1
-                WHERE e.id = ?");
-                $stmt->execute([$empleado_id]);
-                $horario = $stmt->fetch(PDO::FETCH_ASSOC);
-            } catch (PDOException $e) {
-                $horario = null;
-            }
-        }
+
+        $stmt = $pdo->prepare("SELECT \
+            COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada, \
+            COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida, \
+            COALESCE(ehd.tolerancia_minutos, eh.tolerancia_minutos, 10) as tolerancia_minutos \
+        FROM empleados e
+        LEFT JOIN empleados_horarios eh ON e.id = eh.empleado_id AND eh.activo = 1
+        LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id \
+            AND ehd.dia_semana = DAYOFWEEK(CURDATE()) - 1 \
+            AND ehd.activo = 1
+        WHERE e.id = ?");
+        $stmt->execute([$empleado_id]);
+        $horario = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $estado = 'presente';
         if ($horario && $horario['hora_entrada']) {
@@ -340,109 +286,18 @@ try {
             }
         }
 
-        $cols = [$asist_col_empleado];
-        $vals = ['?'];
-        $params = [$empleado_id];
-
-        if ($asist_col_fecha) {
-            $cols[] = $asist_col_fecha;
-            $vals[] = 'CURDATE()';
-        }
-        if ($asist_col_hora_entrada) {
-            $cols[] = $asist_col_hora_entrada;
-            $vals[] = '?';
-            $params[] = $hora_actual;
-        }
-        if ($asist_col_estado) {
-            $cols[] = $asist_col_estado;
-            $vals[] = '?';
-            $params[] = $estado;
-        }
-        if ($asist_col_creado_por) {
-            $cols[] = $asist_col_creado_por;
-            $vals[] = '?';
-            $params[] = $usuario_id;
-        }
-        if ($asist_col_fecha_creacion) {
-            $cols[] = $asist_col_fecha_creacion;
-            $vals[] = 'NOW()';
-        }
-
-        if (count($cols) < 2) {
-            throw new Exception('Estructura de asistencias incompleta para registrar entrada');
-        }
-
-        $cols_sql = array_map('qi', $cols);
-        $sql_insert = "INSERT INTO asistencias (" . implode(', ', $cols_sql) . ") VALUES (" . implode(', ', $vals) . ")";
-        try {
-            $stmt = $pdo->prepare($sql_insert);
-            $stmt->execute($params);
-        } catch (PDOException $insertError) {
-            $meta = get_table_columns_map($pdo, 'asistencias');
-            $colsSet = array_fill_keys($cols, true);
-
-            foreach ($meta as $field => $colmeta) {
-                if (isset($colsSet[$field])) {
-                    continue;
-                }
-
-                $null = strtoupper((string)($colmeta['Null'] ?? 'YES'));
-                $default = $colmeta['Default'] ?? null;
-                $extra = strtolower((string)($colmeta['Extra'] ?? ''));
-                $type = strtolower((string)($colmeta['Type'] ?? ''));
-
-                if ($null === 'YES' || $default !== null || strpos($extra, 'auto_increment') !== false) {
-                    continue;
-                }
-
-                if (preg_match('/(empleado|personal).*id/i', $field)) {
-                    $cols[] = $field;
-                    $vals[] = '?';
-                    $params[] = $empleado_id;
-                } elseif (preg_match('/(usuario|user|creado_por).*id/i', $field)) {
-                    $cols[] = $field;
-                    $vals[] = '?';
-                    $params[] = $usuario_id;
-                } elseif (strpos($type, 'datetime') !== false || strpos($type, 'timestamp') !== false) {
-                    $cols[] = $field;
-                    $vals[] = 'NOW()';
-                } elseif (strpos($type, 'date') === 0) {
-                    $cols[] = $field;
-                    $vals[] = 'CURDATE()';
-                } elseif (strpos($type, 'time') === 0) {
-                    $cols[] = $field;
-                    $vals[] = '?';
-                    $params[] = $hora_actual;
-                } elseif (strpos($type, 'enum(') === 0) {
-                    $enumValues = [];
-                    if (preg_match('/^enum\((.*)\)$/', $type, $mm)) {
-                        $enumValues = str_getcsv($mm[1], ',', "'", "\\");
-                    }
-                    $cols[] = $field;
-                    $vals[] = '?';
-                    $params[] = $enumValues[0] ?? '';
-                } elseif (preg_match('/^(tinyint|smallint|mediumint|int|bigint|decimal|float|double)/', $type)) {
-                    $cols[] = $field;
-                    $vals[] = '?';
-                    $params[] = 0;
-                }
-            }
-
-            $cols_sql = array_map('qi', $cols);
-            $sql_insert_retry = "INSERT INTO asistencias (" . implode(', ', $cols_sql) . ") VALUES (" . implode(', ', $vals) . ")";
-            $stmt = $pdo->prepare($sql_insert_retry);
-            $stmt->execute($params);
-        }
+        $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion) VALUES (?, CURDATE(), ?, ?, ?, NOW())");
+        $stmt->execute([$empleado_id, $hora_actual, $estado, $usuario_id]);
 
         $mensaje = $estado === 'presente' ? '✓ Entrada registrada correctamente' : '⚠ Entrada tardía registrada';
         echo json_encode([
-            'success'=>true,
-            'message'=>$mensaje,
-            'empleado'=>$empleado,
-            'hora_entrada'=>date('H:i', strtotime($hora_actual)),
-            'tipo'=>'asistencia',
-            'subtipo'=>'entrada',
-            'estado'=>$estado
+            'success' => true,
+            'message' => $mensaje,
+            'empleado' => $empleado,
+            'hora_entrada' => date('H:i', strtotime($hora_actual)),
+            'tipo' => 'asistencia',
+            'subtipo' => 'entrada',
+            'estado' => $estado
         ]);
         exit;
     }
