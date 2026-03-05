@@ -102,6 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="scanner-container text-center">
     <h1 class="mb-4">📱 Escaneo Unificado</h1>
     <input type="text" id="barcode-input" class="scanner-input" placeholder="Escanee aquí..." autofocus autocomplete="off">
+    <div class="mt-3">
+        <button type="button" id="process-code-btn" class="btn btn-primary">Procesar código</button>
+    </div>
     <div id="status-message" class="status-message"></div>
     <div id="employee-info" class="employee-info"></div>
     <div id="item-info" class="item-info"></div>
@@ -119,8 +122,17 @@ const employeeInfo = document.getElementById('employee-info');
 const itemInfo = document.getElementById('item-info');
 const detalleInfo = document.getElementById('detalle-info');
 const actionButtons = document.getElementById('action-buttons');
-let processingTimeout = null;
+const processCodeBtn = document.getElementById('process-code-btn');
 let currentItem = null;
+let requestInFlight = false;
+let lastProcessedCode = '';
+let lastProcessedAt = 0;
+let scannerBuffer = '';
+let scannerLastKeyAt = 0;
+let scannerIdleTimer = null;
+const SCANNER_KEY_MAX_INTERVAL = 70;
+const SCANNER_IDLE_FLUSH_MS = 90;
+const SCANNER_MIN_LEN = 5;
 const SCAN_API_ENDPOINTS = (() => {
     const base = window.location.pathname.replace(/[^/]*$/, '');
     return [
@@ -131,17 +143,71 @@ const SCAN_API_ENDPOINTS = (() => {
     ];
 })();
 
-input.addEventListener('input', function() {
-    if (processingTimeout) clearTimeout(processingTimeout);
-    processingTimeout = setTimeout(() => {
-        const code = input.value.trim();
-        if (code.length) {
-            scanCode(code);
+window.addEventListener('keydown', function(event) {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+    if (event.key === 'Enter') {
+        const maybeScanner = scannerBuffer.length >= SCANNER_MIN_LEN && (Date.now() - scannerLastKeyAt) < 300;
+        if (maybeScanner) {
+            event.preventDefault();
+            flushScannerBuffer();
+            return;
         }
-    }, 100);
+
+        if (document.activeElement === input) {
+            event.preventDefault();
+            triggerManualScan();
+        }
+        return;
+    }
+
+    if (event.key.length !== 1) return;
+
+    const now = Date.now();
+    if (!scannerLastKeyAt || (now - scannerLastKeyAt) > SCANNER_KEY_MAX_INTERVAL) {
+        scannerBuffer = '';
+    }
+
+    scannerBuffer += event.key;
+    scannerLastKeyAt = now;
+
+    if (scannerIdleTimer) clearTimeout(scannerIdleTimer);
+    scannerIdleTimer = setTimeout(flushScannerBuffer, SCANNER_IDLE_FLUSH_MS);
 });
 
+processCodeBtn.addEventListener('click', triggerManualScan);
+
 input.addEventListener('blur', () => setTimeout(()=>input.focus(),100));
+
+function normalizeCode(rawCode) {
+    return String(rawCode || '').replace(/\s+/g, '').trim().toUpperCase();
+}
+
+function flushScannerBuffer() {
+    if (scannerIdleTimer) {
+        clearTimeout(scannerIdleTimer);
+        scannerIdleTimer = null;
+    }
+
+    const code = normalizeCode(scannerBuffer);
+    scannerBuffer = '';
+    scannerLastKeyAt = 0;
+
+    if (code.length < SCANNER_MIN_LEN) {
+        return;
+    }
+
+    input.value = code;
+    scanCode(code);
+}
+
+function triggerManualScan() {
+    const code = normalizeCode(input.value);
+    if (!code) {
+        return;
+    }
+    scanCode(code);
+}
 
 async function parseApiResponse(response) {
     const text = await response.text();
@@ -189,15 +255,36 @@ async function postScanApi(payload) {
 }
 
 function scanCode(code) {
+    const normalizedCode = normalizeCode(code);
+    if (!normalizedCode) {
+        return;
+    }
+
+    const now = Date.now();
+    if (normalizedCode === lastProcessedCode && (now - lastProcessedAt) < 1000) {
+        return;
+    }
+    if (requestInFlight) {
+        return;
+    }
+
+    requestInFlight = true;
+    lastProcessedCode = normalizedCode;
+    lastProcessedAt = now;
+
     showStatus('Procesando...', 'info');
-    postScanApi({ codigo: code })
+    postScanApi({ codigo: normalizedCode })
     .then(handleResponse)
     .catch(err=>{
         console.error(err);
         const msg = (err && err.message && !/^\s*</.test(err.message)) ? err.message : 'Error de conexión';
         showStatus(msg, 'error');
     })
-    .finally(()=>{ input.value = ''; });
+    .finally(()=>{
+        requestInFlight = false;
+        input.value = '';
+        input.focus();
+    });
 }
 
 function handleResponse(data) {
