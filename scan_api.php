@@ -226,24 +226,67 @@ try {
             throw new Exception('Sin permiso para registrar asistencias');
         }
 
-        $empleado_id = (int)$m[1];
+        if (!table_exists($pdo, 'empleados') || !table_exists($pdo, 'asistencias')) {
+            throw new Exception('El módulo de asistencias no está instalado correctamente');
+        }
 
-        $stmt = $pdo->prepare("SELECT id, nombre, puesto, departamento FROM empleados WHERE id = ? AND activo = 1");
+        $empleado_id = (int)$m[1];
+        $col_empleado_asist = first_existing_column($pdo, 'asistencias', ['empleado_id', 'id_empleado', 'empleado']);
+        $col_pk_asist = first_existing_column($pdo, 'asistencias', ['id', 'asistencia_id', 'id_asistencia']);
+        $col_fecha_asist = first_existing_column($pdo, 'asistencias', ['fecha', 'fecha_asistencia', 'dia']);
+        $col_fecha_creacion_asist = first_existing_column($pdo, 'asistencias', ['fecha_creacion', 'created_at']);
+        $col_hora_entrada_asist = first_existing_column($pdo, 'asistencias', ['hora_entrada', 'hora_ingreso', 'entrada']);
+        $col_hora_salida_asist = first_existing_column($pdo, 'asistencias', ['hora_salida', 'hora_egreso', 'salida']);
+        $col_estado_asist = first_existing_column($pdo, 'asistencias', ['estado']);
+        $col_creado_por_asist = first_existing_column($pdo, 'asistencias', ['creado_por', 'usuario_id']);
+
+        if (!$col_empleado_asist) {
+            throw new Exception('No se encontró columna de empleado en asistencias');
+        }
+
+        $sql_empleado = "SELECT id, nombre FROM empleados WHERE id = ?";
+        if (column_exists($pdo, 'empleados', 'activo')) {
+            $sql_empleado .= " AND activo = 1";
+        }
+
+        $stmt = $pdo->prepare($sql_empleado);
         $stmt->execute([$empleado_id]);
         $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$empleado) {
             throw new Exception('Empleado no encontrado o inactivo');
         }
 
-        $stmt = $pdo->prepare("SELECT id, hora_entrada, hora_salida FROM asistencias WHERE empleado_id = ? AND fecha = CURDATE()");
-        $stmt->execute([$empleado_id]);
-        $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+        $select_pk = $col_pk_asist ? qi($col_pk_asist) . " AS registro_id" : "NULL AS registro_id";
+        $select_salida = $col_hora_salida_asist ? qi($col_hora_salida_asist) . " AS hora_salida" : "NULL AS hora_salida";
+        $filtro_fecha = null;
+        if ($col_fecha_asist) {
+            $filtro_fecha = qi($col_fecha_asist) . " = CURDATE()";
+        } elseif ($col_fecha_creacion_asist) {
+            $filtro_fecha = "DATE(" . qi($col_fecha_creacion_asist) . ") = CURDATE()";
+        }
+
+        $asistencia_existente = null;
+        if ($filtro_fecha) {
+            $stmt = $pdo->prepare("SELECT {$select_pk}, {$select_salida} FROM asistencias WHERE " . qi($col_empleado_asist) . " = ? AND {$filtro_fecha} LIMIT 1");
+            $stmt->execute([$empleado_id]);
+            $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
 
         $hora_actual = date('H:i:s');
 
-        if ($asistencia_existente && !$asistencia_existente['hora_salida']) {
-            $stmt = $pdo->prepare("UPDATE asistencias SET hora_salida = ? WHERE id = ?");
-            $stmt->execute([$hora_actual, $asistencia_existente['id']]);
+        if ($asistencia_existente && empty($asistencia_existente['hora_salida'])) {
+            if (!$col_hora_salida_asist) {
+                throw new Exception('No existe columna de hora de salida en asistencias');
+            }
+
+            if (!empty($asistencia_existente['registro_id']) && $col_pk_asist) {
+                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($col_hora_salida_asist) . " = ? WHERE " . qi($col_pk_asist) . " = ?");
+                $stmt->execute([$hora_actual, $asistencia_existente['registro_id']]);
+            } else {
+                $whereSalida = $filtro_fecha ?: "1=1";
+                $stmt = $pdo->prepare("UPDATE asistencias SET " . qi($col_hora_salida_asist) . " = ? WHERE " . qi($col_empleado_asist) . " = ? AND {$whereSalida} LIMIT 1");
+                $stmt->execute([$hora_actual, $empleado_id]);
+            }
 
             echo json_encode([
                 'success' => true,
@@ -254,7 +297,7 @@ try {
                 'hora_salida' => date('H:i', strtotime($hora_actual))
             ]);
             exit;
-        } elseif ($asistencia_existente && $asistencia_existente['hora_salida']) {
+        } elseif ($asistencia_existente && !empty($asistencia_existente['hora_salida'])) {
             echo json_encode([
                 'success' => false,
                 'message' => 'Este empleado ya completó su jornada hoy',
@@ -286,8 +329,40 @@ try {
             }
         }
 
-        $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion) VALUES (?, CURDATE(), ?, ?, ?, NOW())");
-        $stmt->execute([$empleado_id, $hora_actual, $estado, $usuario_id]);
+        $insertCols = [qi($col_empleado_asist)];
+        $insertVals = ['?'];
+        $insertParams = [$empleado_id];
+
+        if ($col_fecha_asist) {
+            $insertCols[] = qi($col_fecha_asist);
+            $insertVals[] = 'CURDATE()';
+        }
+        if ($col_hora_entrada_asist) {
+            $insertCols[] = qi($col_hora_entrada_asist);
+            $insertVals[] = '?';
+            $insertParams[] = $hora_actual;
+        }
+        if ($col_estado_asist) {
+            $insertCols[] = qi($col_estado_asist);
+            $insertVals[] = '?';
+            $insertParams[] = $estado;
+        }
+        if ($col_creado_por_asist) {
+            $insertCols[] = qi($col_creado_por_asist);
+            $insertVals[] = '?';
+            $insertParams[] = $usuario_id;
+        }
+        if ($col_fecha_creacion_asist) {
+            $insertCols[] = qi($col_fecha_creacion_asist);
+            $insertVals[] = 'NOW()';
+        }
+
+        if (count($insertCols) < 2) {
+            throw new Exception('Estructura de asistencias incompleta para registrar entrada');
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO asistencias (" . implode(', ', $insertCols) . ") VALUES (" . implode(', ', $insertVals) . ")");
+        $stmt->execute($insertParams);
 
         $mensaje = $estado === 'presente' ? '✓ Entrada registrada correctamente' : '⚠ Entrada tardía registrada';
         echo json_encode([

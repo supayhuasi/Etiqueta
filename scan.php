@@ -106,6 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="button" id="process-code-btn" class="btn btn-primary">Procesar código</button>
     </div>
     <div id="status-message" class="status-message"></div>
+    <div id="status-actions" class="mt-2" style="display:none;">
+        <button type="button" id="copy-error-btn" class="btn btn-sm btn-outline-light">Copiar error</button>
+    </div>
     <div id="employee-info" class="employee-info"></div>
     <div id="item-info" class="item-info"></div>
     <div id="detalle-info" class="detalle-info"></div>
@@ -118,6 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 const input = document.getElementById('barcode-input');
 const statusMessage = document.getElementById('status-message');
+const statusActions = document.getElementById('status-actions');
+const copyErrorBtn = document.getElementById('copy-error-btn');
 const employeeInfo = document.getElementById('employee-info');
 const itemInfo = document.getElementById('item-info');
 const detalleInfo = document.getElementById('detalle-info');
@@ -176,6 +181,25 @@ window.addEventListener('keydown', function(event) {
 });
 
 processCodeBtn.addEventListener('click', triggerManualScan);
+
+copyErrorBtn.addEventListener('click', async function() {
+    const text = statusMessage.textContent || '';
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        copyErrorBtn.textContent = 'Copiado ✓';
+        setTimeout(() => { copyErrorBtn.textContent = 'Copiar error'; }, 1500);
+    } catch (e) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copyErrorBtn.textContent = 'Copiado ✓';
+        setTimeout(() => { copyErrorBtn.textContent = 'Copiar error'; }, 1500);
+    }
+});
 
 input.addEventListener('blur', () => setTimeout(()=>input.focus(),100));
 
@@ -418,6 +442,13 @@ function showStatus(msg, type) {
     else if (type === 'error') statusMessage.classList.add('status-error');
     else if (type === 'warning') statusMessage.classList.add('status-warning');
     statusMessage.style.display = 'block';
+
+    if (type === 'error') {
+        statusActions.style.display = 'block';
+        return;
+    }
+
+    statusActions.style.display = 'none';
     if (type !== 'info') {
         setTimeout(()=>{ statusMessage.style.display='none'; }, 4000);
     }
