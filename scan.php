@@ -121,6 +121,15 @@ const detalleInfo = document.getElementById('detalle-info');
 const actionButtons = document.getElementById('action-buttons');
 let processingTimeout = null;
 let currentItem = null;
+const SCAN_API_ENDPOINTS = (() => {
+    const base = window.location.pathname.replace(/[^/]*$/, '');
+    return [
+        `${base}scan_api.php`,
+        'scan_api.php',
+        '/scan_api.php',
+        '/ecommerce/scan_api.php'
+    ];
+})();
 
 input.addEventListener('input', function() {
     if (processingTimeout) clearTimeout(processingTimeout);
@@ -150,14 +159,38 @@ async function parseApiResponse(response) {
     }
 }
 
+async function postScanApi(payload) {
+    let lastError = null;
+
+    for (const endpoint of SCAN_API_ENDPOINTS) {
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 404) {
+                lastError = new Error(`Endpoint no encontrado: ${endpoint}`);
+                continue;
+            }
+
+            return await parseApiResponse(response);
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    if (lastError) {
+        throw lastError;
+    }
+
+    throw new Error('No se encontró un endpoint válido para escaneo.');
+}
+
 function scanCode(code) {
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: code })
-    })
-    .then(parseApiResponse)
+    postScanApi({ codigo: code })
     .then(handleResponse)
     .catch(err=>{
         console.error(err);
@@ -266,12 +299,7 @@ function procesarAccion(accion) {
         data.observaciones = obs;
     }
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(parseApiResponse)
+    postScanApi(data)
     .then(resp=>{
         if (resp.success) {
             showStatus(resp.message, 'success');
