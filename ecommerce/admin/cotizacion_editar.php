@@ -1025,8 +1025,8 @@ function guardarItemDesdeModal() {
             alert('No se encontró el contenedor de items.');
             return;
         }
-        // Si index es null, undefined o 0, es un nuevo item
-        if (index === null || index === undefined || index === 0) {
+        // Si index es null o undefined, es un nuevo item
+        if (index === null || index === undefined) {
             // Buscar el mayor índice actual
             let maxIndex = 0;
             document.querySelectorAll('.item-row').forEach(row => {
