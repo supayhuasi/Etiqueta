@@ -48,18 +48,18 @@ function table_exists(PDO $pdo, string $table): bool {
     if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
         return false;
     }
-    $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
-    $stmt->execute([$table]);
-    return (bool)$stmt->fetchColumn();
+    $quoted = $pdo->quote($table);
+    $stmt = $pdo->query("SHOW TABLES LIKE {$quoted}");
+    return $stmt ? (bool)$stmt->fetchColumn() : false;
 }
 
 function column_exists(PDO $pdo, string $table, string $column): bool {
     if (!preg_match('/^[a-zA-Z0-9_]+$/', $table) || !preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
         return false;
     }
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-    $stmt->execute([$column]);
-    return (bool)$stmt->fetchColumn();
+    $quotedColumn = $pdo->quote($column);
+    $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}` LIKE {$quotedColumn}");
+    return $stmt ? (bool)$stmt->fetchColumn() : false;
 }
 
 function first_existing_column(PDO $pdo, string $table, array $candidates): ?string {
