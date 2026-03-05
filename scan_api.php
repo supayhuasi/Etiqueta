@@ -117,7 +117,10 @@ try {
     $json = file_get_contents('php://input');
     $data = json_decode($json, true);
     if (!is_array($data)) {
-        throw new Exception('JSON inválido');
+        $data = $_POST ?? [];
+    }
+    if (!is_array($data)) {
+        $data = [];
     }
 
     // Si se indica una acción, la procesamos primero (mismo formato que la API de producción)
@@ -591,7 +594,9 @@ try {
     throw new Exception('Código no reconocido en ningún módulo');
 
 } catch (Throwable $e) {
-    http_response_code(resolve_http_status_from_exception($e));
+    // Para errores de proceso devolvemos 200 y success=false,
+    // así el frontend no corta el flujo por HTTP 4xx.
+    http_response_code(200);
     if ($e instanceof PDOException) {
         error_log('scan_api SQL error: ' . $e->getMessage());
         echo json_encode([
