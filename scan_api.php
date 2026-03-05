@@ -146,7 +146,7 @@ try {
                 if ($item['estado'] !== 'en_corte') {
                     throw new Exception('Este item ya fue iniciado');
                 }
-                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
                     SET estado = 'armado', usuario_inicio = ?, fecha_inicio = NOW() WHERE id = ?");
                 $stmt->execute([$usuario_id, $item_id]);
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
@@ -164,7 +164,7 @@ try {
                 if ($item['estado'] !== 'armado') {
                     throw new Exception('Este item no está en armado');
                 }
-                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
                     SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW() WHERE id = ?");
                 $stmt->execute([$usuario_id, $item_id]);
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
@@ -176,9 +176,9 @@ try {
                 $stmt->execute([$usuario_id, $item_id]);
 
                 // verificar si la orden completa se terminó
-                $stmt = $pdo->prepare("SELECT COUNT(*) as total, \
-                       SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados \
-                    FROM ecommerce_produccion_items_barcode \
+                $stmt = $pdo->prepare("SELECT COUNT(*) as total,
+                       SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados
+                    FROM ecommerce_produccion_items_barcode
                     WHERE orden_produccion_id = (
                         SELECT orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ?
                     )");
@@ -187,8 +187,8 @@ try {
 
                 $mensaje = '✅ Item terminado correctamente';
                 if ($stats['total'] == $stats['terminados']) {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion \
-                        SET estado = 'terminado' \
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion
+                        SET estado = 'terminado'
                         WHERE id = (
                             SELECT orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ?
                         )");
@@ -202,8 +202,8 @@ try {
 
             if ($accion === 'rechazar') {
                 $observaciones = $data['observaciones'] ?? 'Rechazado por operario';
-                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode \
-                    SET estado = 'rechazado', observaciones = ?, usuario_termino = ?, fecha_termino = NOW() \
+                $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
+                    SET estado = 'rechazado', observaciones = ?, usuario_termino = ?, fecha_termino = NOW()
                     WHERE id = ?");
                 $stmt->execute([$observaciones, $usuario_id, $item_id]);
                 echo json_encode(['success'=>true,'message'=>'❌ Item rechazado. Motivo registrado.']);
@@ -306,14 +306,14 @@ try {
             exit;
         }
 
-        $stmt = $pdo->prepare("SELECT \
-            COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada, \
-            COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida, \
-            COALESCE(ehd.tolerancia_minutos, eh.tolerancia_minutos, 10) as tolerancia_minutos \
+        $stmt = $pdo->prepare("SELECT
+            COALESCE(ehd.hora_entrada, eh.hora_entrada) as hora_entrada,
+            COALESCE(ehd.hora_salida, eh.hora_salida) as hora_salida,
+            COALESCE(ehd.tolerancia_minutos, eh.tolerancia_minutos, 10) as tolerancia_minutos
         FROM empleados e
         LEFT JOIN empleados_horarios eh ON e.id = eh.empleado_id AND eh.activo = 1
-        LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id \
-            AND ehd.dia_semana = DAYOFWEEK(CURDATE()) - 1 \
+        LEFT JOIN empleados_horarios_dias ehd ON e.id = ehd.empleado_id
+            AND ehd.dia_semana = DAYOFWEEK(CURDATE()) - 1
             AND ehd.activo = 1
         WHERE e.id = ?");
         $stmt->execute([$empleado_id]);
