@@ -208,7 +208,14 @@ function handleResponse(data) {
     actionButtons.style.display = 'none';
 
     if (!data.success) {
-        showStatus(data.message || 'No reconocido', 'error');
+        let errorMsg = data.message || 'No reconocido';
+        if (data.sql_state || data.sql_error) {
+            const sqlParts = [];
+            if (data.sql_state) sqlParts.push(`SQLSTATE ${data.sql_state}`);
+            if (data.sql_error) sqlParts.push(data.sql_error);
+            errorMsg += ` | ${sqlParts.join(' - ')}`;
+        }
+        showStatus(errorMsg, 'error');
         playErrorSound();
         return;
     }
