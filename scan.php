@@ -139,16 +139,20 @@ async function parseApiResponse(response) {
     try {
         return JSON.parse(text);
     } catch (parseErr) {
+        const plainText = String(text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         if (/auth\/login\.php|ingreso al admin|usuario no autenticado/i.test(text)) {
             throw new Error('Sesión expirada. Volvé a iniciar sesión.');
         }
-        throw new Error(text || `Error HTTP ${response.status}`);
+        if (plainText) {
+            throw new Error(`Respuesta inválida del servidor (${response.status}): ${plainText.slice(0, 180)}`);
+        }
+        throw new Error(`Error HTTP ${response.status}`);
     }
 }
 
 function scanCode(code) {
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
+    fetch('/scan_api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: code })
@@ -262,7 +266,7 @@ function procesarAccion(accion) {
         data.observaciones = obs;
     }
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
+    fetch('/scan_api.php', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(data)
