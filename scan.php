@@ -141,11 +141,19 @@ function scanCode(code) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: code })
     })
-    .then(r=>r.json())
+    .then(async (r) => {
+        const text = await r.text();
+        try {
+            return JSON.parse(text);
+        } catch (parseErr) {
+            throw new Error(text || `Error HTTP ${r.status}`);
+        }
+    })
     .then(handleResponse)
     .catch(err=>{
         console.error(err);
-        showStatus('Error de conexión', 'error');
+        const msg = (err && err.message && !/^\s*</.test(err.message)) ? err.message : 'Error de conexión';
+        showStatus(msg, 'error');
     })
     .finally(()=>{ input.value = ''; });
 }

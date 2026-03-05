@@ -26,6 +26,24 @@ if (!$usuario_id) {
     exit;
 }
 
+function resolve_http_status_from_exception(Throwable $e): int {
+    $code = $e->getCode();
+
+    if (is_int($code)) {
+        $status = $code;
+    } elseif (is_string($code) && ctype_digit($code)) {
+        $status = (int)$code;
+    } else {
+        $status = 400;
+    }
+
+    if ($status < 100 || $status > 599) {
+        $status = 400;
+    }
+
+    return $status;
+}
+
 function ensure_produccion_scans_schema(PDO $pdo): void {
     static $initialized = false;
     if ($initialized) {
@@ -159,7 +177,7 @@ try {
             throw new Exception('Sin permiso para registrar asistencias');
         }
         $empleado_id = (int)$m[1];
-        $stmt = $pdo->prepare("SELECT id, nombre, puesto, departamento FROM empleados WHERE id = ? AND activo = 1");
+        $stmt = $pdo->prepare("SELECT id, nombre FROM empleados WHERE id = ? AND activo = 1");
         $stmt->execute([$empleado_id]);
         $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$empleado) {
@@ -212,8 +230,18 @@ try {
                 $estado = 'tarde';
             }
         }
-        $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion) VALUES (?, CURDATE(), ?, ?, ?, NOW())");
-        $stmt->execute([$empleado_id, $hora_actual, $estado, $usuario_id]);
+        try {
+            $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado, creado_por, fecha_creacion) VALUES (?, CURDATE(), ?, ?, ?, NOW())");
+            $stmt->execute([$empleado_id, $hora_actual, $estado, $usuario_id]);
+        } catch (PDOException $insertError) {
+            try {
+                $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada, estado) VALUES (?, CURDATE(), ?, ?)");
+                $stmt->execute([$empleado_id, $hora_actual, $estado]);
+            } catch (PDOException $fallbackError) {
+                $stmt = $pdo->prepare("INSERT INTO asistencias (empleado_id, fecha, hora_entrada) VALUES (?, CURDATE(), ?)");
+                $stmt->execute([$empleado_id, $hora_actual]);
+            }
+        }
         $mensaje = $estado === 'presente' ? '✓ Entrada registrada correctamente' : '⚠ Entrada tardía registrada';
         echo json_encode([
             'success'=>true,
@@ -373,8 +401,7 @@ try {
 
     throw new Exception('Código no reconocido en ningún módulo');
 
-} catch (Exception $e) {
-    $code = $e->getCode() ?: 400;
-    http_response_code($code);
+} catch (Throwable $e) {
+    http_response_code(resolve_http_status_from_exception($e));
     echo json_encode(['success'=>false,'message'=>$e->getMessage()]);
 }
