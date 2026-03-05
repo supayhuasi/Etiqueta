@@ -1115,13 +1115,19 @@ function calcularTotales() {
         if (precioInput && (precioInput.dataset.base === undefined || precioInput.dataset.base === '')) {
             precioInput.dataset.base = precioInput.value || '';
         }
-        const precioBase = parseFloat(precioInput?.dataset.base || 0) || parseFloat(precioInput?.value || 0);
+        const precioBaseData = parseFloat(precioInput?.dataset.base ?? '');
+        const precioBaseValue = parseFloat(precioInput?.value ?? '');
+        const precioBase = Number.isFinite(precioBaseData)
+            ? precioBaseData
+            : (Number.isFinite(precioBaseValue) ? precioBaseValue : 0);
         let costoAtributos = 0;
         row.querySelectorAll('input[name*="[atributos]"][name$="[costo]"]').forEach(input => {
-            costoAtributos += parseFloat(input.value || 0);
+            const costo = parseFloat(input.value ?? '');
+            costoAtributos += Number.isFinite(costo) ? costo : 0;
         });
 
-    const subtotalItem = cantidad * (precioBase + costoAtributos);
+        const cantidadSafe = Number.isFinite(cantidad) ? cantidad : 0;
+        const subtotalItem = cantidadSafe * (precioBase + costoAtributos);
 
         const subtotalInput = row.querySelector('.item-subtotal');
         if (subtotalInput) {
@@ -1132,13 +1138,13 @@ function calcularTotales() {
             subtotalText.textContent = subtotalItem.toFixed(2);
         }
 
-        subtotal += subtotalItem;
+        subtotal += Number.isFinite(subtotalItem) ? subtotalItem : 0;
 
         const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
         if (productoId) {
             const precioLista = calcularPrecioConLista(productoId, precioBase);
             const descUnit = Math.max(0, precioBase - precioLista);
-            descuentoListaTotal += descUnit * cantidad;
+            descuentoListaTotal += descUnit * cantidadSafe;
         }
     });
 
