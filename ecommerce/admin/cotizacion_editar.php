@@ -216,6 +216,7 @@ foreach ($lista_cat_rows as $row) {
 
 <form method="POST" id="formCotizacion" action="cotizacion_editar.php?id=<?= (int)$id ?>">
     <input type="hidden" name="id" value="<?= (int)$id ?>">
+    <input type="hidden" name="items_json" id="items_json" value="">
     <style>
         .attr-option-item {
             border: 2px solid #ddd;
@@ -1381,6 +1382,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 formCot.appendChild(input);
             }
             input.value = jsonStr;
+
+            // Enviar solo JSON para evitar límites de max_input_vars con muchos items/atributos
+            formCot.querySelectorAll('.item-row [name^="items["]').forEach(function(el) {
+                el.removeAttribute('name');
+            });
+
             formCot.submit();
         });
     }

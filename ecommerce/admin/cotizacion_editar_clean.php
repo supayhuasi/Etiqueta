@@ -2,7 +2,7 @@
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 
-$id = intval($_GET['id'] ?? 0);
+$id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
 
 $stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
 $stmt->execute([$id]);
@@ -204,7 +204,9 @@ foreach ($lista_cat_rows as $row) {
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
-<form method="POST" id="formCotizacion">
+<form method="POST" id="formCotizacion" action="cotizacion_editar_clean.php?id=<?= (int)$id ?>">
+    <input type="hidden" name="id" value="<?= (int)$id ?>">
+    <input type="hidden" name="items_json" id="items_json" value="">
     <style>
         .attr-option-item {
             border: 2px solid #ddd;
