@@ -71,6 +71,21 @@ function first_existing_column(PDO $pdo, string $table, array $candidates): ?str
     return null;
 }
 
+function get_table_columns_map(PDO $pdo, string $table): array {
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+        return [];
+    }
+    $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $map = [];
+    foreach ($rows as $row) {
+        if (!empty($row['Field'])) {
+            $map[$row['Field']] = $row;
+        }
+    }
+    return $map;
+}
+
 function ensure_produccion_scans_schema(PDO $pdo): void {
     static $initialized = false;
     if ($initialized) {
@@ -209,12 +224,17 @@ try {
         }
 
         $empleado_id = (int)$m[1];
+        $asist_col_empleado = first_existing_column($pdo, 'asistencias', ['empleado_id', 'id_empleado', 'empleado', 'empleadoid']);
         $asist_col_fecha = first_existing_column($pdo, 'asistencias', ['fecha', 'fecha_asistencia', 'dia']);
         $asist_col_fecha_creacion = first_existing_column($pdo, 'asistencias', ['fecha_creacion', 'created_at']);
         $asist_col_hora_entrada = first_existing_column($pdo, 'asistencias', ['hora_entrada', 'hora_ingreso', 'entrada']);
         $asist_col_hora_salida = first_existing_column($pdo, 'asistencias', ['hora_salida', 'hora_egreso', 'salida']);
         $asist_col_estado = first_existing_column($pdo, 'asistencias', ['estado']);
         $asist_col_creado_por = first_existing_column($pdo, 'asistencias', ['creado_por', 'usuario_id']);
+
+        if (!$asist_col_empleado) {
+            throw new Exception('No se encontró la columna de empleado en asistencias');
+        }
 
         $sql_empleado = "SELECT id, nombre FROM empleados WHERE id = ?";
         if (column_exists($pdo, 'empleados', 'activo')) {
@@ -232,11 +252,11 @@ try {
         $select_hora_entrada = $asist_col_hora_entrada ? ", {$asist_col_hora_entrada} as hora_entrada" : ", NULL as hora_entrada";
         $select_hora_salida = $asist_col_hora_salida ? ", {$asist_col_hora_salida} as hora_salida" : ", NULL as hora_salida";
         if ($asist_col_fecha) {
-            $stmt = $pdo->prepare("SELECT id{$select_hora_entrada}{$select_hora_salida} FROM asistencias WHERE empleado_id = ? AND {$asist_col_fecha} = CURDATE()");
+            $stmt = $pdo->prepare("SELECT id{$select_hora_entrada}{$select_hora_salida} FROM asistencias WHERE {$asist_col_empleado} = ? AND {$asist_col_fecha} = CURDATE()");
             $stmt->execute([$empleado_id]);
             $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
         } elseif ($asist_col_fecha_creacion) {
-            $stmt = $pdo->prepare("SELECT id{$select_hora_entrada}{$select_hora_salida} FROM asistencias WHERE empleado_id = ? AND DATE({$asist_col_fecha_creacion}) = CURDATE()");
+            $stmt = $pdo->prepare("SELECT id{$select_hora_entrada}{$select_hora_salida} FROM asistencias WHERE {$asist_col_empleado} = ? AND DATE({$asist_col_fecha_creacion}) = CURDATE()");
             $stmt->execute([$empleado_id]);
             $asistencia_existente = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -296,7 +316,7 @@ try {
             }
         }
 
-        $cols = ['empleado_id'];
+        $cols = [$asist_col_empleado];
         $vals = ['?'];
         $params = [$empleado_id];
 
@@ -322,6 +342,51 @@ try {
         if ($asist_col_fecha_creacion) {
             $cols[] = $asist_col_fecha_creacion;
             $vals[] = 'NOW()';
+        }
+
+        $meta = get_table_columns_map($pdo, 'asistencias');
+        $cols_set = array_fill_keys($cols, true);
+        foreach ($meta as $field => $colmeta) {
+            if (isset($cols_set[$field])) {
+                continue;
+            }
+
+            $null = strtoupper((string)($colmeta['Null'] ?? 'YES'));
+            $default = $colmeta['Default'] ?? null;
+            $extra = strtolower((string)($colmeta['Extra'] ?? ''));
+            $type = strtolower((string)($colmeta['Type'] ?? ''));
+
+            if ($null === 'YES' || $default !== null || strpos($extra, 'auto_increment') !== false) {
+                continue;
+            }
+
+            if (strpos($type, 'datetime') !== false || strpos($type, 'timestamp') !== false) {
+                $cols[] = $field;
+                $vals[] = 'NOW()';
+            } elseif (strpos($type, 'date') === 0) {
+                $cols[] = $field;
+                $vals[] = 'CURDATE()';
+            } elseif (strpos($type, 'time') === 0) {
+                $cols[] = $field;
+                $vals[] = '?';
+                $params[] = $hora_actual;
+            } elseif (preg_match('/^(tinyint|smallint|mediumint|int|bigint|decimal|float|double)/', $type)) {
+                $cols[] = $field;
+                $vals[] = '?';
+                $params[] = preg_match('/activo|habilitado|enabled/i', $field) ? 1 : 0;
+            } elseif (strpos($type, 'enum(') === 0) {
+                $enumValues = [];
+                if (preg_match('/^enum\((.*)\)$/', $type, $mm)) {
+                    $enumValues = str_getcsv($mm[1], ',', "'", "\\");
+                }
+                $cols[] = $field;
+                $vals[] = '?';
+                $params[] = $enumValues[0] ?? '';
+            } else {
+                $cols[] = $field;
+                $vals[] = '?';
+                $params[] = '';
+            }
         }
 
         if (count($cols) < 2) {
