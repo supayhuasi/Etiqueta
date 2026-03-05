@@ -134,6 +134,18 @@ input.addEventListener('input', function() {
 
 input.addEventListener('blur', () => setTimeout(()=>input.focus(),100));
 
+async function parseApiResponse(response) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (parseErr) {
+        if (/auth\/login\.php|ingreso al admin|usuario no autenticado/i.test(text)) {
+            throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+        }
+        throw new Error(text || `Error HTTP ${response.status}`);
+    }
+}
+
 function scanCode(code) {
     showStatus('Procesando...', 'info');
     fetch('scan_api.php', {
@@ -141,14 +153,7 @@ function scanCode(code) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: code })
     })
-    .then(async (r) => {
-        const text = await r.text();
-        try {
-            return JSON.parse(text);
-        } catch (parseErr) {
-            throw new Error(text || `Error HTTP ${r.status}`);
-        }
-    })
+    .then(parseApiResponse)
     .then(handleResponse)
     .catch(err=>{
         console.error(err);
@@ -262,7 +267,7 @@ function procesarAccion(accion) {
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(data)
     })
-    .then(r=>r.json())
+    .then(parseApiResponse)
     .then(resp=>{
         if (resp.success) {
             showStatus(resp.message, 'success');
@@ -275,7 +280,8 @@ function procesarAccion(accion) {
     })
     .catch(err=>{
         console.error(err);
-        showStatus('Error de conexión', 'error');
+        const msg = (err && err.message && !/^\s*</.test(err.message)) ? err.message : 'Error de conexión';
+        showStatus(msg, 'error');
     });
 }
 
