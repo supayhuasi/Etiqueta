@@ -152,7 +152,7 @@ async function parseApiResponse(response) {
 
 function scanCode(code) {
     showStatus('Procesando...', 'info');
-    fetch('/scan_api.php', {
+    fetch('scan_api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ codigo: code })
@@ -266,7 +266,7 @@ function procesarAccion(accion) {
         data.observaciones = obs;
     }
     showStatus('Procesando...', 'info');
-    fetch('/scan_api.php', {
+    fetch('scan_api.php', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(data)
