@@ -322,6 +322,73 @@ Respuesta ejemplo:
 
 ---
 
+## 7) Consultar asistencias por nombre de empleado
+
+Endpoint: `/ecommerce/api/asistencias.php`
+
+Método: `GET`
+
+Autenticación:
+
+- Sesión activa en el sistema, **o**
+- Header `X-API-KEY: <tu_clave>`
+
+Parámetros:
+
+- `nombre` (obligatorio): texto a buscar en el nombre del empleado
+- `fecha` (opcional): fecha específica en formato `YYYY-MM-DD`
+- `mes` (opcional): mes en formato `YYYY-MM` (ignorado si se especifica `fecha`)
+
+Ejemplos:
+
+```bash
+# asistencias del día de hoy para un empleado
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias.php?nombre=Juan&fecha=2026-03-06' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# asistencias de un mes para un empleado
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias.php?nombre=Juan&mes=2026-03' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# todas las asistencias registradas para un empleado
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias.php?nombre=Juan' \
+  -H 'X-API-KEY: 3020450830204508'
+```
+
+Respuesta ejemplo:
+
+```json
+{
+  "success": true,
+  "nombre": "Juan",
+  "total": 2,
+  "asistencias": [
+    {
+      "empleado_id": 3,
+      "empleado_nombre": "Juan Pérez",
+      "fecha": "2026-03-06",
+      "hora_entrada": "08:05:00",
+      "hora_salida": "17:10:00",
+      "estado": "presente",
+      "observaciones": ""
+    },
+    {
+      "empleado_id": 3,
+      "empleado_nombre": "Juan Pérez",
+      "fecha": "2026-03-05",
+      "hora_entrada": "08:20:00",
+      "hora_salida": "17:00:00",
+      "estado": "tarde",
+      "observaciones": "Llegó tarde por tráfico"
+    }
+  ]
+}
+```
+
+`hora_entrada` y `hora_salida` son las horas marcadas. `estado` puede ser `presente`, `tarde`, `ausente` o `justificado`.
+
+---
+
 ## Ejemplos de código para el robot
 
 ### Python
