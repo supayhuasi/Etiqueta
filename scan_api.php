@@ -90,6 +90,55 @@ function get_table_columns_map(PDO $pdo, string $table): array {
     return $map;
 }
 
+function parse_enum_values(string $type): array {
+    if (!preg_match('/^enum\((.*)\)$/i', trim($type), $m)) {
+        return [];
+    }
+
+    $inside = $m[1];
+    preg_match_all("/'((?:\\\\'|[^'])*)'/", $inside, $matches);
+    $values = [];
+    foreach (($matches[1] ?? []) as $raw) {
+        $values[] = str_replace("\\'", "'", $raw);
+    }
+    return $values;
+}
+
+function resolve_produccion_estado(PDO $pdo, string $etapa): string {
+    static $cache = null;
+
+    if (!is_array($cache)) {
+        $cache = [
+            'corte' => 'en_corte',
+            'armado' => 'armado',
+            'terminado' => 'terminado'
+        ];
+
+        if (table_exists($pdo, 'ecommerce_produccion_items_barcode') && column_exists($pdo, 'ecommerce_produccion_items_barcode', 'estado')) {
+            $cols = get_table_columns_map($pdo, 'ecommerce_produccion_items_barcode');
+            $type = strtolower((string)($cols['estado']['Type'] ?? ''));
+            $enumValues = parse_enum_values($type);
+
+            if (!empty($enumValues)) {
+                $pick = function(array $candidates) use ($enumValues): string {
+                    foreach ($candidates as $candidate) {
+                        if (in_array($candidate, $enumValues, true)) {
+                            return $candidate;
+                        }
+                    }
+                    return $enumValues[0];
+                };
+
+                $cache['corte'] = $pick(['en_corte', 'corte', 'pendiente', 'en_produccion', 'produccion']);
+                $cache['armado'] = $pick(['armado', 'en_armado', 'en_produccion', 'produccion']);
+                $cache['terminado'] = $pick(['terminado', 'finalizado', 'completado', 'entregado']);
+            }
+        }
+    }
+
+    return $cache[$etapa] ?? 'terminado';
+}
+
 function ensure_produccion_scans_schema(PDO $pdo): void {
     static $initialized = false;
     if ($initialized) {
@@ -114,6 +163,10 @@ function ensure_produccion_scans_schema(PDO $pdo): void {
 }
 
 try {
+    $estado_corte = resolve_produccion_estado($pdo, 'corte');
+    $estado_armado = resolve_produccion_estado($pdo, 'armado');
+    $estado_terminado = resolve_produccion_estado($pdo, 'terminado');
+
     $json = file_get_contents('php://input');
     $data = json_decode($json, true);
     if (!is_array($data)) {
@@ -143,12 +196,13 @@ try {
             }
 
             if ($accion === 'iniciar') {
-                if ($item['estado'] !== 'en_corte') {
+                $estados_inicio_validos = array_unique([$estado_corte, 'en_corte', 'corte', 'pendiente']);
+                if (!in_array((string)$item['estado'], $estados_inicio_validos, true)) {
                     throw new Exception('Este item ya fue iniciado');
                 }
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
-                    SET estado = 'armado', usuario_inicio = ?, fecha_inicio = NOW() WHERE id = ?");
-                $stmt->execute([$usuario_id, $item_id]);
+                    SET estado = ?, usuario_inicio = ?, fecha_inicio = NOW() WHERE id = ?");
+                $stmt->execute([$estado_armado, $usuario_id, $item_id]);
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
                     (produccion_item_id, orden_produccion_id, pedido_id, usuario_id, etapa)
                     SELECT pib.id, pib.orden_produccion_id, op.pedido_id, ?, 'armado'
@@ -161,12 +215,13 @@ try {
             }
 
             if ($accion === 'terminar') {
-                if ($item['estado'] !== 'armado') {
+                $estados_terminar_validos = array_unique([$estado_armado, 'armado', 'en_armado', 'en_produccion']);
+                if (!in_array((string)$item['estado'], $estados_terminar_validos, true)) {
                     throw new Exception('Este item no está en armado');
                 }
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
-                    SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW() WHERE id = ?");
-                $stmt->execute([$usuario_id, $item_id]);
+                    SET estado = ?, usuario_termino = ?, fecha_termino = NOW() WHERE id = ?");
+                $stmt->execute([$estado_terminado, $usuario_id, $item_id]);
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_produccion_scans
                     (produccion_item_id, orden_produccion_id, pedido_id, usuario_id, etapa)
                     SELECT pib.id, pib.orden_produccion_id, op.pedido_id, ?, 'terminado'
@@ -177,12 +232,12 @@ try {
 
                 // verificar si la orden completa se terminó
                 $stmt = $pdo->prepare("SELECT COUNT(*) as total,
-                       SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados
+                       SUM(CASE WHEN estado = ? THEN 1 ELSE 0 END) as terminados
                     FROM ecommerce_produccion_items_barcode
                     WHERE orden_produccion_id = (
                         SELECT orden_produccion_id FROM ecommerce_produccion_items_barcode WHERE id = ?
                     )");
-                $stmt->execute([$item_id]);
+                $stmt->execute([$estado_terminado, $item_id]);
                 $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 $mensaje = '✅ Item terminado correctamente';
@@ -219,6 +274,8 @@ try {
     }
 
     $codigo = strtoupper(preg_replace('/\s+/', '', (string)$data['codigo']));
+    $codigo_limpio = trim($codigo, "*\"' ");
+    $codigo_solo_alnum_guion = preg_replace('/[^A-Z0-9\-]/', '', $codigo_limpio);
 
     // 1) Asistencias - formato EMP000001
     if (preg_match('/^EMP(\d{1,6})$/', $codigo, $m)) {
@@ -407,7 +464,7 @@ try {
             $stmt->execute([(int)$item['id']]);
             $total_scans = (int)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 
-            if ($total_scans >= 3 || $item_lock['estado'] === 'terminado') {
+            if ($total_scans >= 3 || (string)$item_lock['estado'] === (string)$estado_terminado) {
                 $pdo->commit();
                 echo json_encode([
                     'success' => true,
@@ -424,29 +481,29 @@ try {
 
             if ($etapa === 'corte') {
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
-                    SET estado = 'en_corte',
+                    SET estado = ?,
                         usuario_inicio = COALESCE(usuario_inicio, ?),
                         fecha_inicio = COALESCE(fecha_inicio, NOW())
                     WHERE id = ?");
-                $stmt->execute([$usuario_id, (int)$item['id']]);
+                $stmt->execute([$estado_corte, $usuario_id, (int)$item['id']]);
                 $mensaje = '🪚 Corte registrado';
             } elseif ($etapa === 'armado') {
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
-                    SET estado = 'armado'
+                    SET estado = ?
                     WHERE id = ?");
-                $stmt->execute([(int)$item['id']]);
+                $stmt->execute([$estado_armado, (int)$item['id']]);
                 $mensaje = '🧩 Armado registrado';
             } else {
                 $stmt = $pdo->prepare("UPDATE ecommerce_produccion_items_barcode
-                    SET estado = 'terminado', usuario_termino = ?, fecha_termino = NOW()
+                    SET estado = ?, usuario_termino = ?, fecha_termino = NOW()
                     WHERE id = ?");
-                $stmt->execute([$usuario_id, (int)$item['id']]);
+                $stmt->execute([$estado_terminado, $usuario_id, (int)$item['id']]);
 
                 $stmt = $pdo->prepare("SELECT COUNT(*) as total,
-                    SUM(CASE WHEN estado = 'terminado' THEN 1 ELSE 0 END) as terminados
+                    SUM(CASE WHEN estado = ? THEN 1 ELSE 0 END) as terminados
                     FROM ecommerce_produccion_items_barcode
                     WHERE orden_produccion_id = ?");
-                $stmt->execute([(int)$item_lock['orden_produccion_id']]);
+                $stmt->execute([$estado_terminado, (int)$item_lock['orden_produccion_id']]);
                 $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ((int)($stats['total'] ?? 0) > 0 && (int)($stats['total'] ?? 0) === (int)($stats['terminados'] ?? 0)) {
                     $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = 'terminado' WHERE id = ?");
@@ -501,7 +558,92 @@ try {
         exit;
     }
 
-    // 3) Detalle genérico (compatible con distintos esquemas)
+    // 3) Código de pedido/orden de producción (ej: PED-COT-...)
+    if (table_exists($pdo, 'ecommerce_pedidos')) {
+        $col_numero_pedido = first_existing_column($pdo, 'ecommerce_pedidos', ['numero_pedido', 'codigo', 'numero']);
+        if ($col_numero_pedido) {
+            $col_estado_pedido = first_existing_column($pdo, 'ecommerce_pedidos', ['estado']);
+
+            $select_estado_pedido = $col_estado_pedido
+                ? 'p.' . qi($col_estado_pedido) . ' AS estado_pedido'
+                : 'NULL AS estado_pedido';
+
+            $sqlPedido = "SELECT
+                    p.id AS pedido_id,
+                    p." . qi($col_numero_pedido) . " AS numero_pedido,
+                    {$select_estado_pedido}
+                FROM ecommerce_pedidos p
+                WHERE UPPER(TRIM(p." . qi($col_numero_pedido) . ")) = ?
+                   OR UPPER(TRIM(p." . qi($col_numero_pedido) . ")) = ?
+                   OR UPPER(TRIM(p." . qi($col_numero_pedido) . ")) LIKE ?
+                LIMIT 1";
+
+            $stmt = $pdo->prepare($sqlPedido);
+            $stmt->execute([
+                $codigo,
+                $codigo_limpio,
+                '%' . $codigo_solo_alnum_guion . '%'
+            ]);
+            $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($pedido) {
+                $orden = null;
+                if (table_exists($pdo, 'ecommerce_ordenes_produccion')) {
+                    $col_op_estado = first_existing_column($pdo, 'ecommerce_ordenes_produccion', ['estado']);
+                    $select_op_estado = $col_op_estado ? qi($col_op_estado) . ' AS estado_orden' : 'NULL AS estado_orden';
+
+                    $stmt = $pdo->prepare("SELECT id AS orden_id, {$select_op_estado} FROM ecommerce_ordenes_produccion WHERE pedido_id = ? LIMIT 1");
+                    $stmt->execute([(int)$pedido['pedido_id']]);
+                    $orden = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+
+                echo json_encode([
+                    'success' => true,
+                    'tipo' => 'detalle',
+                    'message' => 'Pedido reconocido',
+                    'detalle' => [
+                        'codigo' => $codigo,
+                        'pedido_id' => (int)$pedido['pedido_id'],
+                        'numero_pedido' => $pedido['numero_pedido'],
+                        'estado_pedido' => $pedido['estado_pedido'] ?? null,
+                        'orden_produccion_id' => $orden['orden_id'] ?? null,
+                        'estado_orden_produccion' => $orden['estado_orden'] ?? null
+                    ]
+                ]);
+                exit;
+            }
+        }
+    }
+
+    // 3.b) Código de cotización (fallback)
+    if (table_exists($pdo, 'ecommerce_cotizaciones') && column_exists($pdo, 'ecommerce_cotizaciones', 'numero_cotizacion')) {
+        $stmt = $pdo->prepare("SELECT id, numero_cotizacion FROM ecommerce_cotizaciones
+            WHERE UPPER(TRIM(numero_cotizacion)) = ?
+               OR UPPER(TRIM(numero_cotizacion)) = ?
+               OR UPPER(TRIM(numero_cotizacion)) LIKE ?
+            LIMIT 1");
+        $stmt->execute([
+            $codigo,
+            $codigo_limpio,
+            '%' . $codigo_solo_alnum_guion . '%'
+        ]);
+        $cot = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($cot) {
+            echo json_encode([
+                'success' => true,
+                'tipo' => 'detalle',
+                'message' => 'Cotización reconocida',
+                'detalle' => [
+                    'codigo' => $codigo,
+                    'cotizacion_id' => (int)$cot['id'],
+                    'numero_cotizacion' => $cot['numero_cotizacion']
+                ]
+            ]);
+            exit;
+        }
+    }
+
+    // 4) Detalle genérico (compatible con distintos esquemas)
     if (table_exists($pdo, 'ecommerce_pedido_items')) {
         $col_codigo_item = first_existing_column(
             $pdo,
@@ -520,7 +662,7 @@ try {
         }
     }
 
-    // 4) Entrega de producto (tabla productos)
+    // 5) Entrega de producto (tabla productos)
     $stmt = $pdo->prepare("SELECT id, estado_id FROM productos WHERE codigo_barra = ?");
     $stmt->execute([$codigo]);
     $producto = $stmt->fetch(PDO::FETCH_ASSOC);
