@@ -501,13 +501,23 @@ try {
         exit;
     }
 
-    // 3) Detalle genérico (se puede adaptar a la tabla que se use)
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_pedido_items WHERE codigo_barcode = ?");
-    $stmt->execute([$codigo]);
-    $detalle = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($detalle) {
-        echo json_encode(['success'=>true,'tipo'=>'detalle','detalle'=>$detalle]);
-        exit;
+    // 3) Detalle genérico (compatible con distintos esquemas)
+    if (table_exists($pdo, 'ecommerce_pedido_items')) {
+        $col_codigo_item = first_existing_column(
+            $pdo,
+            'ecommerce_pedido_items',
+            ['codigo_barcode', 'codigo_barra', 'barcode', 'codigo']
+        );
+
+        if ($col_codigo_item) {
+            $stmt = $pdo->prepare("SELECT * FROM ecommerce_pedido_items WHERE " . qi($col_codigo_item) . " = ?");
+            $stmt->execute([$codigo]);
+            $detalle = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($detalle) {
+                echo json_encode(['success'=>true,'tipo'=>'detalle','detalle'=>$detalle]);
+                exit;
+            }
+        }
     }
 
     // 4) Entrega de producto (tabla productos)
