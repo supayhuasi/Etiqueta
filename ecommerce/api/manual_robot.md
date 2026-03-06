@@ -322,6 +322,122 @@ Respuesta ejemplo:
 
 ---
 
+## 7) Entradas y salidas por nombre de usuario
+
+Endpoint: `/ecommerce/api/asistencias_usuario.php`
+
+Método: `GET`
+
+Autenticación:
+
+- Sesión activa en el sistema, **o**
+- Header `X-API-KEY: <tu_clave>`
+
+Parámetros:
+
+- `nombre_usuario` (obligatorio): texto para buscar por `usuario` o `nombre`
+- `fecha_desde` (opcional): formato `YYYY-MM-DD`
+- `fecha_hasta` (opcional): formato `YYYY-MM-DD`
+- `limite` (opcional): cantidad máxima de filas (default: 100, máx: 500)
+
+Ejemplos:
+
+```bash
+# buscar asistencias por usuario
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias_usuario.php?nombre_usuario=roco' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# buscar asistencias en rango de fechas
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias_usuario.php?nombre_usuario=operario&fecha_desde=2026-03-01&fecha_hasta=2026-03-06' \
+  -H 'X-API-KEY: 3020450830204508'
+```
+
+Respuesta ejemplo:
+
+```json
+{
+  "success": true,
+  "nombre_usuario": "operario",
+  "total": 1,
+  "registros": [
+    {
+      "usuario_id": 7,
+      "usuario": "operario1",
+      "usuario_nombre": "Juan Operario",
+      "empleado_id": 3,
+      "empleado_nombre": "Juan Pérez",
+      "fecha": "2026-03-06",
+      "hora_entrada": "08:02:10",
+      "hora_salida": "17:11:42",
+      "estado": "presente",
+      "fecha_registro": "2026-03-06 08:02:10"
+    }
+  ]
+}
+```
+
+Cada fila corresponde a una asistencia registrada por ese usuario (operador), incluyendo la entrada/salida del empleado asociado.
+
+---
+
+## 8) Entradas y salidas por nombre de empleado
+
+Endpoint: `/ecommerce/api/asistencias_empleado.php`
+
+Método: `GET`
+
+Autenticación:
+
+- Sesión activa en el sistema, **o**
+- Header `X-API-KEY: <tu_clave>`
+
+Parámetros:
+
+- `empleado_nombre` (obligatorio): texto para buscar por nombre del empleado
+- `fecha_desde` (opcional): formato `YYYY-MM-DD`
+- `fecha_hasta` (opcional): formato `YYYY-MM-DD`
+- `limite` (opcional): cantidad máxima de filas (default: 100, máx: 500)
+
+Ejemplos:
+
+```bash
+# buscar asistencias por empleado
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias_empleado.php?empleado_nombre=juan' \
+  -H 'X-API-KEY: 3020450830204508'
+
+# buscar asistencias por empleado en rango de fechas
+curl 'https://tucuroller.com.ar/ecommerce/api/asistencias_empleado.php?empleado_nombre=juan&fecha_desde=2026-03-01&fecha_hasta=2026-03-06' \
+  -H 'X-API-KEY: 3020450830204508'
+```
+
+Respuesta ejemplo:
+
+```json
+{
+  "success": true,
+  "empleado_nombre": "juan",
+  "total": 1,
+  "registros": [
+    {
+      "usuario_id": 7,
+      "usuario": "operario1",
+      "usuario_nombre": "Juan Operario",
+      "empleado_id": 3,
+      "empleado_nombre": "Juan Pérez",
+      "fecha": "2026-03-06",
+      "hora_entrada": "08:02:10",
+      "hora_salida": "17:11:42",
+      "estado": "presente",
+      "fecha_registro": "2026-03-06 08:02:10"
+    }
+  ]
+}
+```
+
+Cada fila muestra la asistencia del empleado y, cuando está disponible, el usuario que la registró.
+
+---
+
 ## Ejemplos de código para el robot
 
 ### Python
