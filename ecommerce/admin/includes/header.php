@@ -218,6 +218,8 @@ $page_permissions = [
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
     'mp_config.php' => 'mp_config',
+    'mp_link_pago.php' => 'mp_config',
+    'precios_horarios.php' => 'precios_ecommerce',
     'metodos_pago.php' => 'metodos_pago',
     'pedidos.php' => 'pedidos',
     'ordenes_produccion.php' => 'ordenes_produccion',
@@ -605,7 +607,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -620,6 +622,10 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
+                        <a href="<?= $admin_url ?>mp_link_pago.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_link_pago.php' ? 'active' : '' ?>"><i class="bi bi-link-45deg"></i> Link de Pago</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('precios_ecommerce')): ?>
+                        <a href="<?= $admin_url ?>precios_horarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_horarios.php' ? 'active' : '' ?>"><i class="bi bi-clock-history"></i> Precios por Horario</a>
                         <?php endif; ?>
                         <?php if ($can_access('metodos_pago')): ?>
                         <a href="<?= $admin_url ?>metodos_pago.php" class="<?= basename($_SERVER['PHP_SELF']) === 'metodos_pago.php' ? 'active' : '' ?>"><i class="bi bi-wallet2"></i> Métodos de Pago</a>

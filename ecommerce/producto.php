@@ -59,6 +59,38 @@ $stmt = $pdo->prepare("
 $stmt->execute([$producto_id]);
 $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$opciones_por_id = [];
+$opciones_por_atributo = [];
+if (!empty($atributos)) {
+    $atributo_ids = array_map(static fn($a) => (int)($a['id'] ?? 0), $atributos);
+    $atributo_ids = array_values(array_filter($atributo_ids, static fn($id) => $id > 0));
+
+    if (!empty($atributo_ids)) {
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
+            if ($stmt && $stmt->rowCount() > 0) {
+                $placeholders = implode(',', array_fill(0, count($atributo_ids), '?'));
+                $stmt = $pdo->prepare("\n                    SELECT id, atributo_id, nombre, costo_adicional\n                    FROM ecommerce_atributo_opciones\n                    WHERE atributo_id IN ($placeholders)\n                ");
+                $stmt->execute($atributo_ids);
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $opcion) {
+                    $opcion_id = (int)($opcion['id'] ?? 0);
+                    $atributo_id = (int)($opcion['atributo_id'] ?? 0);
+                    if ($opcion_id > 0 && $atributo_id > 0) {
+                        $opciones_por_id[$opcion_id] = $opcion;
+                        if (!isset($opciones_por_atributo[$atributo_id])) {
+                            $opciones_por_atributo[$atributo_id] = [];
+                        }
+                        $opciones_por_atributo[$atributo_id][$opcion_id] = $opcion;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            $opciones_por_id = [];
+            $opciones_por_atributo = [];
+        }
+    }
+}
+
 // Obtener matriz de precios si es producto variable
 $matriz_precios = [];
 if ($tipo_precio === 'variable') {
@@ -146,26 +178,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "El atributo '{$attr['nombre']}' es obligatorio";
                     break;
                 }
-                $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
                 $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
+                $opcion_id = ($opcion_id !== null && $opcion_id !== '' && is_numeric($opcion_id)) ? (int)$opcion_id : null;
+                $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
+
+                if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
+                    if ($opcion_id === null || !isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                        $error = "Seleccioná una opción válida para '{$attr['nombre']}'";
+                        break;
+                    }
+                    $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+                    $valor = (string)($opcion['nombre'] ?? $valor);
+                    $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
+                }
+
                 $atributos_seleccionados[$attr['id']] = [
                     'id' => $attr['id'],
                     'nombre' => $attr['nombre'],
                     'valor' => $valor,
                     'costo_adicional' => $costo_opcion,
-                    'opcion_id' => $opcion_id !== null && $opcion_id !== '' ? (int)$opcion_id : null
+                    'opcion_id' => $opcion_id
                 ];
             } else {
                 $valor = $_POST['attr_' . $attr['id']] ?? '';
                 if (!empty($valor)) {
-                    $costo_opcion = floatval($_POST['attr_costo_' . $attr['id']] ?? $attr['costo_adicional']);
                     $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
+                    $opcion_id = ($opcion_id !== null && $opcion_id !== '' && is_numeric($opcion_id)) ? (int)$opcion_id : null;
+                    $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
+
+                    if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
+                        if ($opcion_id === null || !isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                            $error = "Seleccioná una opción válida para '{$attr['nombre']}'";
+                            break;
+                        }
+                        $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+                        $valor = (string)($opcion['nombre'] ?? $valor);
+                        $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
+                    }
+
                     $atributos_seleccionados[$attr['id']] = [
                         'id' => $attr['id'],
                         'nombre' => $attr['nombre'],
                         'valor' => $valor,
                         'costo_adicional' => $costo_opcion,
-                        'opcion_id' => $opcion_id !== null && $opcion_id !== '' ? (int)$opcion_id : null
+                        'opcion_id' => $opcion_id
                     ];
                 }
             }
@@ -625,23 +681,32 @@ function actualizarPrecio() {
 
     // Agregar costos adicionales de atributos
     atributosData.forEach(attr => {
-        const valorInput = document.getElementById('attr_' + attr.id);
-        if (valorInput && valorInput.value) {
-            const costoHidden = document.getElementById('attr_costo_' + attr.id);
-            const costoOpcion = costoHidden ? parseFloat(costoHidden.value || 0) : 0;
-            if (costoOpcion > 0) {
-                precioFinal += costoOpcion;
-                costosAdicionales.push({
-                    nombre: valorInput.value,
-                    costo: costoOpcion
-                });
-            } else if (attr.costo_adicional > 0) {
-                precioFinal += parseFloat(attr.costo_adicional);
-                costosAdicionales.push({
-                    nombre: attr.nombre,
-                    costo: parseFloat(attr.costo_adicional)
-                });
+        const tipo = String(attr.tipo || '').toLowerCase();
+
+        if (tipo === 'select') {
+            const selectedRadio = document.querySelector(`input.attr-radio[name="attr_${attr.id}"]:checked`);
+            if (selectedRadio) {
+                const costoOpcion = parseFloat(selectedRadio.dataset.costo || 0);
+                if (costoOpcion > 0) {
+                    precioFinal += costoOpcion;
+                    costosAdicionales.push({
+                        nombre: selectedRadio.value || attr.nombre,
+                        costo: costoOpcion
+                    });
+                }
             }
+            return;
+        }
+
+        const valorInput = document.getElementById('attr_' + attr.id);
+        const valor = valorInput ? String(valorInput.value || '').trim() : '';
+        const costoAtributo = parseFloat(attr.costo_adicional || 0);
+        if (valor !== '' && costoAtributo > 0) {
+            precioFinal += costoAtributo;
+            costosAdicionales.push({
+                nombre: attr.nombre,
+                costo: costoAtributo
+            });
         }
     });
     
