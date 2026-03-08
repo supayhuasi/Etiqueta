@@ -613,6 +613,7 @@ const precioBase = <?= $producto['precio_base'] ?>;
 const listaId = <?= (int)$lista_publica_id ?>;
 const listaItems = <?= json_encode($mapas_lista_publica['items']) ?>;
 const listaCategorias = <?= json_encode($mapas_lista_publica['categorias']) ?>;
+const ajusteHorario = <?= json_encode(obtener_ajuste_horario_publico($pdo)) ?>;
 const productoId = <?= (int)$producto['id'] ?>;
 const categoriaId = <?= (int)($producto['categoria_id'] ?? 0) ?>;
 
@@ -641,6 +642,16 @@ function aplicarDescuento(precioBaseActual) {
         if (descCat > 0) {
             descuento = descCat;
             precioFinal = precioBaseActual * (1 - descuento / 100);
+        }
+    }
+
+    const categoriasObjetivo = Array.isArray(ajusteHorario?.categoria_ids) ? ajusteHorario.categoria_ids.map(v => parseInt(v, 10)) : [];
+    const aplicaPorCategoria = categoriasObjetivo.length === 0 || categoriasObjetivo.includes(parseInt(categoriaId, 10));
+
+    if (ajusteHorario?.aplica && aplicaPorCategoria) {
+        const factor = parseFloat(ajusteHorario.factor || 1);
+        if (factor > 0) {
+            precioFinal = precioFinal * factor;
         }
     }
 
