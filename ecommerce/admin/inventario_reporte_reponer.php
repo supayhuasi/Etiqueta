@@ -1,82 +1,136 @@
 <?php
 require 'includes/header.php';
 
+function inv_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt->execute([$table]);
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    } catch (Throwable $e) {
+    }
+
+    try {
+        $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function inv_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
+        $stmt->execute([$column]);
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    } catch (Throwable $e) {
+    }
+
+    try {
+        $pdo->query("SELECT {$column} FROM {$table} LIMIT 1");
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function inv_fetch_all(PDO $pdo, string $sql): array
+{
+    try {
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 $ver_colores = !empty($_GET['ver_colores']);
 
 // Obtener items que necesitan reposición
 $items_reponer = [];
 
 // Materiales a reponer
-$stmt = $pdo->query("
-    SELECT 
-        'material' as tipo_item,
-        m.id,
-        m.nombre,
-        m.stock,
-        m.stock_minimo,
-        m.unidad_medida,
-        m.tipo_origen,
-        m.proveedor_habitual_id,
-        p.nombre as proveedor_nombre,
-        (m.stock_minimo - m.stock) as cantidad_reponer,
-        CASE 
-            WHEN m.stock < 0 THEN 'negativo'
-            WHEN m.stock = 0 THEN 'sin_stock'
-            WHEN m.stock <= m.stock_minimo THEN 'bajo_minimo'
-        END as prioridad
-    FROM ecommerce_materiales m
-    LEFT JOIN ecommerce_proveedores p ON m.proveedor_habitual_id = p.id
-    WHERE m.stock <= m.stock_minimo
-    ORDER BY 
-        CASE 
-            WHEN m.stock < 0 THEN 1
-            WHEN m.stock = 0 THEN 2
-            ELSE 3
-        END,
-        m.stock ASC
-");
-$materiales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$materiales = [];
+if (inv_table_exists($pdo, 'ecommerce_materiales')) {
+    $materiales = inv_fetch_all($pdo, "
+        SELECT
+            'material' as tipo_item,
+            m.id,
+            m.nombre,
+            m.stock,
+            m.stock_minimo,
+            m.unidad_medida,
+            m.tipo_origen,
+            m.proveedor_habitual_id,
+            p.nombre as proveedor_nombre,
+            (m.stock_minimo - m.stock) as cantidad_reponer,
+            CASE
+                WHEN m.stock < 0 THEN 'negativo'
+                WHEN m.stock = 0 THEN 'sin_stock'
+                WHEN m.stock <= m.stock_minimo THEN 'bajo_minimo'
+            END as prioridad
+        FROM ecommerce_materiales m
+        LEFT JOIN ecommerce_proveedores p ON m.proveedor_habitual_id = p.id
+        WHERE m.stock <= m.stock_minimo
+        ORDER BY
+            CASE
+                WHEN m.stock < 0 THEN 1
+                WHEN m.stock = 0 THEN 2
+                ELSE 3
+            END,
+            m.stock ASC
+    ");
+}
 
 // Productos a reponer
-$stmt = $pdo->query("
-    SELECT 
-        'producto' as tipo_item,
-        pr.id,
-        pr.nombre,
-        pr.stock,
-        pr.stock_minimo,
-        'unidad' as unidad_medida,
-        pr.tipo_origen,
-        pr.proveedor_habitual_id,
-        p.nombre as proveedor_nombre,
-        (pr.stock_minimo - pr.stock) as cantidad_reponer,
-        CASE 
-            WHEN pr.stock < 0 THEN 'negativo'
-            WHEN pr.stock = 0 THEN 'sin_stock'
-            WHEN pr.stock <= pr.stock_minimo THEN 'bajo_minimo'
-        END as prioridad
-    FROM ecommerce_productos pr
-    LEFT JOIN ecommerce_proveedores p ON pr.proveedor_habitual_id = p.id
-    WHERE pr.stock <= pr.stock_minimo
-    ORDER BY 
-        CASE 
-            WHEN pr.stock < 0 THEN 1
-            WHEN pr.stock = 0 THEN 2
-            ELSE 3
-        END,
-        pr.stock ASC
-");
-$productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$productos = [];
+if (inv_table_exists($pdo, 'ecommerce_productos')) {
+    $productos = inv_fetch_all($pdo, "
+        SELECT
+            'producto' as tipo_item,
+            pr.id,
+            pr.nombre,
+            pr.stock,
+            pr.stock_minimo,
+            'unidad' as unidad_medida,
+            pr.tipo_origen,
+            pr.proveedor_habitual_id,
+            p.nombre as proveedor_nombre,
+            (pr.stock_minimo - pr.stock) as cantidad_reponer,
+            CASE
+                WHEN pr.stock < 0 THEN 'negativo'
+                WHEN pr.stock = 0 THEN 'sin_stock'
+                WHEN pr.stock <= pr.stock_minimo THEN 'bajo_minimo'
+            END as prioridad
+        FROM ecommerce_productos pr
+        LEFT JOIN ecommerce_proveedores p ON pr.proveedor_habitual_id = p.id
+        WHERE pr.stock <= pr.stock_minimo
+        ORDER BY
+            CASE
+                WHEN pr.stock < 0 THEN 1
+                WHEN pr.stock = 0 THEN 2
+                ELSE 3
+            END,
+            pr.stock ASC
+    ");
+}
 
 $items_reponer = array_merge($materiales, $productos);
 
 // Stock por color (opciones de atributos)
 $opciones_color_reponer = [];
-$tiene_opciones = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+$tiene_opciones = inv_table_exists($pdo, 'ecommerce_atributo_opciones');
 if ($ver_colores && $tiene_opciones) {
-    $cols_opciones = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones")->fetchAll(PDO::FETCH_COLUMN, 0);
-    if (in_array('stock', $cols_opciones, true)) {
-        $stmt = $pdo->query("
+    if (
+        inv_column_exists($pdo, 'ecommerce_atributo_opciones', 'stock') &&
+        inv_table_exists($pdo, 'ecommerce_producto_atributos') &&
+        inv_table_exists($pdo, 'ecommerce_productos')
+    ) {
+        $opciones_color_reponer = inv_fetch_all($pdo, "
             SELECT
                 p.id AS material_id,
                 p.nombre AS material_nombre,
@@ -92,32 +146,32 @@ if ($ver_colores && $tiene_opciones) {
               AND o.stock <= 0
             ORDER BY p.nombre, o.nombre
         ");
-        $opciones_color_reponer = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 
-// Obtener historial de compras para referencia
-$stmt = $pdo->query("
-    SELECT 
-        ci.material_id,
-        ci.producto_id,
-        c.proveedor_id,
-        pr.nombre as proveedor_nombre,
-        AVG(ci.precio_unitario) as precio_promedio,
-        MAX(c.fecha_compra) as ultima_compra,
-        COUNT(*) as veces_comprado
-    FROM ecommerce_compras_items ci
-    JOIN ecommerce_compras c ON ci.compra_id = c.id
-    LEFT JOIN ecommerce_proveedores pr ON c.proveedor_id = pr.id
-    GROUP BY ci.material_id, ci.producto_id, c.proveedor_id, pr.nombre
-");
 $historial_compras = [];
-foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $hist) {
-    $key = ($hist['material_id'] ? 'material_' . $hist['material_id'] : 'producto_' . $hist['producto_id']);
-    if (!isset($historial_compras[$key])) {
-        $historial_compras[$key] = [];
+if (inv_table_exists($pdo, 'ecommerce_compras_items') && inv_table_exists($pdo, 'ecommerce_compras')) {
+    $historial_rows = inv_fetch_all($pdo, "
+        SELECT
+            ci.material_id,
+            ci.producto_id,
+            c.proveedor_id,
+            pr.nombre as proveedor_nombre,
+            AVG(ci.precio_unitario) as precio_promedio,
+            MAX(c.fecha_compra) as ultima_compra,
+            COUNT(*) as veces_comprado
+        FROM ecommerce_compras_items ci
+        JOIN ecommerce_compras c ON ci.compra_id = c.id
+        LEFT JOIN ecommerce_proveedores pr ON c.proveedor_id = pr.id
+        GROUP BY ci.material_id, ci.producto_id, c.proveedor_id, pr.nombre
+    ");
+    foreach ($historial_rows as $hist) {
+        $key = ($hist['material_id'] ? 'material_' . $hist['material_id'] : 'producto_' . $hist['producto_id']);
+        if (!isset($historial_compras[$key])) {
+            $historial_compras[$key] = [];
+        }
+        $historial_compras[$key][] = $hist;
     }
-    $historial_compras[$key][] = $hist;
 }
 
 // Estadísticas
