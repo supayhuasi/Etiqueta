@@ -5,7 +5,16 @@ function tabla_existe($pdo, $tabla) {
     try {
         $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
         $stmt->execute([$tabla]);
-        return (bool)$stmt->fetchColumn();
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    } catch (Exception $e) {
+        // fallback abajo
+    }
+
+    try {
+        $pdo->query("SELECT 1 FROM {$tabla} LIMIT 1");
+        return true;
     } catch (Exception $e) {
         return false;
     }
@@ -15,7 +24,16 @@ function columna_existe($pdo, $tabla, $columna) {
     try {
         $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
         $stmt->execute([$columna]);
-        return (bool)$stmt->fetchColumn();
+        if ($stmt->fetchColumn()) {
+            return true;
+        }
+    } catch (Exception $e) {
+        // fallback abajo
+    }
+
+    try {
+        $pdo->query("SELECT {$columna} FROM {$tabla} LIMIT 1");
+        return true;
     } catch (Exception $e) {
         return false;
     }
