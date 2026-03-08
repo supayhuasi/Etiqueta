@@ -193,6 +193,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                         <th>Beneficiario</th>
                                         <th>Monto</th>
                                         <th>Estado</th>
+                                        <th>Adjunto</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
@@ -212,6 +213,13 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                             <span class="badge" style="background-color: <?= htmlspecialchars($gasto['estado_color'] ?? '#999') ?>">
                                                 <?= htmlspecialchars($gasto['estado_nombre'] ?? 'Sin estado') ?>
                                             </span>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($gasto['archivo'])): ?>
+                                                <a href="gastos_archivo.php?id=<?= (int)$gasto['id'] ?>" class="btn btn-sm btn-outline-primary" target="_blank" title="Ver adjunto">📎 Ver</a>
+                                            <?php else: ?>
+                                                <span class="text-muted small">Sin adjunto</span>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <div class="d-flex flex-wrap gap-1">
