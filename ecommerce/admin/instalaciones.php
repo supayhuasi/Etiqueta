@@ -28,8 +28,9 @@ $auto_setup_msg = '';
 
 $tablas_ok =
     tabla_existe($pdo, 'ecommerce_ordenes_produccion') &&
-    tabla_existe($pdo, 'ecommerce_pedidos') &&
-    tabla_existe($pdo, 'ecommerce_clientes');
+    tabla_existe($pdo, 'ecommerce_pedidos');
+
+$tiene_clientes = tabla_existe($pdo, 'ecommerce_clientes');
 
 if ($tablas_ok) {
     $tiene_fecha_instalacion = columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_instalacion');
@@ -75,46 +76,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'progr
 
 try {
     if (!$tablas_ok) {
-        throw new RuntimeException('No están disponibles todas las tablas requeridas del módulo.');
+        throw new RuntimeException('No están disponibles las tablas base requeridas del módulo.');
     }
 
-    $select_fecha_instalacion = $tiene_fecha_instalacion
-        ? 'op.fecha_instalacion'
-        : 'NULL AS fecha_instalacion';
+    $cargarPedidos = function(bool $usarFechaInstalacion) use (
+        $pdo,
+        $incluir_entregados,
+        $fecha_desde,
+        $fecha_hasta,
+        $instalacion_desde,
+        $instalacion_hasta,
+        $tiene_clientes
+    ) {
+        $select_fecha_instalacion = $usarFechaInstalacion
+            ? 'op.fecha_instalacion'
+            : 'NULL AS fecha_instalacion';
+        $select_cliente = $tiene_clientes ? 'c.nombre AS cliente_nombre' : 'NULL AS cliente_nombre';
+        $join_cliente = $tiene_clientes ? 'LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id' : '';
 
-    $sql = "
-        SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
-               {$select_fecha_instalacion},
-               p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
-               p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_pedido AS fecha_creacion,
-               c.nombre AS cliente_nombre
-        FROM ecommerce_ordenes_produccion op
-        JOIN ecommerce_pedidos p ON op.pedido_id = p.id
-        LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-        WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'") . "
-    ";
-    $params = [];
-    if ($fecha_desde !== '') {
-        $sql .= " AND DATE(p.fecha_pedido) >= ?";
-        $params[] = $fecha_desde;
-    }
-    if ($fecha_hasta !== '') {
-        $sql .= " AND DATE(p.fecha_pedido) <= ?";
-        $params[] = $fecha_hasta;
-    }
-    if ($tiene_fecha_instalacion && $instalacion_desde !== '') {
-        $sql .= " AND op.fecha_instalacion >= ?";
-        $params[] = $instalacion_desde;
-    }
-    if ($tiene_fecha_instalacion && $instalacion_hasta !== '') {
-        $sql .= " AND op.fecha_instalacion <= ?";
-        $params[] = $instalacion_hasta;
-    }
-    $sql .= " ORDER BY fecha_instalacion IS NULL, fecha_instalacion ASC, p.fecha_pedido DESC, op.pedido_id ASC";
+        $sql = "
+            SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
+                   {$select_fecha_instalacion},
+                   p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
+                   p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_pedido AS fecha_creacion,
+                   {$select_cliente}
+            FROM ecommerce_ordenes_produccion op
+            JOIN ecommerce_pedidos p ON op.pedido_id = p.id
+            {$join_cliente}
+            WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'") . "
+        ";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $params = [];
+        if ($fecha_desde !== '') {
+            $sql .= " AND DATE(p.fecha_pedido) >= ?";
+            $params[] = $fecha_desde;
+        }
+        if ($fecha_hasta !== '') {
+            $sql .= " AND DATE(p.fecha_pedido) <= ?";
+            $params[] = $fecha_hasta;
+        }
+        if ($usarFechaInstalacion && $instalacion_desde !== '') {
+            $sql .= " AND op.fecha_instalacion >= ?";
+            $params[] = $instalacion_desde;
+        }
+        if ($usarFechaInstalacion && $instalacion_hasta !== '') {
+            $sql .= " AND op.fecha_instalacion <= ?";
+            $params[] = $instalacion_hasta;
+        }
+
+        $sql .= " ORDER BY fecha_instalacion IS NULL, fecha_instalacion ASC, p.fecha_pedido DESC, op.pedido_id ASC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    };
+
+    try {
+        $pedidos = $cargarPedidos($tiene_fecha_instalacion);
+    } catch (Throwable $e) {
+        if ($tiene_fecha_instalacion && stripos($e->getMessage(), 'fecha_instalacion') !== false) {
+            $tiene_fecha_instalacion = false;
+            $auto_setup_msg = 'Se detectó una inconsistencia con fecha_instalacion. Se cargó la vista en modo compatible.';
+            $pedidos = $cargarPedidos(false);
+        } else {
+            throw $e;
+        }
+    }
 
     foreach ($pedidos as $row) {
         if (!empty($row['fecha_instalacion'])) {
@@ -149,7 +176,13 @@ $qs = http_build_query(array_filter([
 <?php if ($error_pagina !== ''): ?>
 <div class="alert alert-danger">
     <strong>Error al cargar:</strong> <?= htmlspecialchars($error_pagina) ?>
-    <p class="mb-0 mt-2 small">Comprobá que existan las tablas <code>ecommerce_ordenes_produccion</code>, <code>ecommerce_pedidos</code> y <code>ecommerce_clientes</code>.</p>
+    <p class="mb-0 mt-2 small">Comprobá que existan las tablas base <code>ecommerce_ordenes_produccion</code> y <code>ecommerce_pedidos</code>.</p>
+</div>
+<?php endif; ?>
+
+<?php if (!$tiene_clientes): ?>
+<div class="alert alert-warning">
+    La tabla <code>ecommerce_clientes</code> no existe. Se muestra la vista sin nombre de cliente.
 </div>
 <?php endif; ?>
 
