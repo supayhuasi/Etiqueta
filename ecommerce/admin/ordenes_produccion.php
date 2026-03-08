@@ -86,6 +86,9 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <p class="text-muted">Seguimiento de producción por pedido</p>
     </div>
     <div>
+        <a href="produccion_tareas_usuarios.php" class="btn btn-outline-primary btn-lg">
+            👷 Dashboard por Usuario
+        </a>
         <a href="/scan.php" class="btn btn-success btn-lg">
             📱 Control de Producción (Escaneo)
         </a>

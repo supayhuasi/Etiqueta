@@ -6,15 +6,18 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Permitir acceso a admin y operario
-if (!isset($_SESSION['usuario_id'])) {
-    header('Location: auth/login.php');
+// Permitir acceso a admin y operario (compatibilidad de sesión)
+$usuario_id = $_SESSION['user_id'] ?? ($_SESSION['usuario_id'] ?? ($_SESSION['user']['id'] ?? null));
+$rol_usuario = strtolower(trim((string)($_SESSION['rol'] ?? '')));
+
+if (!$usuario_id) {
+    header('Location: ecommerce/admin/auth/login.php');
     exit;
 }
 
 // Solo admin y operario pueden acceder
 $roles_permitidos = ['admin', 'operario'];
-if (!isset($_SESSION['rol']) || !in_array($_SESSION['rol'], $roles_permitidos)) {
+if (!in_array($rol_usuario, $roles_permitidos, true)) {
     die('Acceso denegado. Solo administradores y operarios pueden acceder a esta página.');
 }
 
@@ -99,7 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="scanner-container text-center">
     <h1 class="mb-4">📱 Escaneo Unificado</h1>
     <input type="text" id="barcode-input" class="scanner-input" placeholder="Escanee aquí..." autofocus autocomplete="off">
+    <div class="mt-3">
+        <button type="button" id="process-code-btn" class="btn btn-primary">Procesar código</button>
+    </div>
     <div id="status-message" class="status-message"></div>
+    <div id="status-actions" class="mt-2" style="display:none;">
+        <button type="button" id="copy-error-btn" class="btn btn-sm btn-outline-light">Copiar error</button>
+    </div>
     <div id="employee-info" class="employee-info"></div>
     <div id="item-info" class="item-info"></div>
     <div id="detalle-info" class="detalle-info"></div>
@@ -112,39 +121,194 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <script>
 const input = document.getElementById('barcode-input');
 const statusMessage = document.getElementById('status-message');
+const statusActions = document.getElementById('status-actions');
+const copyErrorBtn = document.getElementById('copy-error-btn');
 const employeeInfo = document.getElementById('employee-info');
 const itemInfo = document.getElementById('item-info');
 const detalleInfo = document.getElementById('detalle-info');
 const actionButtons = document.getElementById('action-buttons');
-let processingTimeout = null;
+const processCodeBtn = document.getElementById('process-code-btn');
 let currentItem = null;
+let requestInFlight = false;
+let lastProcessedCode = '';
+let lastProcessedAt = 0;
+let scannerBuffer = '';
+let scannerLastKeyAt = 0;
+let scannerIdleTimer = null;
+const SCANNER_KEY_MAX_INTERVAL = 70;
+const SCANNER_IDLE_FLUSH_MS = 90;
+const SCANNER_MIN_LEN = 5;
+const SCAN_API_ENDPOINTS = (() => {
+    const base = window.location.pathname.replace(/[^/]*$/, '');
+    return [
+        `${base}scan_api.php`,
+        'scan_api.php',
+        '/scan_api.php',
+        '/ecommerce/scan_api.php'
+    ];
+})();
 
-input.addEventListener('input', function() {
-    if (processingTimeout) clearTimeout(processingTimeout);
-    processingTimeout = setTimeout(() => {
-        const code = input.value.trim();
-        if (code.length) {
-            scanCode(code);
+window.addEventListener('keydown', function(event) {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+    if (event.key === 'Enter') {
+        const maybeScanner = scannerBuffer.length >= SCANNER_MIN_LEN && (Date.now() - scannerLastKeyAt) < 300;
+        if (maybeScanner) {
+            event.preventDefault();
+            flushScannerBuffer();
+            return;
         }
-    }, 100);
+
+        if (document.activeElement === input) {
+            event.preventDefault();
+            triggerManualScan();
+        }
+        return;
+    }
+
+    if (event.key.length !== 1) return;
+
+    const now = Date.now();
+    if (!scannerLastKeyAt || (now - scannerLastKeyAt) > SCANNER_KEY_MAX_INTERVAL) {
+        scannerBuffer = '';
+    }
+
+    scannerBuffer += event.key;
+    scannerLastKeyAt = now;
+
+    if (scannerIdleTimer) clearTimeout(scannerIdleTimer);
+    scannerIdleTimer = setTimeout(flushScannerBuffer, SCANNER_IDLE_FLUSH_MS);
+});
+
+processCodeBtn.addEventListener('click', triggerManualScan);
+
+copyErrorBtn.addEventListener('click', async function() {
+    const text = statusMessage.textContent || '';
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        copyErrorBtn.textContent = 'Copiado ✓';
+        setTimeout(() => { copyErrorBtn.textContent = 'Copiar error'; }, 1500);
+    } catch (e) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        copyErrorBtn.textContent = 'Copiado ✓';
+        setTimeout(() => { copyErrorBtn.textContent = 'Copiar error'; }, 1500);
+    }
 });
 
 input.addEventListener('blur', () => setTimeout(()=>input.focus(),100));
 
+function normalizeCode(rawCode) {
+    return String(rawCode || '').replace(/\s+/g, '').trim().toUpperCase();
+}
+
+function flushScannerBuffer() {
+    if (scannerIdleTimer) {
+        clearTimeout(scannerIdleTimer);
+        scannerIdleTimer = null;
+    }
+
+    const code = normalizeCode(scannerBuffer);
+    scannerBuffer = '';
+    scannerLastKeyAt = 0;
+
+    if (code.length < SCANNER_MIN_LEN) {
+        return;
+    }
+
+    input.value = code;
+    scanCode(code);
+}
+
+function triggerManualScan() {
+    const code = normalizeCode(input.value);
+    if (!code) {
+        return;
+    }
+    scanCode(code);
+}
+
+async function parseApiResponse(response) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (parseErr) {
+        const plainText = String(text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (/auth\/login\.php|ingreso al admin|usuario no autenticado/i.test(text)) {
+            throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+        }
+        if (plainText) {
+            throw new Error(`Respuesta inválida del servidor (${response.status}): ${plainText.slice(0, 180)}`);
+        }
+        throw new Error(`Error HTTP ${response.status}`);
+    }
+}
+
+async function postScanApi(payload) {
+    let lastError = null;
+
+    for (const endpoint of SCAN_API_ENDPOINTS) {
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 404) {
+                lastError = new Error(`Endpoint no encontrado: ${endpoint}`);
+                continue;
+            }
+
+            return await parseApiResponse(response);
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    if (lastError) {
+        throw lastError;
+    }
+
+    throw new Error('No se encontró un endpoint válido para escaneo.');
+}
+
 function scanCode(code) {
+    const normalizedCode = normalizeCode(code);
+    if (!normalizedCode) {
+        return;
+    }
+
+    const now = Date.now();
+    if (normalizedCode === lastProcessedCode && (now - lastProcessedAt) < 1000) {
+        return;
+    }
+    if (requestInFlight) {
+        return;
+    }
+
+    requestInFlight = true;
+    lastProcessedCode = normalizedCode;
+    lastProcessedAt = now;
+
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: code })
-    })
-    .then(r=>r.json())
+    postScanApi({ codigo: normalizedCode })
     .then(handleResponse)
     .catch(err=>{
         console.error(err);
-        showStatus('Error de conexión', 'error');
+        const msg = (err && err.message && !/^\s*</.test(err.message)) ? err.message : 'Error de conexión';
+        showStatus(msg, 'error');
     })
-    .finally(()=>{ input.value = ''; });
+    .finally(()=>{
+        requestInFlight = false;
+        input.value = '';
+        input.focus();
+    });
 }
 
 function handleResponse(data) {
@@ -155,7 +319,14 @@ function handleResponse(data) {
     actionButtons.style.display = 'none';
 
     if (!data.success) {
-        showStatus(data.message || 'No reconocido', 'error');
+        let errorMsg = data.message || 'No reconocido';
+        if (data.sql_state || data.sql_error) {
+            const sqlParts = [];
+            if (data.sql_state) sqlParts.push(`SQLSTATE ${data.sql_state}`);
+            if (data.sql_error) sqlParts.push(data.sql_error);
+            errorMsg += ` | ${sqlParts.join(' - ')}`;
+        }
+        showStatus(errorMsg, 'error');
         playErrorSound();
         return;
     }
@@ -165,7 +336,7 @@ function handleResponse(data) {
             renderAsistencia(data);
             break;
         case 'produccion':
-            renderProduccion(data.item);
+            renderProduccion(data.item, data);
             break;
         case 'entrega':
             // nothing else to show
@@ -190,7 +361,7 @@ function renderAsistencia(data) {
     playSuccessSound();
 }
 
-function renderProduccion(item) {
+function renderProduccion(item, data = {}) {
     currentItem = item;
     let estadoColor = { en_corte:'danger', armado:'warning', terminado:'success', rechazado:'danger' };
     let html = `
@@ -198,11 +369,21 @@ function renderProduccion(item) {
         <p><strong>Item:</strong> ${item.numero_item} | <strong>Orden:</strong> ${item.numero_pedido}</p>
         <p><strong>Código:</strong> <code>${item.codigo_barcode}</code></p>
         <p><strong>Estado:</strong> <span class="badge bg-${estadoColor[item.estado]}">${item.estado.toUpperCase().replace('_',' ')}</span></p>
+        ${data.etapa ? `<p><strong>Etapa registrada:</strong> <span class="badge bg-info">${data.etapa.toUpperCase()}</span></p>` : ''}
+        ${data.escaneos ? `<p><small>Escaneos registrados: ${data.escaneos}/3</small></p>` : ''}
         ${item.fecha_inicio ? `<p><small>Iniciado: ${item.fecha_inicio} por ${item.usuario_inicio_nombre||'N/A'}</small></p>` : ''}
         ${item.fecha_termino ? `<p><small>Terminado: ${item.fecha_termino} por ${item.usuario_termino_nombre||'N/A'}</small></p>` : ''}
     `;
     itemInfo.innerHTML = html;
     itemInfo.style.display = 'block';
+
+    if (data.auto) {
+        actionButtons.innerHTML = `<p class="text-muted mb-0">Escaneo automático aplicado</p>`;
+        actionButtons.style.display = 'flex';
+        playSuccessSound();
+        return;
+    }
+
     // actions
     let buttons = '';
     if (item.estado === 'en_corte') {
@@ -236,12 +417,7 @@ function procesarAccion(accion) {
         data.observaciones = obs;
     }
     showStatus('Procesando...', 'info');
-    fetch('scan_api.php', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r=>r.json())
+    postScanApi(data)
     .then(resp=>{
         if (resp.success) {
             showStatus(resp.message, 'success');
@@ -254,7 +430,8 @@ function procesarAccion(accion) {
     })
     .catch(err=>{
         console.error(err);
-        showStatus('Error de conexión', 'error');
+        const msg = (err && err.message && !/^\s*</.test(err.message)) ? err.message : 'Error de conexión';
+        showStatus(msg, 'error');
     });
 }
 
@@ -265,6 +442,13 @@ function showStatus(msg, type) {
     else if (type === 'error') statusMessage.classList.add('status-error');
     else if (type === 'warning') statusMessage.classList.add('status-warning');
     statusMessage.style.display = 'block';
+
+    if (type === 'error') {
+        statusActions.style.display = 'block';
+        return;
+    }
+
+    statusActions.style.display = 'none';
     if (type !== 'info') {
         setTimeout(()=>{ statusMessage.style.display='none'; }, 4000);
     }

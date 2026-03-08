@@ -59,7 +59,7 @@ $role_permissions = [
     'usuario' => [
         'dashboard',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
-        'pedidos', 'ordenes_produccion', 'instalaciones',
+        'pedidos', 'ordenes_produccion', 'instalaciones', 'visitas',
         'clientes_web',
         'inventario',
         'flujo_caja',
@@ -79,6 +79,7 @@ $role_permissions = [
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
+        'visitas',
         'cotizaciones',
         'cotizacion_clientes',
         'clientes_web',
@@ -139,6 +140,7 @@ $page_permissions = [
     'instalaciones.php' => 'instalaciones',
     'instalaciones_reporte_direcciones.php' => 'instalaciones',
     'instalaciones_reporte_productos.php' => 'instalaciones',
+    'visitas.php' => 'visitas',
     'facturacion_clientes.php' => 'facturacion_clientes',
     'clientes_web.php' => 'clientes_web',
     'cotizaciones.php' => 'cotizaciones',
@@ -514,7 +516,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'visitas', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -526,9 +528,13 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <?php endif; ?>
                         <?php if ($can_access('ordenes_produccion')): ?>
                         <a href="<?= $admin_url ?>ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>"><i class="bi bi-gear"></i> Órdenes de Producción</a>
+                        <a href="<?= $admin_url ?>produccion_tareas_usuarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'produccion_tareas_usuarios.php' ? 'active' : '' ?>"><i class="bi bi-person-workspace"></i> Tareas por Usuario</a>
                         <?php endif; ?>
                         <?php if ($can_access('instalaciones')): ?>
                         <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('visitas')): ?>
+                        <a href="<?= $admin_url ?>visitas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'visitas.php' ? 'active' : '' ?>"><i class="bi bi-list-task"></i> Visitas</a>
                         <?php endif; ?>
                         <?php if ($can_access('facturacion_clientes')): ?>
                         <a href="<?= $admin_url ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark-text"></i> Facturación</a>
@@ -636,7 +642,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                         <a href="<?= $relative_root ?>index.php"><i class="bi bi-house"></i> Inicio Principal</a>
                         <?php endif; ?>
                         <?php if ($can_access('scan')): ?>
-                        <a href="<?= $relative_root ?>scan.php"><i class="bi bi-upc-scan"></i> Escaneo</a>
+                        <a href="<?= $public_base ?>/scan.php"><i class="bi bi-upc-scan"></i> Escaneo</a>
                         <?php endif; ?>
                         <?php if ($can_access('dashboard_principal')): ?>
                         <a href="<?= $relative_root ?>dashboard.php"><i class="bi bi-speedometer"></i> Dashboard</a>

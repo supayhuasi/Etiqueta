@@ -2,6 +2,17 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+$script_path = $_SERVER['SCRIPT_NAME'] ?? '';
+$base_path = '';
+if ($script_path !== '') {
+  $base_path = rtrim(str_replace('\\', '/', dirname($script_path)), '/');
+  if ($base_path === '/' || $base_path === '.') {
+    $base_path = '';
+  }
+}
+
+$scan_url = ($base_path !== '' ? $base_path : '') . '/scan.php';
 ?>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container-fluid">
@@ -21,7 +32,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
         <?php if (isset($_SESSION['rol'])): ?>
         <li class="nav-item">
-          <a class="nav-link" href="/scan.php">Escaneo</a>
+          <a class="nav-link" href="<?= htmlspecialchars($scan_url) ?>">Escaneo</a>
         </li>
         <?php if (!in_array($_SESSION['rol'], ['ventas','operario'])): ?>
         <li class="nav-item">

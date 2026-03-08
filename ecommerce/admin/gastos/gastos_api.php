@@ -53,22 +53,58 @@ try {
     $json = file_get_contents('php://input');
     $data = json_decode($json, true);
     if (!is_array($data)) {
-        throw new Exception('JSON inválido');
+        // Compatibilidad: permitir payload x-www-form-urlencoded o multipart/form-data
+        $data = $_POST;
+    }
+    if (!is_array($data) || empty($data)) {
+        throw new Exception('Payload inválido: enviar JSON o datos POST');
     }
 
+    $pickValue = function(array $source, array $keys, $default = null) {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $source) && $source[$key] !== null && $source[$key] !== '') {
+                return $source[$key];
+            }
+        }
+        return $default;
+    };
+
+    $resolveIdByName = function(PDO $pdo, string $table, $rawValue): int {
+        if ($rawValue === null || $rawValue === '') {
+            return 0;
+        }
+
+        if (is_numeric($rawValue)) {
+            return (int)$rawValue;
+        }
+
+        $name = trim((string)$rawValue);
+        if ($name === '') {
+            return 0;
+        }
+
+        $stmt = $pdo->prepare("SELECT id FROM {$table} WHERE LOWER(nombre) = LOWER(?) LIMIT 1");
+        $stmt->execute([$name]);
+        $id = $stmt->fetchColumn();
+        return $id ? (int)$id : 0;
+    };
+
     // campos requeridos
-    $fecha = $data['fecha'] ?? '';
-    $tipo_id = intval($data['tipo_gasto_id'] ?? 0);
-    $estado_id = intval($data['estado_gasto_id'] ?? 0);
-    $descripcion = trim($data['descripcion'] ?? '');
-    $monto = floatval($data['monto'] ?? 0);
-    $empleado_id = (!empty($data['empleado_id']) ? intval($data['empleado_id']) : null);
-    $observaciones = trim($data['observaciones'] ?? '');
+    $fecha = (string)($pickValue($data, ['fecha', 'date'], '') ?? '');
+    $tipoRaw = $pickValue($data, ['tipo_gasto_id', 'tipo_id', 'tipo_gasto', 'tipo', 'expense_type_id']);
+    $estadoRaw = $pickValue($data, ['estado_gasto_id', 'estado_id', 'estado_gasto', 'estado', 'status_id']);
+    $tipo_id = $resolveIdByName($pdo, 'tipos_gastos', $tipoRaw);
+    $estado_id = $resolveIdByName($pdo, 'estados_gastos', $estadoRaw);
+    $descripcion = trim((string)($pickValue($data, ['descripcion', 'description', 'detalle'], '') ?? ''));
+    $monto = floatval($pickValue($data, ['monto', 'amount'], 0));
+    $empleadoRaw = $pickValue($data, ['empleado_id', 'beneficiario_id', 'employee_id']);
+    $empleado_id = ($empleadoRaw !== null && $empleadoRaw !== '' ? intval($empleadoRaw) : null);
+    $observaciones = trim((string)($pickValue($data, ['observaciones', 'observacion', 'notes'], '') ?? ''));
 
     $errores = [];
     if (empty($fecha)) $errores[] = 'La fecha es obligatoria';
-    if ($tipo_id <= 0) $errores[] = 'Debe indicar un tipo de gasto';
-    if ($estado_id <= 0) $errores[] = 'Debe indicar un estado';
+    if ($tipo_id <= 0) $errores[] = 'Debe indicar un tipo de gasto válido';
+    if ($estado_id <= 0) $errores[] = 'Debe indicar un estado válido';
     if ($descripcion === '') $errores[] = 'La descripción es obligatoria';
     if ($monto <= 0) $errores[] = 'El monto debe ser mayor que 0';
 

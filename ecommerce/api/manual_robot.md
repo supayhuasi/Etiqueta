@@ -167,7 +167,7 @@ curl -H 'X-API-KEY: TU_API_KEY' \
   'https://tucuroller.com.ar/ecommerce/api/sistema.php?modulos=1'
 ```
 
-### Ejemplos
+Ejemplos:
 
 ```bash
 # 1) Empleados activos
@@ -255,10 +255,13 @@ curl 'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?tipo=materiales
 
 Endpoint: `/ecommerce/api/ventas_mes.php`
 
+Método: `GET`
+
 Parámetro obligatorio:
 - `mes` en formato `YYYY-MM`
 
 Ejemplo:
+
 
 ```bash
 curl 'https://tucuroller.com.ar/ecommerce/api/ventas_mes.php?mes=2026-03'
@@ -275,6 +278,7 @@ Parámetros:
 - `mes` (opcional, `YYYY-MM`, default mes actual)
 
 Ejemplo:
+
 
 ```bash
 curl 'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan&mes=2026-03'

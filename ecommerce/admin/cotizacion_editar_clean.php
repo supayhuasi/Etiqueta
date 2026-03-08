@@ -2,7 +2,7 @@
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 
-$id = intval($_GET['id'] ?? 0);
+$id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
 
 $stmt = $pdo->prepare("SELECT * FROM ecommerce_cotizaciones WHERE id = ?");
 $stmt->execute([$id]);
@@ -204,7 +204,9 @@ foreach ($lista_cat_rows as $row) {
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
-<form method="POST" id="formCotizacion">
+<form method="POST" id="formCotizacion" action="cotizacion_editar_clean.php?id=<?= (int)$id ?>">
+    <input type="hidden" name="id" value="<?= (int)$id ?>">
+    <input type="hidden" name="items_json" id="items_json" value="">
     <style>
         .attr-option-item {
             border: 2px solid #ddd;
@@ -1023,8 +1025,8 @@ function guardarItemDesdeModal() {
             alert('No se encontró el contenedor de items.');
             return;
         }
-        // Si index es null, undefined o 0, es un nuevo item
-        if (index === null || index === undefined || index === 0) {
+        // Si index es null o undefined, es un nuevo item
+        if (index === null || index === undefined) {
             // Buscar el mayor índice actual
             let maxIndex = 0;
             document.querySelectorAll('.item-row').forEach(row => {
@@ -1112,13 +1114,19 @@ function calcularTotales() {
         if (precioInput && (precioInput.dataset.base === undefined || precioInput.dataset.base === '')) {
             precioInput.dataset.base = precioInput.value || '';
         }
-        const precioBase = parseFloat(precioInput?.dataset.base || 0) || parseFloat(precioInput?.value || 0);
+        const precioBaseData = parseFloat(precioInput?.dataset.base ?? '');
+        const precioBaseValue = parseFloat(precioInput?.value ?? '');
+        const precioBase = Number.isFinite(precioBaseData)
+            ? precioBaseData
+            : (Number.isFinite(precioBaseValue) ? precioBaseValue : 0);
         let costoAtributos = 0;
         row.querySelectorAll('input[name*="[atributos]"][name$="[costo]"]').forEach(input => {
-            costoAtributos += parseFloat(input.value || 0);
+            const costo = parseFloat(input.value ?? '');
+            costoAtributos += Number.isFinite(costo) ? costo : 0;
         });
 
-    const subtotalItem = cantidad * (precioBase + costoAtributos);
+        const cantidadSafe = Number.isFinite(cantidad) ? cantidad : 0;
+        const subtotalItem = cantidadSafe * (precioBase + costoAtributos);
 
         const subtotalInput = row.querySelector('.item-subtotal');
         if (subtotalInput) {
@@ -1129,13 +1137,13 @@ function calcularTotales() {
             subtotalText.textContent = subtotalItem.toFixed(2);
         }
 
-        subtotal += subtotalItem;
+        subtotal += Number.isFinite(subtotalItem) ? subtotalItem : 0;
 
         const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
         if (productoId) {
             const precioLista = calcularPrecioConLista(productoId, precioBase);
             const descUnit = Math.max(0, precioBase - precioLista);
-            descuentoListaTotal += descUnit * cantidad;
+            descuentoListaTotal += descUnit * cantidadSafe;
         }
     });
 

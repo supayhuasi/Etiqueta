@@ -10,21 +10,32 @@ $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Agregar campo empresa/direccion según qué columna exista
 if ($cotizacion && !empty($cotizacion['cliente_id'])) {
-    $stmt_empresa = $pdo->prepare("SELECT empresa FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
     try {
-        $stmt_empresa->execute([$cotizacion['cliente_id']]);
-        $emp_data = $stmt_empresa->fetch(PDO::FETCH_ASSOC);
-        if ($emp_data) {
-            $cotizacion['cliente_empresa'] = $emp_data['empresa'] ?? null;
+        $cols_stmt = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes");
+        $cols = $cols_stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+        $select_cols = [];
+        if (in_array('empresa', $cols, true)) {
+            $select_cols[] = 'empresa';
+        }
+        if (in_array('direccion', $cols, true)) {
+            $select_cols[] = 'direccion';
+        }
+
+        if (!empty($select_cols)) {
+            $stmt_extra = $pdo->prepare("SELECT " . implode(', ', $select_cols) . " FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
+            $stmt_extra->execute([$cotizacion['cliente_id']]);
+            $extra_data = $stmt_extra->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            if (array_key_exists('empresa', $extra_data)) {
+                $cotizacion['cliente_empresa'] = $extra_data['empresa'];
+            }
+            if (array_key_exists('direccion', $extra_data)) {
+                $cotizacion['cliente_direccion'] = $extra_data['direccion'];
+            }
         }
     } catch (Exception $e) {
-        // Si falla, intentar con direccion
-        $stmt_dir = $pdo->prepare("SELECT direccion FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
-        $stmt_dir->execute([$cotizacion['cliente_id']]);
-        $dir_data = $stmt_dir->fetch(PDO::FETCH_ASSOC);
-        if ($dir_data) {
-            $cotizacion['cliente_direccion'] = $dir_data['direccion'] ?? null;
-        }
+        // Ignorar si la tabla/columnas no están disponibles
     }
 }
 // Agregar validaciones y conversión a pedido
@@ -48,17 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     
     try {
-        if ($accion === 'cambiar_estado') {
-            $nuevo_estado = $_POST['estado'];
-            $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = ? WHERE id = ?");
-            $stmt->execute([$nuevo_estado, $id]);
-            
-            if ($nuevo_estado === 'enviada') {
-                $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET fecha_envio = NOW() WHERE id = ?");
-                $stmt->execute([$id]);
-            }
-            
-            } elseif ($accion === 'convertir_pedido') {
+        if ($accion === 'convertir_pedido') {
                 if ($cotizacion['estado'] === 'convertida') {
                     throw new Exception('La cotización ya fue convertida');
                 }
@@ -164,8 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 header("Location: pedidos_detalle.php?id=" . $pedido_id . "&mensaje=convertida");
                 exit;
-                
-        } elseif ($accion === 'cambiar_estado') {
+    } elseif ($accion === 'cambiar_estado') {
             $nuevo_estado = $_POST['estado'];
             $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = ? WHERE id = ?");
             $stmt->execute([$nuevo_estado, $id]);
@@ -176,11 +176,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             $mensaje = "Estado actualizado";
-            
-            // Recargar
-            $stmt = $pdo->prepare("SELECT c.*, cc.nombre AS cliente_nombre, cc.empresa AS cliente_empresa, cc.email AS cliente_email, cc.telefono AS cliente_telefono FROM ecommerce_cotizaciones c LEFT JOIN ecommerce_cotizacion_clientes cc ON c.cliente_id = cc.id WHERE c.id = ?");
-            $stmt->execute([$id]);
-            $cotizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Actualizar datos en memoria para reflejar cambios sin recargar página
+            $cotizacion['estado'] = $nuevo_estado;
+            if ($nuevo_estado === 'enviada') {
+                $cotizacion['fecha_envio'] = date('Y-m-d H:i:s');
+            }
         }
         
     } catch (Exception $e) {
@@ -240,20 +241,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <th width="30%">Nombre:</th>
                         <td><?= htmlspecialchars($cotizacion['cliente_nombre'] ?? $cotizacion['nombre_cliente']) ?></td>
                     </tr>
-                    <?php if (!empty($cotizacion['cliente_empresa']) || $cotizacion['empresa']): ?>
+                    <?php if (!empty($cotizacion['cliente_empresa'] ?? '') || !empty($cotizacion['empresa'] ?? '')): ?>
                     <tr>
                         <th>Empresa:</th>
-                        <td><?= htmlspecialchars($cotizacion['cliente_empresa'] ?? $cotizacion['empresa']) ?></td>
+                        <td><?= htmlspecialchars($cotizacion['cliente_empresa'] ?? ($cotizacion['empresa'] ?? '')) ?></td>
                     </tr>
                     <?php endif; ?>
                     <tr>
                         <th>Email:</th>
                         <td><a href="mailto:<?= htmlspecialchars($cotizacion['cliente_email'] ?? $cotizacion['email']) ?>"><?= htmlspecialchars($cotizacion['cliente_email'] ?? $cotizacion['email']) ?></a></td>
                     </tr>
-                    <?php if (!empty($cotizacion['cliente_telefono']) || $cotizacion['telefono']): ?>
+                    <?php if (!empty($cotizacion['cliente_telefono'] ?? '') || !empty($cotizacion['telefono'] ?? '')): ?>
                     <tr>
                         <th>Teléfono:</th>
-                        <td><?= htmlspecialchars($cotizacion['cliente_telefono'] ?? $cotizacion['telefono']) ?></td>
+                        <td><?= htmlspecialchars($cotizacion['cliente_telefono'] ?? ($cotizacion['telefono'] ?? '')) ?></td>
                     </tr>
                     <?php endif; ?>
                 </table>
@@ -337,8 +338,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php endif; ?>
                             </td>
                             <td class="text-center"><?= $item['cantidad'] ?></td>
-                            <td class="text-end">$<?= number_format($item['precio_unitario'], 2) ?></td>
-                            <td class="text-end"><strong>$<?= number_format($item['precio_total'], 2) ?></strong></td>
+                            <td class="text-end">$<?= number_format((float)($item['precio_unitario'] ?? $item['precio_base'] ?? 0), 2) ?></td>
+                            <td class="text-end"><strong>$<?= number_format((float)($item['precio_total'] ?? (($item['precio_unitario'] ?? $item['precio_base'] ?? 0) * ($item['cantidad'] ?? 1))), 2) ?></strong></td>
                         </tr>
                         <?php if (!empty($item['atributos']) && is_array($item['atributos'])): ?>
                             <tr class="table-light">

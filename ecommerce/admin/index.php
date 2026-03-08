@@ -26,6 +26,14 @@ if ($stmt_cot->rowCount() > 0) {
     $cotizaciones_pendientes = 0;
 }
 
+// Visitas pendientes
+$visitas_pendientes = 0;
+$stmt_vis = $pdo->query("SHOW TABLES LIKE 'ecommerce_visitas'");
+if ($stmt_vis->rowCount() > 0) {
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_visitas WHERE estado = 'pendiente'");
+    $visitas_pendientes = (int)($stmt->fetch()['total'] ?? 0);
+}
+
 // Últimos pedidos
 $stmt = $pdo->query("
     SELECT p.numero_pedido, c.nombre, p.total, p.estado, p.fecha_pedido 
@@ -102,6 +110,17 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+    <?php if (isset($can_access) && $can_access('visitas')): ?>
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body">
+                <h6 class="card-title">🗓️ Visitas Pendientes</h6>
+                <h3><?= $visitas_pendientes ?></h3>
+                <a href="visitas.php" class="btn btn-light btn-sm mt-3">Ver</a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="row g-3 mt-2">
@@ -153,6 +172,12 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <div class="card-body">
                 <a href="productos_crear.php" class="btn btn-primary w-100 mb-2">+ Nuevo Producto</a>
+                <a href="categorias_crear.php" class="btn btn-success w-100 mb-2">+ Nueva Categoría</a>
+                <a href="matriz_precios.php" class="btn btn-warning w-100 mb-2">📏 Generar Matriz</a>
+                <?php if (isset($can_access) && $can_access('visitas')): ?>
+                <a href="visitas.php" class="btn btn-secondary w-100 mb-2">🗓️ Visitas (To Do)</a>
+                <?php endif; ?>
+                <a href="empresa.php" class="btn btn-info w-100">🏪 Editar Empresa</a>
                 <a href="categorias_crear.php" class="btn btn-outline-primary w-100 mb-2">+ Nueva Categoría</a>
                 <a href="matriz_precios.php" class="btn btn-outline-secondary w-100 mb-2">📏 Generar Matriz</a>
                 <a href="empresa.php" class="btn btn-outline-dark w-100">🏪 Editar Empresa</a>
