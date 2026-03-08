@@ -219,6 +219,7 @@ $page_permissions = [
     'trabajos.php' => 'trabajos',
     'mp_config.php' => 'mp_config',
     'mp_link_pago.php' => 'mp_config',
+    'admin_mensajes.php' => 'admin_mensajes',
     'precios_horarios.php' => 'precios_ecommerce',
     'metodos_pago.php' => 'metodos_pago',
     'pedidos.php' => 'pedidos',
@@ -303,6 +304,13 @@ if (!function_exists('admin_column_exists')) {
 
 $notificaciones_atrasos = [];
 $notificaciones_atrasos_total = 0;
+$notificaciones_tardanzas = [];
+$notificaciones_tardanzas_total = 0;
+$notificaciones_sin_tareas = [];
+$notificaciones_sin_tareas_total = 0;
+$notificaciones_mensajes = [];
+$notificaciones_mensajes_total = 0;
+$notificaciones_total = 0;
 
 if ($role === 'admin') {
     try {
@@ -346,9 +354,120 @@ if ($role === 'admin') {
                 $notificaciones_atrasos = $pdo->query($sql_lista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
         }
+
+        if (
+            admin_table_exists($pdo, 'asistencias')
+            && admin_table_exists($pdo, 'empleados')
+            && admin_column_exists($pdo, 'asistencias', 'empleado_id')
+            && admin_column_exists($pdo, 'asistencias', 'fecha')
+            && admin_column_exists($pdo, 'asistencias', 'estado')
+        ) {
+            $sql_tardes_count = "
+                SELECT COUNT(*)
+                FROM asistencias a
+                WHERE a.fecha = CURDATE()
+                  AND LOWER(COALESCE(a.estado, '')) = 'tarde'
+            ";
+            $notificaciones_tardanzas_total = (int)$pdo->query($sql_tardes_count)->fetchColumn();
+
+            if ($notificaciones_tardanzas_total > 0) {
+                $sql_tardes = "
+                    SELECT
+                        a.id,
+                        a.empleado_id,
+                        e.nombre AS empleado_nombre,
+                        a.hora_entrada
+                    FROM asistencias a
+                    INNER JOIN empleados e ON e.id = a.empleado_id
+                    WHERE a.fecha = CURDATE()
+                      AND LOWER(COALESCE(a.estado, '')) = 'tarde'
+                    ORDER BY a.hora_entrada DESC, a.id DESC
+                    LIMIT 8
+                ";
+                $notificaciones_tardanzas = $pdo->query($sql_tardes)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        }
+
+        if (
+            admin_table_exists($pdo, 'usuarios')
+            && admin_table_exists($pdo, 'roles')
+            && admin_table_exists($pdo, 'ecommerce_produccion_items_barcode')
+            && admin_column_exists($pdo, 'usuarios', 'rol_id')
+            && admin_column_exists($pdo, 'usuarios', 'activo')
+            && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'usuario_inicio')
+            && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'estado')
+        ) {
+            $sql_sin_tareas_count = "
+                SELECT COUNT(*)
+                FROM usuarios u
+                INNER JOIN roles r ON r.id = u.rol_id
+                WHERE COALESCE(u.activo, 1) = 1
+                  AND LOWER(COALESCE(r.nombre, '')) IN ('operario', 'ventas')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM ecommerce_produccion_items_barcode pib
+                      WHERE pib.usuario_inicio = u.id
+                        AND LOWER(COALESCE(pib.estado, '')) IN ('armado', 'en_armado', 'en_produccion')
+                  )
+            ";
+            $notificaciones_sin_tareas_total = (int)$pdo->query($sql_sin_tareas_count)->fetchColumn();
+
+            if ($notificaciones_sin_tareas_total > 0) {
+                $sql_sin_tareas = "
+                    SELECT
+                        u.id,
+                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+                        r.nombre AS rol_nombre
+                    FROM usuarios u
+                    INNER JOIN roles r ON r.id = u.rol_id
+                    WHERE COALESCE(u.activo, 1) = 1
+                      AND LOWER(COALESCE(r.nombre, '')) IN ('operario', 'ventas')
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM ecommerce_produccion_items_barcode pib
+                          WHERE pib.usuario_inicio = u.id
+                            AND LOWER(COALESCE(pib.estado, '')) IN ('armado', 'en_armado', 'en_produccion')
+                      )
+                    ORDER BY usuario_nombre ASC
+                    LIMIT 8
+                ";
+                $notificaciones_sin_tareas = $pdo->query($sql_sin_tareas)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        }
+
+        if (
+            admin_table_exists($pdo, 'ecommerce_admin_mensajes')
+            && isset($_SESSION['user']['id'])
+            && is_numeric($_SESSION['user']['id'])
+        ) {
+            $admin_id_actual = (int)$_SESSION['user']['id'];
+
+            $stmt = $pdo->prepare("\n                SELECT COUNT(*)\n                FROM ecommerce_admin_mensajes\n                WHERE destinatario_id = ? AND leido = 0\n            ");
+            $stmt->execute([$admin_id_actual]);
+            $notificaciones_mensajes_total = (int)$stmt->fetchColumn();
+
+            if ($notificaciones_mensajes_total > 0) {
+                $stmt = $pdo->prepare("\n                    SELECT\n                        m.id,\n                        m.asunto,\n                        m.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS remitente_nombre\n                    FROM ecommerce_admin_mensajes m\n                    INNER JOIN usuarios u ON u.id = m.remitente_id\n                    WHERE m.destinatario_id = ?\n                      AND m.leido = 0\n                    ORDER BY m.fecha_creacion DESC\n                    LIMIT 5\n                ");
+                $stmt->execute([$admin_id_actual]);
+                $notificaciones_mensajes = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        }
+
+        $notificaciones_total =
+            (int)$notificaciones_atrasos_total
+            + (int)$notificaciones_tardanzas_total
+            + (int)$notificaciones_sin_tareas_total
+            + (int)$notificaciones_mensajes_total;
     } catch (Throwable $e) {
         $notificaciones_atrasos = [];
         $notificaciones_atrasos_total = 0;
+        $notificaciones_tardanzas = [];
+        $notificaciones_tardanzas_total = 0;
+        $notificaciones_sin_tareas = [];
+        $notificaciones_sin_tareas_total = 0;
+        $notificaciones_mensajes = [];
+        $notificaciones_mensajes_total = 0;
+        $notificaciones_total = 0;
     }
 }
 ?>
@@ -555,6 +674,17 @@ if ($role === 'admin') {
             border-bottom: 1px solid var(--admin-border);
             background: #f8fbff;
         }
+        .notif-section-title {
+            padding: 8px 14px;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #64748b;
+            background: #f8fafc;
+            border-top: 1px solid #eef2f7;
+            border-bottom: 1px solid #eef2f7;
+            font-weight: 700;
+        }
         .notif-item {
             display: block;
             padding: 10px 14px;
@@ -671,26 +801,63 @@ if ($role === 'admin') {
             <div class="dropdown">
                 <button class="btn btn-outline-danger btn-sm notif-btn" type="button" data-bs-toggle="dropdown" aria-label="Notificaciones">
                     <i class="bi bi-bell"></i>
-                    <?php if ($notificaciones_atrasos_total > 0): ?>
-                        <span class="notif-badge"><?= $notificaciones_atrasos_total > 99 ? '99+' : (int)$notificaciones_atrasos_total ?></span>
+                    <?php if ($notificaciones_total > 0): ?>
+                        <span class="notif-badge"><?= $notificaciones_total > 99 ? '99+' : (int)$notificaciones_total ?></span>
                     <?php endif; ?>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end notif-dropdown">
-                    <div class="notif-header">Pedidos atrasados</div>
-                    <?php if (empty($notificaciones_atrasos)): ?>
-                        <div class="notif-empty">No hay pedidos atrasados en este momento.</div>
+                    <div class="notif-header">Notificaciones Admin</div>
+                    <?php if ($notificaciones_total <= 0): ?>
+                        <div class="notif-empty">No hay notificaciones nuevas en este momento.</div>
                     <?php else: ?>
-                        <?php foreach ($notificaciones_atrasos as $notif): ?>
-                            <a class="notif-item" href="<?= $admin_url ?>orden_produccion_detalle.php?pedido_id=<?= (int)($notif['pedido_id'] ?? 0) ?>">
-                                <div class="fw-semibold"><?= htmlspecialchars($notif['numero_pedido'] ?? ('Pedido #' . (int)($notif['pedido_id'] ?? 0))) ?></div>
-                                <div class="small text-muted"><?= htmlspecialchars($notif['cliente_nombre'] ?: 'Cliente sin nombre') ?></div>
-                                <div class="small text-danger">
-                                    Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
-                                    · <?= max(1, (int)($notif['dias_atraso'] ?? 0)) ?> día(s) de atraso
-                                </div>
-                            </a>
-                        <?php endforeach; ?>
-                        <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver todos los pedidos</a>
+                        <?php if ($notificaciones_mensajes_total > 0): ?>
+                            <div class="notif-section-title">Mensajes sin leer (<?= (int)$notificaciones_mensajes_total ?>)</div>
+                            <?php foreach ($notificaciones_mensajes as $msg): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>admin_mensajes.php?leer=<?= (int)$msg['id'] ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($msg['asunto'] ?? 'Mensaje') ?></div>
+                                    <div class="small text-muted">De: <?= htmlspecialchars($msg['remitente_nombre'] ?? 'Admin') ?></div>
+                                    <div class="small text-primary"><?= htmlspecialchars(date('d/m H:i', strtotime((string)$msg['fecha_creacion']))) ?></div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>admin_mensajes.php">Abrir mensajería</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_atrasos_total > 0): ?>
+                            <div class="notif-section-title">Pedidos atrasados (<?= (int)$notificaciones_atrasos_total ?>)</div>
+                            <?php foreach ($notificaciones_atrasos as $notif): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>orden_produccion_detalle.php?pedido_id=<?= (int)($notif['pedido_id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($notif['numero_pedido'] ?? ('Pedido #' . (int)($notif['pedido_id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($notif['cliente_nombre'] ?: 'Cliente sin nombre') ?></div>
+                                    <div class="small text-danger">
+                                        Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
+                                        · <?= max(1, (int)($notif['dias_atraso'] ?? 0)) ?> día(s) de atraso
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pedidos</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_tardanzas_total > 0): ?>
+                            <div class="notif-section-title">Llegadas tarde hoy (<?= (int)$notificaciones_tardanzas_total ?>)</div>
+                            <?php foreach ($notificaciones_tardanzas as $tarde): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>asistencias/asistencias.php">
+                                    <div class="fw-semibold"><?= htmlspecialchars($tarde['empleado_nombre'] ?? 'Empleado') ?></div>
+                                    <div class="small text-warning">Entrada: <?= !empty($tarde['hora_entrada']) ? htmlspecialchars(date('H:i', strtotime((string)$tarde['hora_entrada']))) : '-' ?></div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>asistencias/asistencias.php">Ver asistencias</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_sin_tareas_total > 0): ?>
+                            <div class="notif-section-title">Sin tareas activas (<?= (int)$notificaciones_sin_tareas_total ?>)</div>
+                            <?php foreach ($notificaciones_sin_tareas as $idle): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
+                                    <div class="fw-semibold"><?= htmlspecialchars($idle['usuario_nombre'] ?? 'Usuario') ?></div>
+                                    <div class="small text-muted">Rol: <?= htmlspecialchars($idle['rol_nombre'] ?? '-') ?></div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">Ver tareas por usuario</a>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -702,6 +869,9 @@ if ($role === 'admin') {
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="<?= $admin_url ?>cambiar_clave.php"><i class="bi bi-key"></i> Cambiar Contraseña</a></li>
+                <?php if ($role === 'admin'): ?>
+                    <li><a class="dropdown-item" href="<?= $admin_url ?>admin_mensajes.php"><i class="bi bi-chat-left-text"></i> Mensajes Admin</a></li>
+                <?php endif; ?>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="<?= $admin_url ?>auth/logout.php"><i class="bi bi-box-arrow-right"></i> Salir</a></li>
             </ul>
@@ -709,10 +879,18 @@ if ($role === 'admin') {
     </div>
 </div>
 
-<?php if ($role === 'admin' && $notificaciones_atrasos_total > 0): ?>
+<?php if ($role === 'admin' && ($notificaciones_atrasos_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0)): ?>
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
-        Tenés <?= (int)$notificaciones_atrasos_total ?> pedido(s) atrasado(s) con fecha de entrega vencida.
+        <?php if ($notificaciones_atrasos_total > 0): ?>
+            <?= (int)$notificaciones_atrasos_total ?> pedido(s) atrasado(s)
+        <?php endif; ?>
+        <?php if ($notificaciones_tardanzas_total > 0): ?>
+            <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
+        <?php endif; ?>
+        <?php if ($notificaciones_sin_tareas_total > 0): ?>
+            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
@@ -794,7 +972,7 @@ if ($role === 'admin') {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores'])): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -810,6 +988,9 @@ if ($role === 'admin') {
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
                         <a href="<?= $admin_url ?>mp_link_pago.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_link_pago.php' ? 'active' : '' ?>"><i class="bi bi-link-45deg"></i> Link de Pago</a>
+                        <?php endif; ?>
+                        <?php if ($role === 'admin'): ?>
+                        <a href="<?= $admin_url ?>admin_mensajes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'admin_mensajes.php' ? 'active' : '' ?>"><i class="bi bi-chat-left-text"></i> Mensajes Admin</a>
                         <?php endif; ?>
                         <?php if ($can_access('precios_ecommerce')): ?>
                         <a href="<?= $admin_url ?>precios_horarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'precios_horarios.php' ? 'active' : '' ?>"><i class="bi bi-clock-history"></i> Precios por Horario</a>
