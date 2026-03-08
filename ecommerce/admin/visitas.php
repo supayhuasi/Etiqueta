@@ -18,6 +18,7 @@ try {
         telefono VARCHAR(60) NULL,
         direccion VARCHAR(255) NULL,
         fecha_visita DATE NOT NULL,
+        hora_visita TIME NULL,
         estado ENUM('pendiente','en_proceso','completada','cancelada') NOT NULL DEFAULT 'pendiente',
         creado_por INT NULL,
         fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -25,6 +26,16 @@ try {
         INDEX idx_fecha_visita (fecha_visita),
         INDEX idx_estado (estado)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $tiene_hora_visita = false;
+    $stmt_col = $pdo->query("SHOW COLUMNS FROM ecommerce_visitas LIKE 'hora_visita'");
+    if ($stmt_col && $stmt_col->fetch(PDO::FETCH_ASSOC)) {
+        $tiene_hora_visita = true;
+    }
+
+    if (!$tiene_hora_visita) {
+        $pdo->exec("ALTER TABLE ecommerce_visitas ADD COLUMN hora_visita TIME NULL AFTER fecha_visita");
+    }
 } catch (Throwable $e) {
     $error = 'No se pudo preparar la tabla de visitas: ' . $e->getMessage();
 }
@@ -40,10 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $telefono = trim($_POST['telefono'] ?? '');
             $direccion = trim($_POST['direccion'] ?? '');
             $fecha_visita = trim($_POST['fecha_visita'] ?? '');
+            $hora_visita = trim($_POST['hora_visita'] ?? '');
 
             if ($titulo === '' || $fecha_visita === '') {
                 throw new Exception('El título y la fecha de visita son obligatorios.');
             }
+
+            if ($hora_visita !== '' && !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $hora_visita)) {
+                throw new Exception('La hora de visita es inválida.');
+            }
+
+            $hora_visita_db = $hora_visita !== '' ? ($hora_visita . ':00') : null;
 
             $creado_por = null;
             if (isset($_SESSION['user']['id']) && is_numeric($_SESSION['user']['id'])) {
@@ -51,8 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $stmt = $pdo->prepare("INSERT INTO ecommerce_visitas
-                (titulo, descripcion, cliente_nombre, telefono, direccion, fecha_visita, estado, creado_por)
-                VALUES (?, ?, ?, ?, ?, ?, 'pendiente', ?)");
+                (titulo, descripcion, cliente_nombre, telefono, direccion, fecha_visita, hora_visita, estado, creado_por)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)");
             $stmt->execute([
                 $titulo,
                 $descripcion !== '' ? $descripcion : null,
@@ -60,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $telefono !== '' ? $telefono : null,
                 $direccion !== '' ? $direccion : null,
                 $fecha_visita,
+                $hora_visita_db,
                 $creado_por
             ]);
 
@@ -115,6 +134,7 @@ $sql .= "
     ORDER BY
         FIELD(v.estado, 'pendiente', 'en_proceso', 'completada', 'cancelada'),
         v.fecha_visita ASC,
+    COALESCE(v.hora_visita, '23:59:59') ASC,
         v.id DESC
 ";
 
@@ -216,6 +236,11 @@ try {
             </div>
 
             <div class="col-md-3">
+                <label class="form-label">Hora de visita</label>
+                <input type="time" name="hora_visita" class="form-control">
+            </div>
+
+            <div class="col-md-3">
                 <label class="form-label">Cliente</label>
                 <input type="text" name="cliente_nombre" class="form-control" maxlength="150">
             </div>
@@ -307,6 +332,9 @@ try {
                             <tr>
                                 <td>
                                     <?= htmlspecialchars(date('d/m/Y', strtotime($visita['fecha_visita']))) ?>
+                                    <?php if (!empty($visita['hora_visita'])): ?>
+                                        <div class="small text-muted"><?= htmlspecialchars(date('H:i', strtotime($visita['hora_visita']))) ?> hs</div>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
                                     <div class="fw-semibold"><?= htmlspecialchars($visita['titulo']) ?></div>

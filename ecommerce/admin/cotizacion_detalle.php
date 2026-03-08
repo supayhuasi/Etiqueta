@@ -106,10 +106,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $telefono = trim((string)($cotizacion['cliente_telefono'] ?? $cotizacion['telefono'] ?? ''));
                 // Compatibilidad con empresa/direccion
                 $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
+                    $dni = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? '')));
 
                 if ($telefono === '') {
                     throw new Exception('Teléfono requerido para crear cliente del pedido');
                 }
+                    if ($direccion === '') {
+                        throw new Exception('Domicilio obligatorio para convertir la cotización en pedido');
+                    }
+                    if ($dni === '') {
+                        throw new Exception('DNI obligatorio para convertir la cotización en pedido');
+                    }
 
                 // Buscar si ya existe un cliente con ese teléfono en ecommerce_clientes
                 $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
@@ -120,19 +127,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Cliente existe, usar ese ID
                     $cliente_id = (int)$row['id'];
                     // Actualizar datos del cliente con la info más reciente
-                    $stmt = $pdo->prepare("
-                        UPDATE ecommerce_clientes 
-                        SET nombre = ?, email = ?
-                        WHERE id = ?
-                    ");
-                    $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $cliente_id]);
+                        try {
+                            $stmt = $pdo->prepare("
+                                UPDATE ecommerce_clientes 
+                                SET nombre = ?, email = ?, direccion = ?, documento_tipo = 'DNI', documento_numero = ?
+                                WHERE id = ?
+                            ");
+                            $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $direccion, $dni, $cliente_id]);
+                        } catch (Exception $e) {
+                            $stmt = $pdo->prepare("
+                                UPDATE ecommerce_clientes 
+                                SET nombre = ?, email = ?
+                                WHERE id = ?
+                            ");
+                            $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $cliente_id]);
+                        }
                 } else {
                     // Cliente no existe, crear uno nuevo
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_clientes (telefono, nombre, email)
-                        VALUES (?, ?, ?)
-                    ");
-                    $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local')]);
+                        try {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO ecommerce_clientes (telefono, nombre, email, direccion, documento_tipo, documento_numero)
+                                VALUES (?, ?, ?, ?, 'DNI', ?)
+                            ");
+                            $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $direccion, $dni]);
+                        } catch (Exception $e) {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO ecommerce_clientes (telefono, nombre, email)
+                                VALUES (?, ?, ?)
+                            ");
+                            $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local')]);
+                        }
                     $cliente_id = (int)$pdo->lastInsertId();
                 }
 
@@ -141,18 +165,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $estado_pedido = 'pendiente_pago';
 
                 $public_token = bin2hex(random_bytes(16));
-                $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado, public_token)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([
-                    $numero_pedido,
-                    $cliente_id,
-                    (float)$cotizacion['total'],
-                    $metodo_pago,
-                    $estado_pedido,
-                    $public_token
-                ]);
+                    try {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, total, metodo_pago, estado, public_token, envio_nombre, envio_telefono, envio_direccion, observaciones)
+                            VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $numero_pedido,
+                            $cliente_id,
+                            (float)$cotizacion['total'],
+                            (float)$cotizacion['total'],
+                            $metodo_pago,
+                            $estado_pedido,
+                            $public_token,
+                            $nombre ?: $telefono,
+                            $telefono,
+                            $direccion,
+                            'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ' | DNI: ' . $dni
+                        ]);
+                    } catch (Exception $e) {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado, public_token)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $numero_pedido,
+                            $cliente_id,
+                            (float)$cotizacion['total'],
+                            $metodo_pago,
+                            $estado_pedido,
+                            $public_token
+                        ]);
+                    }
                 $pedido_id = (int)$pdo->lastInsertId();
 
                 $stmtItem = $pdo->prepare("
@@ -277,6 +321,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <tr>
                         <th>Teléfono:</th>
                         <td><?= htmlspecialchars($cotizacion['cliente_telefono'] ?? ($cotizacion['telefono'] ?? '')) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php $direccion_ui = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? '')); ?>
+                    <?php if ($direccion_ui !== ''): ?>
+                    <tr>
+                        <th>Domicilio:</th>
+                        <td><?= htmlspecialchars($direccion_ui) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php $dni_ui = trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? '')); ?>
+                    <?php if ($dni_ui !== ''): ?>
+                    <tr>
+                        <th>DNI:</th>
+                        <td><?= htmlspecialchars($dni_ui) ?></td>
                     </tr>
                     <?php endif; ?>
                 </table>
@@ -449,6 +507,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="cotizacion_pdf.php?id=<?= $id ?>" class="btn btn-info" target="_blank">📄 Ver/Descargar PDF</a>
             <a href="cotizacion_editar.php?id=<?= $id ?>" class="btn btn-warning">✏️ Editar Cotización</a>
             <?php if ($cotizacion['estado'] !== 'convertida'): ?>
+                <?php
+                    $dir_oblig = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
+                    $dni_oblig = trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? ''));
+                ?>
+                <?php if ($dir_oblig === '' || $dni_oblig === ''): ?>
+                    <div class="alert alert-warning mb-0 py-2 px-3 d-flex align-items-center">
+                        ⚠️ Para convertir a pedido se requiere completar domicilio y DNI en la cotización.
+                    </div>
+                <?php endif; ?>
                 <form method="POST" style="display:inline;">
                     <input type="hidden" name="accion" value="convertir_pedido">
                     <button type="submit" class="btn btn-success" onclick="return confirm('¿Convertir esta cotización a pedido?')">🛒 Convertir a Pedido</button>

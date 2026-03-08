@@ -174,6 +174,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $referencia = 'Sueldo ' . $mes_pago;
             $id_referencia = $empleado_id;
 
+            $stmt_dup = $pdo->prepare("\n                SELECT id\n                FROM flujo_caja\n                WHERE tipo = 'egreso'\n                  AND categoria = 'Pago de Sueldo'\n                  AND id_referencia = ?\n                  AND referencia = ?\n                  AND fecha = ?\n                  AND monto = ?\n                LIMIT 1\n            ");
+            $stmt_dup->execute([$id_referencia, $referencia, $fecha, $monto]);
+            if ($stmt_dup->fetch(PDO::FETCH_ASSOC)) {
+                throw new Exception('Este pago de sueldo ya fue registrado en flujo de caja.');
+            }
+
         } elseif ($tipo_egreso_post === 'gasto') {
             $gasto_id = intval($_POST['gasto_id'] ?? 0);
             $categoria = $_POST['categoria'] ?? '';

@@ -20,7 +20,7 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
 
-$error = '';;;
+$error = '';
 $exito = '';
 $resumen = [];
 
@@ -136,6 +136,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
         // 4. Importar pagos de sueldos (que no sean parciales)
         if (isset($_POST['importar_sueldos'])) {
             try {
+                    // Normalizar importaciones viejas: usar el id del pago de sueldos como referencia
+                    $stmt_fix_ref = $pdo->prepare("
+                        UPDATE flujo_caja fc
+                        JOIN pagos_sueldos ps
+                          ON fc.categoria = 'Pago de Sueldo'
+                         AND fc.observaciones = 'Importado de sueldos'
+                         AND fc.referencia = CONCAT('Sueldo ', ps.mes_pago)
+                        SET fc.id_referencia = ps.id
+                        WHERE fc.id_referencia = ps.empleado_id
+                          AND fc.id_referencia <> ps.id
+                    ");
+                    $stmt_fix_ref->execute();
+
+                                        $stmt_fix_tipo = $pdo->prepare("
+                                                UPDATE flujo_caja
+                                                SET tipo = 'egreso'
+                                                WHERE categoria = 'Pago de Sueldo'
+                                                    AND observaciones = 'Importado de sueldos'
+                                                    AND tipo = 'ingreso'
+                                        ");
+                                        $stmt_fix_tipo->execute();
+                    
+                    $stmt_clean_dups = $pdo->prepare("
+                        DELETE fc_dup
+                        FROM flujo_caja fc_dup
+                        JOIN flujo_caja fc_keep
+                          ON fc_dup.id > fc_keep.id
+                         AND fc_dup.tipo = fc_keep.tipo
+                         AND fc_dup.categoria = fc_keep.categoria
+                         AND fc_dup.fecha = fc_keep.fecha
+                         AND fc_dup.monto = fc_keep.monto
+                         AND COALESCE(fc_dup.referencia, '') = COALESCE(fc_keep.referencia, '')
+                         AND COALESCE(fc_dup.descripcion, '') = COALESCE(fc_keep.descripcion, '')
+                         AND COALESCE(fc_dup.id_referencia, 0) = COALESCE(fc_keep.id_referencia, 0)
+                        WHERE fc_dup.categoria = 'Pago de Sueldo'
+                          AND fc_dup.observaciones = 'Importado de sueldos'
+                          AND fc_keep.observaciones = 'Importado de sueldos'
+                    ");
+                    $stmt_clean_dups->execute();
+
                 $stmt = $pdo->prepare("
                     SELECT ps.id, ps.empleado_id, ps.mes_pago, ps.monto_pagado, e.nombre
                     FROM pagos_sueldos ps
@@ -159,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                         $sueldo['nombre'] . ' - ' . $sueldo['mes_pago'],
                         $sueldo['monto_pagado'],
                         'Sueldo ' . $sueldo['mes_pago'],
-                        $sueldo['empleado_id'],
+                        $sueldo['id'],
                         $_SESSION['user']['id']
                     ]);
                 }
@@ -231,16 +271,16 @@ try {
     <div class="row mb-4">
         <div class="col-md-8">
             <h1>📥 Importar Transacciones</h1>
-            <p class="text-muted">Sincroniza datos existentes de otros módulos al flujo de caja</p>
-        </div>
-        <div class="col-md-4 text-end">
             <a href="flujo_caja.php" class="btn btn-secondary">← Volver</a>
         </div>
     </div>
 
     <?php if ($error): ?>
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <strong>Error:</strong> <?= htmlspecialchars($error) ?>
+// Verificar autenticación
+if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>

@@ -37,6 +37,15 @@ if (!in_array('cupon_descuento', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
 }
 
+$direccion_col = in_array('direccion', $cols_cot, true) ? 'direccion' : (in_array('empresa', $cols_cot, true) ? 'empresa' : null);
+$dni_col = in_array('dni', $cols_cot, true) ? 'dni' : null;
+
+$direccion_actual = '';
+if ($direccion_col !== null) {
+    $direccion_actual = (string)($cotizacion[$direccion_col] ?? '');
+}
+$dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
+
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -44,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = $_POST['email'] ?? '';
         $telefono = $_POST['telefono'] ?? '';
         $direccion = $_POST['direccion'] ?? '';
+        $dni = trim((string)($_POST['dni'] ?? ''));
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
@@ -65,6 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $decoded = json_decode($_POST['items_json'], true);
             if (is_array($decoded)) {
                 $items_post = $decoded;
+            } else {
+                throw new Exception('Formato inválido de items. Guardá nuevamente la cotización.');
             }
         }
 
@@ -137,30 +149,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $total = $subtotal - $descuento - $cupon_descuento;
+            $set_parts = [
+                'nombre_cliente = ?',
+                'email = ?',
+                'telefono = ?',
+                'lista_precio_id = ?',
+                'items = ?',
+                'subtotal = ?',
+                'descuento = ?',
+                'cupon_codigo = ?',
+                'cupon_descuento = ?',
+                'total = ?',
+                'observaciones = ?',
+                'validez_dias = ?'
+            ];
 
-        $stmt = $pdo->prepare("
-            UPDATE ecommerce_cotizaciones
-            SET nombre_cliente = ?, email = ?, telefono = ?, direccion = ?, lista_precio_id = ?, items = ?,
-                subtotal = ?, descuento = ?, cupon_codigo = ?, cupon_descuento = ?, total = ?, observaciones = ?, validez_dias = ?
-            WHERE id = ?
-        ");
+            $params = [
+                $nombre_cliente,
+                $email,
+                $telefono,
+                $lista_precio_id,
+                json_encode($items_nuevos, JSON_UNESCAPED_UNICODE),
+                $subtotal,
+                $descuento,
+                $cupon_codigo ?: null,
+                $cupon_descuento,
+                $total,
+                $observaciones,
+                $validez_dias
+            ];
 
-        $stmt->execute([
-            $nombre_cliente,
-            $email,
-            $telefono,
-            $direccion,
-            $lista_precio_id,
-            json_encode($items_nuevos, JSON_UNESCAPED_UNICODE),
-            $subtotal,
-            $descuento,
-            $cupon_codigo ?: null,
-            $cupon_descuento,
-            $total,
-            $observaciones,
-            $validez_dias,
-            $id
-        ]);
+            if ($direccion_col !== null) {
+                $set_parts[] = $direccion_col . ' = ?';
+                $params[] = $direccion;
+            }
+
+            if ($dni_col !== null) {
+                $set_parts[] = $dni_col . ' = ?';
+                $params[] = ($dni !== '' ? $dni : null);
+            }
+
+            $sql_update = "UPDATE ecommerce_cotizaciones SET " . implode(', ', $set_parts) . " WHERE id = ?";
+            $params[] = $id;
+
+            $stmt = $pdo->prepare($sql_update);
+            $stmt->execute($params);
 
         header("Location: cotizacion_detalle.php?id=" . $id);
         exit;
@@ -263,8 +296,12 @@ foreach ($lista_cat_rows as $row) {
                         <input type="text" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars($cotizacion['telefono'] ?? '') ?>">
                     </div>
                     <div class="mb-3">
+                        <label for="dni" class="form-label">DNI</label>
+                        <input type="text" class="form-control" id="dni" name="dni" value="<?= htmlspecialchars($dni_actual) ?>" placeholder="Opcional en cotización">
+                    </div>
+                    <div class="mb-3">
                         <label for="direccion" class="form-label">Dirección</label>
-                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($cotizacion['direccion'] ?? '') ?>">
+                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($direccion_actual) ?>">
                     </div>
                 </div>
             </div>

@@ -51,8 +51,8 @@ $egresos_mes = 0.0;
 $saldo_flujo_mes = 0.0;
 
 if (fin_table_exists($pdo, 'flujo_caja')) {
-    $ingresos_mes = (float) fin_scalar($pdo, "SELECT SUM(monto) FROM flujo_caja WHERE tipo = 'ingreso' AND DATE_FORMAT(fecha, '%Y-%m') = '" . $mes . "'", 0);
-    $egresos_mes = (float) fin_scalar($pdo, "SELECT SUM(monto) FROM flujo_caja WHERE tipo = 'egreso' AND DATE_FORMAT(fecha, '%Y-%m') = '" . $mes . "'", 0);
+    $ingresos_mes = (float) fin_scalar($pdo, "SELECT SUM(monto) FROM flujo_caja WHERE tipo = 'ingreso' AND categoria <> 'Pago de Sueldo' AND DATE_FORMAT(fecha, '%Y-%m') = '" . $mes . "'", 0);
+    $egresos_mes = (float) fin_scalar($pdo, "SELECT SUM(monto) FROM flujo_caja WHERE (tipo = 'egreso' OR categoria = 'Pago de Sueldo') AND DATE_FORMAT(fecha, '%Y-%m') = '" . $mes . "'", 0);
     $saldo_flujo_mes = $ingresos_mes - $egresos_mes;
 }
 

@@ -44,7 +44,8 @@ $total_ingresos = 0;
 $total_egresos = 0;
 
 foreach ($transacciones as $trans) {
-    if ($trans['tipo'] === 'ingreso') {
+    $es_sueldo = ($trans['categoria'] ?? '') === 'Pago de Sueldo';
+    if ($trans['tipo'] === 'ingreso' && !$es_sueldo) {
         $total_ingresos += $trans['monto'];
     } else {
         $total_egresos += $trans['monto'];

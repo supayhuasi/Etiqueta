@@ -303,6 +303,10 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             padding: 0;
             border-right: 1px solid var(--admin-border);
             box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7);
+            position: sticky;
+            top: 0;
+            max-height: 100vh;
+            overflow-y: auto;
         }
         .sidebar .logo-section {
             padding: 20px;
@@ -316,6 +320,7 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
         }
         .sidebar-menu {
             padding: 15px 10px;
+            padding-bottom: 90px;
         }
         .menu-section {
             margin-bottom: 10px;
@@ -333,6 +338,17 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             justify-content: space-between;
             align-items: center;
         }
+        .menu-header span i {
+            margin-right: 8px;
+            opacity: 0.9;
+        }
+        .menu-header .bi-chevron-down {
+            transition: transform 0.2s ease;
+            opacity: 0.75;
+        }
+        .menu-header:not(.collapsed) .bi-chevron-down {
+            transform: rotate(180deg);
+        }
         .menu-header:hover {
             background: var(--admin-primary-soft);
             color: var(--admin-primary);
@@ -344,7 +360,10 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             color: var(--admin-text);
         }
         .menu-items {
-            padding: 5px 0;
+            padding: 8px 6px 4px;
+            margin-top: 4px;
+            border-left: 2px solid #e4ecfb;
+            margin-left: 8px;
         }
         .menu-items a {
             color: #4b5563;
@@ -355,17 +374,40 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             margin: 2px 0;
             transition: all 0.2s ease;
             font-size: 14px;
+            position: relative;
+        }
+        .menu-items a::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: #a3b7da;
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
         }
         .menu-items a:hover {
             background-color: #edf2ff;
             color: var(--admin-primary);
             padding-left: 40px;
         }
+        .menu-items a:hover::before {
+            background: var(--admin-primary);
+        }
         .menu-items a.active {
             background-color: var(--admin-primary);
             color: #fff;
             font-weight: 600;
             box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+        }
+        .menu-items a.active::before {
+            background: #fff;
+        }
+        .menu-section.has-active > .menu-header {
+            border-color: #b7cdfc;
+            background: #eff5ff;
+            color: #1e40af;
         }
         .main-content {
             padding: 30px;
@@ -382,7 +424,11 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 50;
+        }
+        .top-navbar h5 {
+            font-weight: 700;
+            letter-spacing: .02em;
         }
         .card {
             border: 1px solid var(--admin-border);
@@ -758,3 +804,25 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
 
         <!-- Main Content -->
         <div class="col-md-10 main-content">
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const menuSections = document.querySelectorAll('.menu-section');
+
+    menuSections.forEach(function (section) {
+        const activeItem = section.querySelector('.menu-items a.active');
+        if (activeItem) {
+            section.classList.add('has-active');
+            const collapseEl = section.querySelector('.collapse.menu-items');
+            if (collapseEl) {
+                collapseEl.classList.add('show');
+            }
+            const headerEl = section.querySelector('.menu-header[data-bs-toggle="collapse"]');
+            if (headerEl) {
+                headerEl.classList.remove('collapsed');
+                headerEl.setAttribute('aria-expanded', 'true');
+            }
+        }
+    });
+});
+</script>
