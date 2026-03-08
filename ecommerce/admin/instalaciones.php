@@ -21,6 +21,71 @@ function columna_existe($pdo, $tabla, $columna) {
     }
 }
 
+function asegurar_estructura_minima_instalaciones($pdo) {
+    $mensajes = [];
+
+    try {
+        if (!tabla_existe($pdo, 'ecommerce_clientes')) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_clientes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(150) NULL,
+                email VARCHAR(150) NULL,
+                telefono VARCHAR(50) NULL,
+                activo TINYINT(1) DEFAULT 1,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $mensajes[] = 'Se creó tabla ecommerce_clientes (mínima).';
+        }
+
+        if (!tabla_existe($pdo, 'ecommerce_pedidos')) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_pedidos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                numero_pedido VARCHAR(50) NULL,
+                cliente_id INT NULL,
+                envio_nombre VARCHAR(150) NULL,
+                envio_telefono VARCHAR(50) NULL,
+                envio_direccion VARCHAR(255) NULL,
+                envio_localidad VARCHAR(120) NULL,
+                envio_provincia VARCHAR(120) NULL,
+                envio_codigo_postal VARCHAR(20) NULL,
+                estado VARCHAR(30) DEFAULT 'pendiente',
+                total DECIMAL(12,2) DEFAULT 0,
+                fecha_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_cliente_id (cliente_id),
+                INDEX idx_fecha_pedido (fecha_pedido)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $mensajes[] = 'Se creó tabla ecommerce_pedidos (mínima).';
+        }
+
+        if (!tabla_existe($pdo, 'ecommerce_ordenes_produccion')) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_ordenes_produccion (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                pedido_id INT NOT NULL,
+                estado VARCHAR(30) DEFAULT 'pendiente',
+                notas TEXT NULL,
+                fecha_entrega DATE NULL,
+                fecha_instalacion DATE NULL,
+                materiales_descontados TINYINT DEFAULT 0,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+                fecha_actualizacion DATETIME NULL,
+                INDEX idx_pedido_id (pedido_id),
+                INDEX idx_estado (estado)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $mensajes[] = 'Se creó tabla ecommerce_ordenes_produccion (mínima).';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_ordenes_produccion') && !columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_instalacion')) {
+            $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN fecha_instalacion DATE NULL AFTER fecha_entrega");
+            $mensajes[] = 'Se agregó columna fecha_instalacion.';
+        }
+    } catch (Exception $e) {
+        error_log('asegurar_estructura_minima_instalaciones: ' . $e->getMessage());
+        $mensajes[] = 'No se pudo completar auto-reparación de estructura: ' . $e->getMessage();
+    }
+
+    return $mensajes;
+}
+
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $instalacion_desde = $_GET['instalacion_desde'] ?? '';
@@ -32,6 +97,11 @@ $pedidos_por_fecha = [];
 $pedidos_sin_fecha = [];
 $error_pagina = '';
 $auto_setup_msg = '';
+
+$mensajes_setup = asegurar_estructura_minima_instalaciones($pdo);
+if (!empty($mensajes_setup)) {
+    $auto_setup_msg = implode(' ', $mensajes_setup);
+}
 
 $tablas_base_ok = tabla_existe($pdo, 'ecommerce_ordenes_produccion') && tabla_existe($pdo, 'ecommerce_pedidos');
 $tiene_clientes = tabla_existe($pdo, 'ecommerce_clientes');
