@@ -102,15 +102,15 @@ try {
         $sql .= " AND DATE(p.fecha_pedido) <= ?";
         $params[] = $fecha_hasta;
     }
-    if ($instalacion_desde !== '') {
+    if ($tiene_fecha_instalacion && $instalacion_desde !== '') {
         $sql .= " AND op.fecha_instalacion >= ?";
         $params[] = $instalacion_desde;
     }
-    if ($instalacion_hasta !== '') {
+    if ($tiene_fecha_instalacion && $instalacion_hasta !== '') {
         $sql .= " AND op.fecha_instalacion <= ?";
         $params[] = $instalacion_hasta;
     }
-    $sql .= " ORDER BY op.fecha_instalacion IS NULL, op.fecha_instalacion ASC, p.fecha_pedido DESC, op.pedido_id ASC";
+    $sql .= " ORDER BY fecha_instalacion IS NULL, fecha_instalacion ASC, p.fecha_pedido DESC, op.pedido_id ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
