@@ -145,6 +145,7 @@ $role_permissions = [
         'pedidos', 'ordenes_produccion', 'instalaciones', 'visitas',
         'clientes_web',
         'inventario',
+        'finanzas',
         'flujo_caja',
         'cheques',
         'gastos',
@@ -253,6 +254,7 @@ $page_permissions = [
     'flujo_caja_ingreso.php' => 'flujo_caja',
     'flujo_caja_egreso.php' => 'flujo_caja',
     'flujo_caja_reportes.php' => 'flujo_caja',
+    'finanzas.php' => 'finanzas',
     'pagos_sueldos_parciales.php' => 'flujo_caja',
     'cheques.php' => 'cheques',
     'cheques_crear.php' => 'cheques',
@@ -693,13 +695,16 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
                 <?php endif; ?>
 
                 <!-- Finanzas -->
-                <?php if ($can_access_any(['flujo_caja', 'cheques', 'gastos'])): ?>
+                <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas">
                         <span><i class="bi bi-cash-stack"></i> Finanzas</span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuFinanzas">
+                        <?php if ($can_access('finanzas')): ?>
+                        <a href="<?= $admin_url ?>finanzas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'finanzas.php' ? 'active' : '' ?>"><i class="bi bi-speedometer2"></i> Estado Financiero</a>
+                        <?php endif; ?>
                         <?php if ($can_access('flujo_caja')): ?>
                         <a href="<?= $admin_url ?>flujo_caja.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['flujo_caja.php', 'flujo_caja_ingreso.php', 'flujo_caja_egreso.php', 'flujo_caja_reportes.php', 'pagos_sueldos_parciales.php']) ? 'active' : '' ?>"><i class="bi bi-cash"></i> Flujo de Caja</a>
                         <?php endif; ?>

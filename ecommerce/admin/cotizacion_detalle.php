@@ -1,6 +1,22 @@
 <?php
 require 'includes/header.php';
 
+try {
+    $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('dni', $cols_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN dni VARCHAR(20) NULL AFTER telefono");
+    }
+} catch (Exception $e) {
+}
+
+try {
+    $cols_cli_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('dni', $cols_cli_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN dni VARCHAR(20) NULL AFTER telefono");
+    }
+} catch (Exception $e) {
+}
+
 $id = intval($_GET['id'] ?? 0);
 
 // Obtener cotización (compatible con empresa o direccion)
@@ -21,6 +37,9 @@ if ($cotizacion && !empty($cotizacion['cliente_id'])) {
         if (in_array('direccion', $cols, true)) {
             $select_cols[] = 'direccion';
         }
+        if (in_array('dni', $cols, true)) {
+            $select_cols[] = 'dni';
+        }
 
         if (!empty($select_cols)) {
             $stmt_extra = $pdo->prepare("SELECT " . implode(', ', $select_cols) . " FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
@@ -32,6 +51,9 @@ if ($cotizacion && !empty($cotizacion['cliente_id'])) {
             }
             if (array_key_exists('direccion', $extra_data)) {
                 $cotizacion['cliente_direccion'] = $extra_data['direccion'];
+            }
+            if (array_key_exists('dni', $extra_data)) {
+                $cotizacion['cliente_dni'] = $extra_data['dni'];
             }
         }
     } catch (Exception $e) {
