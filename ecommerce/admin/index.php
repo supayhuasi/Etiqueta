@@ -155,6 +155,9 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <a href="productos_crear.php" class="btn btn-primary w-100 mb-2">+ Nuevo Producto</a>
                 <a href="categorias_crear.php" class="btn btn-success w-100 mb-2">+ Nueva Categoría</a>
                 <a href="matriz_precios.php" class="btn btn-warning w-100 mb-2">📏 Generar Matriz</a>
+                <?php if (isset($can_access) && $can_access('visitas')): ?>
+                <a href="visitas.php" class="btn btn-secondary w-100 mb-2">🗓️ Visitas (To Do)</a>
+                <?php endif; ?>
                 <a href="empresa.php" class="btn btn-info w-100">🏪 Editar Empresa</a>
             </div>
         </div>

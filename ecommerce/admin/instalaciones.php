@@ -3,8 +3,12 @@ require 'includes/header.php';
 
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
+$instalacion_desde = $_GET['instalacion_desde'] ?? '';
+$instalacion_hasta = $_GET['instalacion_hasta'] ?? '';
 $incluir_entregados = !empty($_GET['incluir_entregados']);
 $pedidos = [];
+$pedidos_por_fecha = [];
+$pedidos_sin_fecha = [];
 $error_pagina = '';
 
 // Manejar programación de instalaciones
@@ -31,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'progr
 
 try {
     $sql = "
-        SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
+        SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega, op.fecha_instalacion,
                p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
                p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_pedido AS fecha_creacion,
                c.nombre AS cliente_nombre
@@ -49,11 +53,29 @@ try {
         $sql .= " AND DATE(p.fecha_pedido) <= ?";
         $params[] = $fecha_hasta;
     }
-    $sql .= " ORDER BY p.fecha_pedido DESC, op.pedido_id ASC";
+    if ($instalacion_desde !== '') {
+        $sql .= " AND op.fecha_instalacion >= ?";
+        $params[] = $instalacion_desde;
+    }
+    if ($instalacion_hasta !== '') {
+        $sql .= " AND op.fecha_instalacion <= ?";
+        $params[] = $instalacion_hasta;
+    }
+    $sql .= " ORDER BY op.fecha_instalacion IS NULL, op.fecha_instalacion ASC, p.fecha_pedido DESC, op.pedido_id ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($pedidos as $row) {
+        if (!empty($row['fecha_instalacion'])) {
+            $pedidos_por_fecha[$row['fecha_instalacion']][] = $row;
+        } else {
+            $pedidos_sin_fecha[] = $row;
+        }
+    }
+
+    ksort($pedidos_por_fecha);
 } catch (Throwable $e) {
     $error_pagina = $e->getMessage();
 }
@@ -61,6 +83,8 @@ try {
 $qs = http_build_query(array_filter([
     'fecha_desde' => $fecha_desde,
     'fecha_hasta' => $fecha_hasta,
+    'instalacion_desde' => $instalacion_desde,
+    'instalacion_hasta' => $instalacion_hasta,
     'incluir_entregados' => $incluir_entregados ? '1' : null,
 ]));
 ?>
@@ -68,7 +92,7 @@ $qs = http_build_query(array_filter([
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1>Instalaciones</h1>
-        <p class="text-muted">Pedidos terminados de produccion - armar listas para instalar</p>
+        <p class="text-muted">Agenda por fecha para planificar qué se instala cada día.</p>
     </div>
     <a href="ordenes_produccion.php" class="btn btn-outline-secondary">Ordenes de Produccion</a>
 </div>
@@ -84,12 +108,20 @@ $qs = http_build_query(array_filter([
     <div class="card-body">
         <form method="GET" class="row g-3 align-items-end">
             <div class="col-md-3">
-                <label class="form-label">Fecha desde</label>
+                <label class="form-label">Pedido desde</label>
                 <input type="date" name="fecha_desde" class="form-control" value="<?= htmlspecialchars($fecha_desde) ?>">
             </div>
             <div class="col-md-3">
-                <label class="form-label">Fecha hasta</label>
+                <label class="form-label">Pedido hasta</label>
                 <input type="date" name="fecha_hasta" class="form-control" value="<?= htmlspecialchars($fecha_hasta) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Instalación desde</label>
+                <input type="date" name="instalacion_desde" class="form-control" value="<?= htmlspecialchars($instalacion_desde) ?>">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Instalación hasta</label>
+                <input type="date" name="instalacion_hasta" class="form-control" value="<?= htmlspecialchars($instalacion_hasta) ?>">
             </div>
             <div class="col-md-3">
                 <div class="form-check">
@@ -97,8 +129,9 @@ $qs = http_build_query(array_filter([
                     <label class="form-check-label" for="incluir_entregados">Incluir ya entregados</label>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-4 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Filtrar</button>
+                <a href="instalaciones.php" class="btn btn-outline-secondary">Limpiar</a>
             </div>
         </form>
     </div>
@@ -109,7 +142,7 @@ $qs = http_build_query(array_filter([
 <?php else: ?>
     <div class="card mb-4">
         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><?= count($pedidos) ?> pedido(s) terminado(s)</h5>
+            <h5 class="mb-0"><?= count($pedidos) ?> pedido(s) para instalaciones</h5>
             <div class="d-flex gap-2">
                 <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-light btn-sm" target="_blank">Reporte por direcciones y cortinas</a>
                 <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-light btn-sm" target="_blank">Reporte por productos y tiempos</a>
@@ -132,63 +165,113 @@ $qs = http_build_query(array_filter([
                     </div>
                 </form>
             </div>
-            <div class="table-responsive">
-                <form method="POST" id="ordenes-form">
-                    <input type="hidden" name="action" value="programar_instalacion">
-                    <table class="table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th style="width:40px;"></th>
-                            <th>Pedido</th>
-                            <th>Cliente / Envio</th>
-                            <th>Direccion</th>
-                            <th>Localidad</th>
-                            <th>Fecha pedido</th>
-                            <th>Fecha instalación</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($pedidos as $row): ?>
-                            <?php
-                            $nombre = trim($row['envio_nombre'] ?? '') ?: $row['cliente_nombre'] ?? 'Sin nombre';
-                            $dir = trim($row['envio_direccion'] ?? '');
-                            $loc = trim($row['envio_localidad'] ?? '') . (!empty($row['envio_provincia']) ? ', ' . $row['envio_provincia'] : '');
-                            $is_programada = !empty($row['fecha_instalacion']);
-                            $is_past = $is_programada && (strtotime($row['fecha_instalacion']) < strtotime(date('Y-m-d')));
-                            $rowClass = $is_programada ? ($is_past ? 'table-warning' : 'table-success') : '';
-                            ?>
-                            <tr class="<?= $rowClass ?>">
-                                <td><input type="checkbox" name="orden_ids[]" value="<?= (int)$row['orden_id'] ?>" class="form-check-input"></td>
-                                <td>
-                                    <strong><?= htmlspecialchars($row['numero_pedido']) ?></strong>
-                                    <?php if ($is_programada): ?>
-                                        <span class="badge <?= $is_past ? 'bg-warning text-dark' : 'bg-success' ?> ms-2" title="Instalación: <?= htmlspecialchars($row['fecha_instalacion']) ?>">Programada</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= htmlspecialchars($nombre) ?></td>
-                                <td><?= htmlspecialchars($dir) ?></td>
-                                <td><?= htmlspecialchars($loc) ?></td>
-                                <td><?= date('d/m/Y', strtotime($row['fecha_creacion'])) ?></td>
-                                <td>
-                                    <?php if (!empty($row['fecha_entrega'])): ?>
-                                        <div class="small text-muted">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($row['fecha_entrega']))) ?></div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($row['fecha_instalacion'])): ?>
-                                        <div class="small text-primary">Programada: <?= htmlspecialchars(date('d/m/Y', strtotime($row['fecha_instalacion']))) ?></div>
-                                    <?php else: ?>
-                                        <div class="small text-muted">-</div>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <a href="orden_produccion_detalle.php?pedido_id=<?= (int)$row['pedido_id'] ?>" class="btn btn-sm btn-outline-primary">Ver detalle</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                </form>
-            </div>
+            <form method="POST" id="ordenes-form">
+                <input type="hidden" name="action" value="programar_instalacion">
+
+                <?php foreach ($pedidos_por_fecha as $fecha_instalada => $items_fecha): ?>
+                    <div class="border-top p-3 bg-light">
+                        <h5 class="mb-0">📅 <?= htmlspecialchars(date('d/m/Y', strtotime($fecha_instalada))) ?> <span class="badge bg-primary ms-2"><?= count($items_fecha) ?></span></h5>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;"></th>
+                                    <th>Pedido</th>
+                                    <th>Cliente / Envio</th>
+                                    <th>Direccion</th>
+                                    <th>Localidad</th>
+                                    <th>Fecha pedido</th>
+                                    <th>Fecha instalación</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($items_fecha as $row): ?>
+                                    <?php
+                                    $nombre = trim($row['envio_nombre'] ?? '') ?: $row['cliente_nombre'] ?? 'Sin nombre';
+                                    $dir = trim($row['envio_direccion'] ?? '');
+                                    $loc = trim($row['envio_localidad'] ?? '') . (!empty($row['envio_provincia']) ? ', ' . $row['envio_provincia'] : '');
+                                    $is_programada = !empty($row['fecha_instalacion']);
+                                    $is_past = $is_programada && (strtotime($row['fecha_instalacion']) < strtotime(date('Y-m-d')));
+                                    $rowClass = $is_programada ? ($is_past ? 'table-warning' : 'table-success') : '';
+                                    ?>
+                                    <tr class="<?= $rowClass ?>">
+                                        <td><input type="checkbox" name="orden_ids[]" value="<?= (int)$row['orden_id'] ?>" class="form-check-input"></td>
+                                        <td>
+                                            <strong><?= htmlspecialchars($row['numero_pedido']) ?></strong>
+                                            <?php if ($is_programada): ?>
+                                                <span class="badge <?= $is_past ? 'bg-warning text-dark' : 'bg-success' ?> ms-2" title="Instalación: <?= htmlspecialchars($row['fecha_instalacion']) ?>">Programada</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?= htmlspecialchars($nombre) ?></td>
+                                        <td><?= htmlspecialchars($dir) ?></td>
+                                        <td><?= htmlspecialchars($loc) ?></td>
+                                        <td><?= date('d/m/Y', strtotime($row['fecha_creacion'])) ?></td>
+                                        <td>
+                                            <?php if (!empty($row['fecha_entrega'])): ?>
+                                                <div class="small text-muted">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($row['fecha_entrega']))) ?></div>
+                                            <?php endif; ?>
+                                            <div class="small text-primary">Programada: <?= htmlspecialchars(date('d/m/Y', strtotime($row['fecha_instalacion']))) ?></div>
+                                        </td>
+                                        <td>
+                                            <a href="orden_produccion_detalle.php?pedido_id=<?= (int)$row['pedido_id'] ?>" class="btn btn-sm btn-outline-primary">Ver detalle</a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endforeach; ?>
+
+                <?php if (!empty($pedidos_sin_fecha)): ?>
+                    <div class="border-top p-3 bg-white">
+                        <h5 class="mb-0">🗂️ Sin fecha de instalación <span class="badge bg-secondary ms-2"><?= count($pedidos_sin_fecha) ?></span></h5>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;"></th>
+                                    <th>Pedido</th>
+                                    <th>Cliente / Envio</th>
+                                    <th>Direccion</th>
+                                    <th>Localidad</th>
+                                    <th>Fecha pedido</th>
+                                    <th>Fecha instalación</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pedidos_sin_fecha as $row): ?>
+                                    <?php
+                                    $nombre = trim($row['envio_nombre'] ?? '') ?: $row['cliente_nombre'] ?? 'Sin nombre';
+                                    $dir = trim($row['envio_direccion'] ?? '');
+                                    $loc = trim($row['envio_localidad'] ?? '') . (!empty($row['envio_provincia']) ? ', ' . $row['envio_provincia'] : '');
+                                    ?>
+                                    <tr>
+                                        <td><input type="checkbox" name="orden_ids[]" value="<?= (int)$row['orden_id'] ?>" class="form-check-input"></td>
+                                        <td><strong><?= htmlspecialchars($row['numero_pedido']) ?></strong></td>
+                                        <td><?= htmlspecialchars($nombre) ?></td>
+                                        <td><?= htmlspecialchars($dir) ?></td>
+                                        <td><?= htmlspecialchars($loc) ?></td>
+                                        <td><?= date('d/m/Y', strtotime($row['fecha_creacion'])) ?></td>
+                                        <td>
+                                            <?php if (!empty($row['fecha_entrega'])): ?>
+                                                <div class="small text-muted">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($row['fecha_entrega']))) ?></div>
+                                            <?php endif; ?>
+                                            <div class="small text-muted">-</div>
+                                        </td>
+                                        <td>
+                                            <a href="orden_produccion_detalle.php?pedido_id=<?= (int)$row['pedido_id'] ?>" class="btn btn-sm btn-outline-primary">Ver detalle</a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </form>
         </div>
     </div>
 <?php endif; ?>
