@@ -26,6 +26,14 @@ if ($stmt_cot->rowCount() > 0) {
     $cotizaciones_pendientes = 0;
 }
 
+// Visitas pendientes
+$visitas_pendientes = 0;
+$stmt_vis = $pdo->query("SHOW TABLES LIKE 'ecommerce_visitas'");
+if ($stmt_vis->rowCount() > 0) {
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_visitas WHERE estado = 'pendiente'");
+    $visitas_pendientes = (int)($stmt->fetch()['total'] ?? 0);
+}
+
 // Últimos pedidos
 $stmt = $pdo->query("
     SELECT p.numero_pedido, c.nombre, p.total, p.estado, p.fecha_pedido 
@@ -102,6 +110,17 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+    <?php if (isset($can_access) && $can_access('visitas')): ?>
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body">
+                <h6 class="card-title">🗓️ Visitas Pendientes</h6>
+                <h3><?= $visitas_pendientes ?></h3>
+                <a href="visitas.php" class="btn btn-light btn-sm mt-3">Ver</a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="row mt-4">
