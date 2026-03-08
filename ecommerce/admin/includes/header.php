@@ -195,20 +195,33 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --admin-bg: #f3f6fb;
+            --admin-surface: #ffffff;
+            --admin-border: #e6ebf2;
+            --admin-text: #1f2a37;
+            --admin-muted: #6b7280;
+            --admin-primary: #2563eb;
+            --admin-primary-soft: #eff6ff;
+            --admin-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --admin-radius: 14px;
+        }
         body {
-            background-color: #f8f9fa;
+            background: radial-gradient(circle at top right, #eef4ff 0%, var(--admin-bg) 45%, #f8fafc 100%);
+            color: var(--admin-text);
         }
         .sidebar {
-            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+            background: linear-gradient(180deg, #f8fbff 0%, #eef2f7 100%);
             min-height: 100vh;
             padding: 0;
-            border-right: 2px solid #dee2e6;
+            border-right: 1px solid var(--admin-border);
+            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7);
         }
         .sidebar .logo-section {
             padding: 20px;
             text-align: center;
-            background: white;
-            border-bottom: 2px solid #dee2e6;
+            background: var(--admin-surface);
+            border-bottom: 1px solid var(--admin-border);
         }
         .sidebar .logo-section img {
             max-width: 150px;
@@ -221,62 +234,147 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             margin-bottom: 10px;
         }
         .menu-header {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: 10px;
             padding: 12px 15px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-weight: 600;
-            color: #495057;
+            color: var(--admin-text);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         .menu-header:hover {
-            background: #007bff;
-            color: white;
-            transform: translateX(5px);
+            background: var(--admin-primary-soft);
+            color: var(--admin-primary);
+            border-color: #cfe0ff;
+            transform: translateX(3px);
         }
         .menu-header.collapsed {
-            background: white;
-            color: #495057;
+            background: var(--admin-surface);
+            color: var(--admin-text);
         }
         .menu-items {
             padding: 5px 0;
         }
         .menu-items a {
-            color: #495057;
+            color: #4b5563;
             text-decoration: none;
             padding: 8px 15px 8px 35px;
             display: block;
-            border-radius: 5px;
+            border-radius: 8px;
             margin: 2px 0;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-size: 14px;
         }
         .menu-items a:hover {
-            background-color: #e9ecef;
-            color: #007bff;
+            background-color: #edf2ff;
+            color: var(--admin-primary);
             padding-left: 40px;
         }
         .menu-items a.active {
-            background-color: #007bff;
-            color: white;
+            background-color: var(--admin-primary);
+            color: #fff;
             font-weight: 600;
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
         }
         .main-content {
             padding: 30px;
         }
         .top-navbar {
-            background: white;
-            color: #495057;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(6px);
+            color: var(--admin-text);
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #dee2e6;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 1px solid var(--admin-border);
+            box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .card {
+            border: 1px solid var(--admin-border);
+            border-radius: var(--admin-radius);
+            box-shadow: var(--admin-shadow);
+            overflow: hidden;
+        }
+        .card-header {
+            border-bottom: 1px solid var(--admin-border);
+            font-weight: 600;
+            background: #f8fbff;
+        }
+        .btn {
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #2f6ff3, #1e55cf);
+            border-color: #1f55cf;
+            box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2a64dd, #1b4dbd);
+            border-color: #1b4dbd;
+        }
+        .table {
+            --bs-table-bg: transparent;
+        }
+        .table thead th {
+            border-bottom-width: 1px;
+            color: #334155;
+            font-size: .82rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .table tbody tr {
+            border-color: #edf1f7;
+        }
+        .table-hover tbody tr:hover {
+            background: #f7faff;
+        }
+        .form-control,
+        .form-select {
+            border-radius: 10px;
+            border: 1px solid #d9e1ec;
+            box-shadow: none;
+        }
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #8ab0ff;
+            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
+        }
+        .badge {
+            border-radius: 999px;
+            padding: .4em .7em;
+            font-weight: 600;
+        }
+        @media (max-width: 992px) {
+            .top-navbar {
+                padding: 12px 16px;
+            }
+            .main-content {
+                padding: 16px;
+            }
+            .sidebar {
+                min-height: auto;
+            }
+            .sidebar .logo-section {
+                padding: 14px;
+            }
+            .menu-header {
+                padding: 10px 12px;
+            }
+            .menu-items a {
+                padding: 8px 10px 8px 28px;
+            }
+            .btn {
+                padding: .45rem .7rem;
+            }
         }
     </style>
 </head>

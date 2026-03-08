@@ -38,8 +38,8 @@ $stmt = $pdo->query("
 $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<h1>Dashboard</h1>
-<p class="text-muted">Bienvenido al panel de administración</p>
+<h1 class="mb-1">Dashboard</h1>
+<p class="text-muted mb-4">Bienvenido al panel de administración</p>
 
 <div class="mb-3">
     <a href="../index.php" target="_blank" class="btn btn-success">
@@ -47,9 +47,9 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </a>
 </div>
 
-<div class="row mt-4">
+<div class="row g-3 mt-1">
     <div class="col-md-3">
-        <div class="card bg-primary text-white">
+        <div class="card bg-primary text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">📦 Productos</h6>
                 <h3><?= $total_productos ?></h3>
@@ -58,7 +58,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-success text-white">
+        <div class="card bg-success text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">📁 Categorías</h6>
                 <h3><?= $total_categorias ?></h3>
@@ -67,7 +67,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-secondary text-white">
+        <div class="card bg-secondary text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">⚙️ Atributos</h6>
                 <h3><?= $total_atributos ?></h3>
@@ -76,7 +76,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-warning text-white">
+        <div class="card bg-warning text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">📋 Pedidos</h6>
                 <h3><?= $total_pedidos ?></h3>
@@ -85,7 +85,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-info text-white">
+        <div class="card bg-info text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">💰 Ingresos</h6>
                 <h3>$<?= number_format($ingresos_totales, 0) ?></h3>
@@ -94,7 +94,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-dark text-white">
+        <div class="card bg-dark text-white h-100">
             <div class="card-body">
                 <h6 class="card-title">💼 Cotizaciones</h6>
                 <h3><?= $cotizaciones_pendientes ?></h3>
@@ -104,9 +104,9 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<div class="row mt-4">
+<div class="row g-3 mt-2">
     <div class="col-md-8">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header bg-primary text-white">
                 <h5>Últimos Pedidos</h5>
             </div>
@@ -115,7 +115,7 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <p class="text-muted">Sin pedidos</p>
                 <?php else: ?>
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table table-sm table-hover align-middle">
                             <thead>
                                 <tr>
                                     <th>Pedido</th>
@@ -147,15 +147,15 @@ $ultimos_pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <div class="col-md-4">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header bg-success text-white">
                 <h5>Acciones Rápidas</h5>
             </div>
             <div class="card-body">
                 <a href="productos_crear.php" class="btn btn-primary w-100 mb-2">+ Nuevo Producto</a>
-                <a href="categorias_crear.php" class="btn btn-success w-100 mb-2">+ Nueva Categoría</a>
-                <a href="matriz_precios.php" class="btn btn-warning w-100 mb-2">📏 Generar Matriz</a>
-                <a href="empresa.php" class="btn btn-info w-100">🏪 Editar Empresa</a>
+                <a href="categorias_crear.php" class="btn btn-outline-primary w-100 mb-2">+ Nueva Categoría</a>
+                <a href="matriz_precios.php" class="btn btn-outline-secondary w-100 mb-2">📏 Generar Matriz</a>
+                <a href="empresa.php" class="btn btn-outline-dark w-100">🏪 Editar Empresa</a>
             </div>
         </div>
     </div>

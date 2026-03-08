@@ -59,9 +59,10 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
 <div class="container mt-4">
     <div class="row mb-4">
         <div class="col-md-6">
-            <h2>Administración de Cheques</h2>
+            <h2 class="mb-1">Administración de Cheques</h2>
+            <p class="text-muted mb-0">Control de emisión, cobro y estado por período</p>
         </div>
-        <div class="col-md-6 text-end">
+        <div class="col-md-6 text-md-end mt-3 mt-md-0">
             <a href="cheques_crear.php" class="btn btn-primary">+ Nuevo Cheque</a>
         </div>
     </div>
@@ -86,7 +87,7 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                     </select>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
-                    <a href="?mes=<?= date('Y-m') ?>" class="btn btn-secondary w-100">Mes Actual</a>
+                    <a href="?mes=<?= date('Y-m') ?>" class="btn btn-outline-secondary w-100">Mes Actual</a>
                 </div>
             </form>
         </div>
@@ -95,7 +96,7 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
     <!-- Resumen de cheques del mes -->
     <div class="row mb-4">
         <div class="col-md-12">
-            <div class="card">
+            <div class="card shadow-sm">
                 <div class="card-header bg-primary text-white">
                     <h5>Resumen de Cheques - Mes: <strong><?= $mes_filtro ?></strong></h5>
                 </div>
@@ -161,7 +162,7 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
     </div>
 
     <!-- Tabla de cheques -->
-    <div class="card">
+    <div class="card shadow-sm">
         <div class="card-header">
             <h5>Cheques del Mes</h5>
         </div>
@@ -170,7 +171,7 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                 <p class="text-muted text-center">No hay cheques registrados para este período</p>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover" id="tabla-cheques">
+                    <table class="table table-hover align-middle" id="tabla-cheques">
                         <thead>
                             <tr>
                                 <th style="width: 40px;">
@@ -219,10 +220,10 @@ $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <a href="cheques_cambiar_estado.php?id=<?= $cheque['id'] ?>" class="btn btn-primary" title="Cambiar estado">🔄</a>
-                                        <a href="cheques_editar.php?id=<?= $cheque['id'] ?>" class="btn btn-warning" title="Editar">✎</a>
-                                        <a href="cheques_eliminar.php?id=<?= $cheque['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-danger" title="Eliminar" onclick="return confirm('¿Estás seguro?')">🗑️</a>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <a href="cheques_cambiar_estado.php?id=<?= $cheque['id'] ?>" class="btn btn-sm btn-primary" title="Cambiar estado">🔄</a>
+                                        <a href="cheques_editar.php?id=<?= $cheque['id'] ?>" class="btn btn-sm btn-warning" title="Editar">✎</a>
+                                        <a href="cheques_eliminar.php?id=<?= $cheque['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-sm btn-danger" title="Eliminar" onclick="return confirm('¿Estás seguro?')">🗑️</a>
                                     </div>
                                 </td>
                             </tr>

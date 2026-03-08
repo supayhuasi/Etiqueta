@@ -1,11 +1,49 @@
 <?php
 require 'includes/header.php';
 
+function tabla_existe(PDO $pdo, string $tabla): bool {
+    $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+    $stmt->execute([$tabla]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function columna_existe(PDO $pdo, string $tabla, string $columna): bool {
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
+    $stmt->execute([$columna]);
+    return (bool)$stmt->fetchColumn();
+}
+
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $incluir_entregados = !empty($_GET['incluir_entregados']);
 $pedidos = [];
 $error_pagina = '';
+$tiene_fecha_instalacion = false;
+$auto_setup_ok = false;
+$auto_setup_msg = '';
+
+$tablas_ok =
+    tabla_existe($pdo, 'ecommerce_ordenes_produccion') &&
+    tabla_existe($pdo, 'ecommerce_pedidos') &&
+    tabla_existe($pdo, 'ecommerce_clientes');
+
+if ($tablas_ok) {
+    $tiene_fecha_instalacion = columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_instalacion');
+
+    if (!$tiene_fecha_instalacion) {
+        try {
+            $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN fecha_instalacion DATE NULL AFTER fecha_entrega");
+            $tiene_fecha_instalacion = columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_instalacion');
+            if ($tiene_fecha_instalacion) {
+                $auto_setup_ok = true;
+                $auto_setup_msg = 'Se creó automáticamente la columna fecha_instalacion en ecommerce_ordenes_produccion.';
+            }
+        } catch (Throwable $e) {
+            $auto_setup_msg = 'No se pudo crear automáticamente la columna fecha_instalacion. Ejecutá ecommerce/setup_ordenes_produccion.php';
+            error_log('instalaciones auto-setup fecha_instalacion: ' . $e->getMessage());
+        }
+    }
+}
 
 // Manejar programación de instalaciones
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'programar_instalacion') {
@@ -16,8 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'progr
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $params = array_merge([$fecha_instalacion], $ids);
         try {
-            $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ? WHERE id IN ($placeholders)");
-            $stmt->execute($params);
+            if ($tablas_ok && $tiene_fecha_instalacion) {
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ? WHERE id IN ($placeholders)");
+                $stmt->execute($params);
+            }
         } catch (Throwable $e) {
             // registrar error pero continuar
             error_log('Error programando instalaciones: ' . $e->getMessage());
@@ -30,8 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'progr
 }
 
 try {
+    if (!$tablas_ok) {
+        throw new RuntimeException('No están disponibles todas las tablas requeridas del módulo.');
+    }
+
+    $select_fecha_instalacion = $tiene_fecha_instalacion
+        ? 'op.fecha_instalacion'
+        : 'NULL AS fecha_instalacion';
+
     $sql = "
         SELECT op.id AS orden_id, op.pedido_id, op.estado AS estado_produccion, op.fecha_entrega,
+               {$select_fecha_instalacion},
                p.numero_pedido, p.envio_nombre, p.envio_telefono, p.envio_direccion,
                p.envio_localidad, p.envio_provincia, p.envio_codigo_postal, p.fecha_pedido AS fecha_creacion,
                c.nombre AS cliente_nombre
@@ -77,6 +126,25 @@ $qs = http_build_query(array_filter([
 <div class="alert alert-danger">
     <strong>Error al cargar:</strong> <?= htmlspecialchars($error_pagina) ?>
     <p class="mb-0 mt-2 small">Comprobá que existan las tablas <code>ecommerce_ordenes_produccion</code>, <code>ecommerce_pedidos</code> y <code>ecommerce_clientes</code>.</p>
+</div>
+<?php endif; ?>
+
+<?php if ($auto_setup_msg !== '' && $auto_setup_ok): ?>
+<div class="alert alert-success">
+    <?= htmlspecialchars($auto_setup_msg) ?>
+</div>
+<?php endif; ?>
+
+<?php if ($auto_setup_msg !== '' && !$auto_setup_ok): ?>
+<div class="alert alert-warning">
+    <?= htmlspecialchars($auto_setup_msg) ?>
+</div>
+<?php endif; ?>
+
+<?php if ($tablas_ok && !$tiene_fecha_instalacion): ?>
+<div class="alert alert-warning">
+    La columna <code>fecha_instalacion</code> no existe en <code>ecommerce_ordenes_produccion</code>.
+    Se cargó la vista en modo compatible, pero no se podrá programar fecha hasta ejecutar el setup.
 </div>
 <?php endif; ?>
 

@@ -289,18 +289,24 @@ unset($pedido);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>Pedidos</h1>
-    <div class="text-muted">Total: <?= count($pedidos) ?> pedidos</div>
+    <div>
+        <h1 class="mb-1">Pedidos</h1>
+        <p class="text-muted mb-0">Gestión de pedidos y seguimiento de estados</p>
+    </div>
+    <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= count($pedidos) ?></div>
 </div>
 
 <?php if (isset($error)): ?>
     <div class="alert alert-danger"><?= $error ?></div>
 <?php endif; ?>
 
-<div class="card mb-3">
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="mb-0">Filtros</h5>
+    </div>
     <div class="card-body">
         <form method="GET" class="row align-items-end g-3">
-            <div class="col-auto">
+            <div class="col-12 col-md-2">
                 <label for="estado" class="form-label">Estado:</label>
                 <select name="estado" id="estado" class="form-select">
                     <option value="">Todos</option>
@@ -311,20 +317,20 @@ unset($pedido);
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-auto">
+            <div class="col-12 col-md-3">
                 <label for="cliente" class="form-label">Cliente:</label>
                 <input type="text" name="cliente" id="cliente" class="form-control" placeholder="Nombre, email o #pedido" value="<?= htmlspecialchars($cliente_busqueda) ?>">
             </div>
-            <div class="col-auto">
+            <div class="col-6 col-md-2">
                 <label for="fecha_desde" class="form-label">Desde:</label>
                 <input type="date" name="fecha_desde" id="fecha_desde" class="form-control" value="<?= $fecha_desde ?>">
             </div>
-            <div class="col-auto">
+            <div class="col-6 col-md-2">
                 <label for="fecha_hasta" class="form-label">Hasta:</label>
                 <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control" value="<?= $fecha_hasta ?>">
             </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-outline-secondary">Filtrar</button>
+            <div class="col-12 col-md-3 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
                 <?php if (!empty($estado_filter) || !empty($fecha_desde) || !empty($fecha_hasta) || !empty($cliente_busqueda)): ?>
                     <a href="pedidos.php" class="btn btn-outline-secondary">Limpiar</a>
                 <?php endif; ?>
@@ -336,8 +342,10 @@ unset($pedido);
 <?php if (empty($pedidos)): ?>
     <div class="alert alert-info">No hay pedidos</div>
 <?php else: ?>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle">
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
                     <th>Número</th>
@@ -366,6 +374,7 @@ unset($pedido);
                             </span>
                         </td>
                         <td>
+                            <div class="d-flex flex-wrap gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>">Ver detalle</a>
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
@@ -373,11 +382,14 @@ unset($pedido);
                             <?php if (!empty($pedido['public_token'])): ?>
                                 <a class="btn btn-sm btn-outline-info" href="<?= htmlspecialchars($base_url . '/pedido_publico.php?token=' . urlencode($pedido['public_token'])) ?>" target="_blank" rel="noopener">Link público</a>
                             <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
-        </table>
+                </table>
+            </div>
+        </div>
     </div>
 <?php endif; ?>
 

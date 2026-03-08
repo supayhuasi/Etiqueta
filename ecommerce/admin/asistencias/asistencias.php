@@ -81,20 +81,17 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 <div class="container-fluid mt-4">
     <div class="row mb-4">
         <div class="col-md-6">
-            <h1>📋 Control de Asistencias</h1>
-            <p class="text-muted">Gestiona las asistencias de los empleados</p>
+            <h1 class="mb-1">📋 Control de Asistencias</h1>
+            <p class="text-muted mb-0">Gestiona entradas, salidas y estado de asistencia por empleado</p>
         </div>
-        <div class="col-md-6 text-end">
-            <div class="btn-group mb-2" role="group">
+        <div class="col-md-6 mt-3 mt-md-0">
+            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
                 <a href="/scan.php" class="btn btn-success">📱 Escanear Asistencia</a>
                 <a href="asistencias_crear.php" class="btn btn-primary">➕ Cargar Manual</a>
                 <a href="asistencias_rango.php" class="btn btn-primary">📅 Cargar Rango</a>
-            </div>
-            <div class="btn-group mb-2" role="group">
                 <a href="asistencias_horarios.php" class="btn btn-info">⏰ Gestionar Horarios</a>
                 <a href="asistencias_reporte.php?mes=<?= $mes_filtro ?>&empleado_id=<?= $empleado_filtro ?>" class="btn btn-success" target="_blank">📊 Generar Reporte</a>
-            </div>
-            <div class="dropdown d-inline-block">
+                <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     🎫 Tarjetas PDF
                 </button>
@@ -105,14 +102,15 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                         <li><a class="dropdown-item" href="tarjetas_pdf.php?empleado_id=<?= $emp['id'] ?>" target="_blank"><?= htmlspecialchars($emp['nombre']) ?></a></li>
                     <?php endforeach; ?>
                 </ul>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Estadísticas -->
-    <div class="row mb-4">
+    <div class="row mb-4 g-3">
         <div class="col-md-2">
-            <div class="card bg-primary text-white">
+            <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center">
                     <h6>Total</h6>
                     <h3><?= $stats['total'] ?? 0 ?></h3>
@@ -120,7 +118,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card bg-success text-white">
+            <div class="card bg-success text-white h-100">
                 <div class="card-body text-center">
                     <h6>Presentes</h6>
                     <h3><?= $stats['presentes'] ?? 0 ?></h3>
@@ -128,7 +126,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card bg-warning text-white">
+            <div class="card bg-warning text-white h-100">
                 <div class="card-body text-center">
                     <h6>Tardanzas</h6>
                     <h3><?= $stats['tardes'] ?? 0 ?></h3>
@@ -136,7 +134,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card bg-danger text-white">
+            <div class="card bg-danger text-white h-100">
                 <div class="card-body text-center">
                     <h6>Ausentes</h6>
                     <h3><?= $stats['ausentes'] ?? 0 ?></h3>
@@ -144,7 +142,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card bg-info text-white">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body text-center">
                     <h6>Justificados</h6>
                     <h3><?= $stats['justificados'] ?? 0 ?></h3>
@@ -155,6 +153,9 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
     <!-- Filtros -->
     <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filtros</h5>
+        </div>
         <div class="card-body">
             <form method="GET" class="row g-3">
                 <div class="col-md-4">
@@ -174,7 +175,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
                 <div class="col-md-4 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary me-2">🔍 Filtrar</button>
-                    <a href="asistencias.php" class="btn btn-secondary">🔄 Limpiar</a>
+                    <a href="asistencias.php" class="btn btn-outline-secondary">🔄 Limpiar</a>
                 </div>
             </form>
         </div>
@@ -204,8 +205,8 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                             <div id="<?= $collapse_id ?>" class="accordion-collapse collapse" aria-labelledby="<?= $heading_id ?>" data-bs-parent="#asistenciasAccordion">
                                 <div class="accordion-body">
                                     <div class="table-responsive">
-                                        <table class="table table-hover mb-0">
-                                            <thead class="table-dark">
+                                        <table class="table table-hover align-middle mb-0">
+                                            <thead class="table-light">
                                                 <tr>
                                                     <th>Fecha</th>
                                                     <th>Horario</th>

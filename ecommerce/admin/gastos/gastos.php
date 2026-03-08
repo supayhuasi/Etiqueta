@@ -86,9 +86,10 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
 <div class="container-fluid mt-4">
     <div class="row mb-4">
         <div class="col-md-6">
-            <h2>💸 Administración de Gastos</h2>
+            <h2 class="mb-1">💸 Administración de Gastos</h2>
+            <p class="text-muted mb-0">Seguimiento mensual de gastos y estado de pago</p>
         </div>
-        <div class="col-md-6 text-end">
+        <div class="col-md-6 text-md-end mt-3 mt-md-0">
             <a href="gastos_crear.php" class="btn btn-primary">+ Nuevo Gasto</a>
         </div>
     </div>
@@ -127,16 +128,16 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                     </select>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
-                    <a href="?mes=<?= date('Y-m') ?>" class="btn btn-secondary w-100">Mes Actual</a>
+                    <a href="?mes=<?= date('Y-m') ?>" class="btn btn-outline-secondary w-100">Mes Actual</a>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- Resumen de gastos del mes -->
-    <div class="row mb-4">
+    <div class="row mb-4 g-3">
         <div class="col-md-3">
-            <div class="card bg-primary text-white">
+            <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center">
                     <h6>Total de Gastos</h6>
                     <h3><?= count($gastos) ?></h3>
@@ -145,7 +146,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card bg-success text-white">
+            <div class="card bg-success text-white h-100">
                 <div class="card-body text-center">
                     <h6>Total Invertido</h6>
                     <h3>$<?= number_format($totales['monto_total'] ?? 0, 0, ',', '.') ?></h3>
@@ -154,7 +155,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card bg-info text-white">
+            <div class="card bg-info text-white h-100">
                 <div class="card-body text-center">
                     <h6>Pagados</h6>
                     <h3>$<?= number_format($totales['monto_pagado'] ?? 0, 0, ',', '.') ?></h3>
@@ -162,7 +163,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+            <div class="card bg-warning text-dark h-100">
                 <div class="card-body text-center">
                     <h6>Pendientes</h6>
                     <h3>$<?= number_format($totales['monto_pendiente'] ?? 0, 0, ',', '.') ?></h3>
@@ -174,7 +175,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
     <div class="row mb-4">
         <div class="col-md-8">
             <!-- Tabla de gastos -->
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
                     <h5>Gastos del Mes</h5>
                 </div>
@@ -183,7 +184,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                         <p class="text-muted text-center">No hay gastos registrados para este período</p>
                     <?php else: ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover">
+                            <table class="table table-hover align-middle">
                                 <thead>
                                     <tr>
                                         <th>Fecha</th>
@@ -205,6 +206,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                             </span>
                                         </td>
                                         <td><?= htmlspecialchars(substr($gasto['descripcion'], 0, 30)) ?></td>
+                                        <td><?= htmlspecialchars($gasto['empleado_nombre'] ?? '-') ?></td>
                                         <td><strong>$<?= number_format($gasto['monto'], 2, ',', '.') ?></strong></td>
                                         <td>
                                             <span class="badge" style="background-color: <?= htmlspecialchars($gasto['estado_color'] ?? '#999') ?>">
@@ -212,10 +214,10 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                             </span>
                                         </td>
                                         <td>
-                                            <div class="btn-group btn-group-sm" role="group">
-                                                <a href="gastos_cambiar_estado.php?id=<?= $gasto['id'] ?>" class="btn btn-info" title="Cambiar estado">✎</a>
-                                                <a href="gastos_editar.php?id=<?= $gasto['id'] ?>" class="btn btn-warning" title="Editar">📝</a>
-                                                <a href="gastos_eliminar.php?id=<?= $gasto['id'] ?>" class="btn btn-danger" title="Eliminar" onclick="return confirm('¿Estás seguro?')">🗑️</a>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <a href="gastos_cambiar_estado.php?id=<?= $gasto['id'] ?>" class="btn btn-sm btn-info" title="Cambiar estado">✎</a>
+                                                <a href="gastos_editar.php?id=<?= $gasto['id'] ?>" class="btn btn-sm btn-warning" title="Editar">📝</a>
+                                                <a href="gastos_eliminar.php?id=<?= $gasto['id'] ?>" class="btn btn-sm btn-danger" title="Eliminar" onclick="return confirm('¿Estás seguro?')">🗑️</a>
                                             </div>
                                         </td>
                                     </tr>
@@ -230,7 +232,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
 
         <div class="col-md-4">
             <!-- Gastos por tipo -->
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
                     <h5>Gastos por Tipo</h5>
                 </div>
