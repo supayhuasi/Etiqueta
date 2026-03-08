@@ -20,13 +20,21 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.cookie_httponly', '1');
-    session_set_cookie_params([
-        'lifetime' => 0,
-        'path' => '/',
-        'secure' => $is_https,
-        'httponly' => true,
-        'samesite' => 'Lax'
-    ]);
+
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => $is_https,
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ]);
+    } else {
+        ini_set('session.cookie_secure', $is_https ? '1' : '0');
+        ini_set('session.cookie_samesite', 'Lax');
+        session_set_cookie_params(0, '/');
+    }
+
     session_start();
 
     if (empty($_SESSION['__session_initialized'])) {
@@ -36,14 +44,14 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 if (!function_exists('admin_h')) {
-    function admin_h($value): string
+    function admin_h($value)
     {
         return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
     }
 }
 
 if (!function_exists('admin_csrf_token')) {
-    function admin_csrf_token(): string
+    function admin_csrf_token()
     {
         if (empty($_SESSION['admin_csrf_token'])) {
             $_SESSION['admin_csrf_token'] = bin2hex(random_bytes(32));
@@ -54,18 +62,22 @@ if (!function_exists('admin_csrf_token')) {
 }
 
 if (!function_exists('admin_validate_csrf')) {
-    function admin_validate_csrf(?string $token): bool
+    function admin_validate_csrf($token)
     {
         if (empty($_SESSION['admin_csrf_token']) || $token === null) {
             return false;
         }
 
-        return hash_equals($_SESSION['admin_csrf_token'], $token);
+        if (function_exists('hash_equals')) {
+            return hash_equals($_SESSION['admin_csrf_token'], $token);
+        }
+
+        return $_SESSION['admin_csrf_token'] === $token;
     }
 }
 
 if (!function_exists('admin_require_csrf_post')) {
-    function admin_require_csrf_post(): void
+    function admin_require_csrf_post()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             return;

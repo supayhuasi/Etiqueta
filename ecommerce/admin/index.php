@@ -1,51 +1,26 @@
 <?php
 require 'includes/header.php';
 
-// Obtener estadísticas
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_productos WHERE activo = 1");
-$total_productos = $stmt->fetch()['total'];
-
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_categorias WHERE activo = 1");
-$total_categorias = $stmt->fetch()['total'];
-
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_producto_atributos");
-$total_atributos = $stmt->fetch()['total'];
-
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_pedidos WHERE estado != 'cancelado'");
-$total_pedidos = $stmt->fetch()['total'];
-
-$stmt = $pdo->query("SELECT SUM(total) as total FROM ecommerce_pedidos WHERE estado IN ('confirmado', 'preparando', 'enviado', 'entregado')");
-$ingresos_totales = $stmt->fetch()['total'] ?? 0;
-
-// Cotizaciones
-$stmt_cot = $pdo->query("SHOW TABLES LIKE 'ecommerce_cotizaciones'");
-if ($stmt_cot->rowCount() > 0) {
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM ecommerce_cotizaciones WHERE estado = 'pendiente'");
-    $cotizaciones_pendientes = $stmt->fetch()['total'];
-} else {
-    $cotizaciones_pendientes = 0;
-}
-
-<?php
-require 'includes/header.php';
-
-function dashboard_table_exists(PDO $pdo, string $table): bool
+function dashboard_table_exists(PDO $pdo, $table)
 {
     try {
         $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
         $stmt->execute([$table]);
-        return (bool)$stmt->fetchColumn();
-    } catch (Throwable $e) {
-        try {
-            $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
+        if ($stmt->fetchColumn()) {
             return true;
-        } catch (Throwable $ignored) {
-            return false;
         }
+    } catch (Throwable $e) {
+    }
+
+    try {
+        $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
+        return true;
+    } catch (Throwable $e) {
+        return false;
     }
 }
 
-function dashboard_scalar(PDO $pdo, string $sql, $default = 0)
+function dashboard_scalar(PDO $pdo, $sql, $default = 0)
 {
     try {
         $value = $pdo->query($sql)->fetchColumn();
@@ -334,7 +309,6 @@ $modulos = [
                     <li>Control de permisos por rol en navegación y páginas.</li>
                 </ul>
                 <div class="d-grid gap-2">
-                    <a href="api_keys.php" class="btn btn-outline-danger btn-sm"><i class="bi bi-key me-1"></i>Revisar API Keys</a>
                     <a href="auth/logout.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión segura</a>
                     <a href="../api/manual_robot.md" class="btn btn-outline-primary btn-sm" target="_blank"><i class="bi bi-book me-1"></i>Manual API Robot</a>
                 </div>
