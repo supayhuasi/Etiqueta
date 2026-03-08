@@ -274,6 +274,83 @@ $current_page = basename($_SERVER['PHP_SELF']);
 if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$current_page])) {
     die("Acceso denegado. No tenés permisos para esta sección.");
 }
+
+if (!function_exists('admin_table_exists')) {
+    function admin_table_exists(PDO $pdo, string $table): bool
+    {
+        try {
+            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            $stmt->execute([$table]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('admin_column_exists')) {
+    function admin_column_exists(PDO $pdo, string $table, string $column): bool
+    {
+        try {
+            $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
+            $stmt->execute([$column]);
+            return (bool)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+$notificaciones_atrasos = [];
+$notificaciones_atrasos_total = 0;
+
+if ($role === 'admin') {
+    try {
+        if (
+            admin_table_exists($pdo, 'ecommerce_ordenes_produccion')
+            && admin_table_exists($pdo, 'ecommerce_pedidos')
+            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'pedido_id')
+            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'fecha_entrega')
+            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'estado')
+        ) {
+            $sql_count = "
+                SELECT COUNT(*)
+                FROM ecommerce_ordenes_produccion op
+                JOIN ecommerce_pedidos p ON p.id = op.pedido_id
+                WHERE op.fecha_entrega IS NOT NULL
+                  AND op.fecha_entrega < CURDATE()
+                  AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
+                  AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+            ";
+            $notificaciones_atrasos_total = (int)$pdo->query($sql_count)->fetchColumn();
+
+            if ($notificaciones_atrasos_total > 0) {
+                $sql_lista = "
+                    SELECT
+                        p.id AS pedido_id,
+                        p.numero_pedido,
+                        c.nombre AS cliente_nombre,
+                        op.fecha_entrega,
+                        op.estado,
+                        DATEDIFF(CURDATE(), op.fecha_entrega) AS dias_atraso
+                    FROM ecommerce_ordenes_produccion op
+                    JOIN ecommerce_pedidos p ON p.id = op.pedido_id
+                    LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
+                    WHERE op.fecha_entrega IS NOT NULL
+                      AND op.fecha_entrega < CURDATE()
+                      AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
+                      AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+                    ORDER BY op.fecha_entrega ASC
+                    LIMIT 8
+                ";
+                $notificaciones_atrasos = $pdo->query($sql_lista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        }
+    } catch (Throwable $e) {
+        $notificaciones_atrasos = [];
+        $notificaciones_atrasos_total = 0;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -432,6 +509,78 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
             font-weight: 700;
             letter-spacing: .02em;
         }
+        .top-navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .notif-btn {
+            position: relative;
+            border-radius: 999px;
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .notif-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            font-size: .66rem;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            background: #dc3545;
+            color: #fff;
+            border: 2px solid #fff;
+            font-weight: 700;
+        }
+        .notif-dropdown {
+            width: min(420px, 92vw);
+            padding: 0;
+            border: 1px solid var(--admin-border);
+            box-shadow: var(--admin-shadow);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .notif-header {
+            padding: 10px 14px;
+            font-weight: 700;
+            border-bottom: 1px solid var(--admin-border);
+            background: #f8fbff;
+        }
+        .notif-item {
+            display: block;
+            padding: 10px 14px;
+            border-bottom: 1px solid #eef2f7;
+            color: inherit;
+            text-decoration: none;
+        }
+        .notif-item:hover {
+            background: #f8fbff;
+            color: inherit;
+        }
+        .notif-item:last-child {
+            border-bottom: 0;
+        }
+        .notif-empty {
+            padding: 14px;
+            color: var(--admin-muted);
+            font-size: .92rem;
+        }
+        .notif-alert-strip {
+            background: #fff3cd;
+            border-bottom: 1px solid #ffe69c;
+            color: #664d03;
+            padding: 8px 16px;
+            font-size: .92rem;
+        }
         .card {
             border: 1px solid var(--admin-border);
             border-radius: var(--admin-radius);
@@ -517,17 +666,55 @@ if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$c
 
 <div class="top-navbar">
     <h5 style="margin: 0; color: #007bff;"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
-    <div class="dropdown">
-        <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-            <i class="bi bi-person-circle"></i> <?= htmlspecialchars($_SESSION['user']['usuario']) ?>
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item" href="<?= $admin_url ?>cambiar_clave.php"><i class="bi bi-key"></i> Cambiar Contraseña</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="<?= $admin_url ?>auth/logout.php"><i class="bi bi-box-arrow-right"></i> Salir</a></li>
-        </ul>
+    <div class="top-navbar-right">
+        <?php if ($role === 'admin'): ?>
+            <div class="dropdown">
+                <button class="btn btn-outline-danger btn-sm notif-btn" type="button" data-bs-toggle="dropdown" aria-label="Notificaciones">
+                    <i class="bi bi-bell"></i>
+                    <?php if ($notificaciones_atrasos_total > 0): ?>
+                        <span class="notif-badge"><?= $notificaciones_atrasos_total > 99 ? '99+' : (int)$notificaciones_atrasos_total ?></span>
+                    <?php endif; ?>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end notif-dropdown">
+                    <div class="notif-header">Pedidos atrasados</div>
+                    <?php if (empty($notificaciones_atrasos)): ?>
+                        <div class="notif-empty">No hay pedidos atrasados en este momento.</div>
+                    <?php else: ?>
+                        <?php foreach ($notificaciones_atrasos as $notif): ?>
+                            <a class="notif-item" href="<?= $admin_url ?>orden_produccion_detalle.php?pedido_id=<?= (int)($notif['pedido_id'] ?? 0) ?>">
+                                <div class="fw-semibold"><?= htmlspecialchars($notif['numero_pedido'] ?? ('Pedido #' . (int)($notif['pedido_id'] ?? 0))) ?></div>
+                                <div class="small text-muted"><?= htmlspecialchars($notif['cliente_nombre'] ?: 'Cliente sin nombre') ?></div>
+                                <div class="small text-danger">
+                                    Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
+                                    · <?= max(1, (int)($notif['dias_atraso'] ?? 0)) ?> día(s) de atraso
+                                </div>
+                            </a>
+                        <?php endforeach; ?>
+                        <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver todos los pedidos</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <div class="dropdown">
+            <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-person-circle"></i> <?= htmlspecialchars($_SESSION['user']['usuario']) ?>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= $admin_url ?>cambiar_clave.php"><i class="bi bi-key"></i> Cambiar Contraseña</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="<?= $admin_url ?>auth/logout.php"><i class="bi bi-box-arrow-right"></i> Salir</a></li>
+            </ul>
+        </div>
     </div>
 </div>
+
+<?php if ($role === 'admin' && $notificaciones_atrasos_total > 0): ?>
+    <div class="notif-alert-strip">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        Tenés <?= (int)$notificaciones_atrasos_total ?> pedido(s) atrasado(s) con fecha de entrega vencida.
+    </div>
+<?php endif; ?>
 
 <div class="container-fluid">
     <div class="row">
