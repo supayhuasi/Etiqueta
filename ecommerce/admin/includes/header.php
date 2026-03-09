@@ -311,6 +311,7 @@ $notificaciones_sin_tareas_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_total = 0;
+$notificaciones_atrasos_clientes_texto = '';
 
 $notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes_produccion');
 $notificaciones_permiso_admin = ($role === 'admin');
@@ -326,38 +327,90 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'fecha_entrega')
             && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'estado')
         ) {
-            $sql_count = "
-                SELECT COUNT(*)
-                FROM ecommerce_ordenes_produccion op
-                JOIN ecommerce_pedidos p ON p.id = op.pedido_id
-                WHERE op.fecha_entrega IS NOT NULL
-                AND DATE(op.fecha_entrega) <= CURDATE()
-                  AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
-                  AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
-            ";
-            $notificaciones_atrasos_total = (int)$pdo->query($sql_count)->fetchColumn();
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_notificaciones_diarias (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                tipo VARCHAR(80) NOT NULL,
+                fecha_notificacion DATE NOT NULL,
+                total INT NOT NULL DEFAULT 0,
+                payload_json LONGTEXT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_tipo_fecha (tipo, fecha_notificacion),
+                INDEX idx_fecha (fecha_notificacion)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-            if ($notificaciones_atrasos_total > 0) {
-                $sql_lista = "
-                    SELECT
-                        op.id AS orden_produccion_id,
-                        p.id AS pedido_id,
-                        p.numero_pedido,
-                        c.nombre AS cliente_nombre,
-                        op.fecha_entrega,
-                        op.estado,
-                                                DATEDIFF(CURDATE(), DATE(op.fecha_entrega)) AS dias_atraso
+            $tipo_notif = 'ordenes_produccion_atrasadas';
+            $hoy = date('Y-m-d');
+
+            $stmt_diaria = $pdo->prepare("SELECT total, payload_json FROM ecommerce_notificaciones_diarias WHERE tipo = ? AND fecha_notificacion = ? LIMIT 1");
+            $stmt_diaria->execute([$tipo_notif, $hoy]);
+            $row_diaria = $stmt_diaria->fetch(PDO::FETCH_ASSOC);
+
+            if ($row_diaria) {
+                $notificaciones_atrasos_total = (int)($row_diaria['total'] ?? 0);
+                $payload = json_decode((string)($row_diaria['payload_json'] ?? '[]'), true);
+                $notificaciones_atrasos = is_array($payload) ? $payload : [];
+            } else {
+                $sql_count = "
+                    SELECT COUNT(*)
                     FROM ecommerce_ordenes_produccion op
                     JOIN ecommerce_pedidos p ON p.id = op.pedido_id
-                    LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                     WHERE op.fecha_entrega IS NOT NULL
-                                            AND DATE(op.fecha_entrega) <= CURDATE()
+                      AND DATE(op.fecha_entrega) <= CURDATE()
                       AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
                       AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
-                    ORDER BY op.fecha_entrega ASC
-                    LIMIT 8
                 ";
-                $notificaciones_atrasos = $pdo->query($sql_lista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $notificaciones_atrasos_total = (int)$pdo->query($sql_count)->fetchColumn();
+
+                $notificaciones_atrasos = [];
+                if ($notificaciones_atrasos_total > 0) {
+                    $sql_lista = "
+                        SELECT
+                            op.id AS orden_produccion_id,
+                            p.id AS pedido_id,
+                            p.numero_pedido,
+                            c.nombre AS cliente_nombre,
+                            op.fecha_entrega,
+                            op.estado,
+                            DATEDIFF(CURDATE(), DATE(op.fecha_entrega)) AS dias_atraso
+                        FROM ecommerce_ordenes_produccion op
+                        JOIN ecommerce_pedidos p ON p.id = op.pedido_id
+                        LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
+                        WHERE op.fecha_entrega IS NOT NULL
+                          AND DATE(op.fecha_entrega) <= CURDATE()
+                          AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
+                          AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+                        ORDER BY op.fecha_entrega ASC
+                        LIMIT 20
+                    ";
+                    $notificaciones_atrasos = $pdo->query($sql_lista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
+
+                $stmt_insert = $pdo->prepare("INSERT INTO ecommerce_notificaciones_diarias (tipo, fecha_notificacion, total, payload_json) VALUES (?, ?, ?, ?)");
+                $stmt_insert->execute([
+                    $tipo_notif,
+                    $hoy,
+                    $notificaciones_atrasos_total,
+                    json_encode($notificaciones_atrasos, JSON_UNESCAPED_UNICODE)
+                ]);
+            }
+
+            if (!empty($notificaciones_atrasos)) {
+                $clientes_unicos = [];
+                foreach ($notificaciones_atrasos as $notif_cli) {
+                    $cli = trim((string)($notif_cli['cliente_nombre'] ?? ''));
+                    if ($cli !== '') {
+                        $clientes_unicos[$cli] = true;
+                    }
+                }
+                $clientes_lista = array_keys($clientes_unicos);
+                if (!empty($clientes_lista)) {
+                    $primeros = array_slice($clientes_lista, 0, 4);
+                    $notificaciones_atrasos_clientes_texto = implode(', ', $primeros);
+                    if (count($clientes_lista) > 4) {
+                        $notificaciones_atrasos_clientes_texto .= ' y ' . (count($clientes_lista) - 4) . ' más';
+                    }
+                }
             }
         }
 
@@ -904,6 +957,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
         <?php if ($notificaciones_atrasos_total > 0): ?>
             <?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
+            <?php if ($notificaciones_atrasos_clientes_texto !== ''): ?>
+                · Clientes: <?= htmlspecialchars($notificaciones_atrasos_clientes_texto) ?>
+            <?php endif; ?>
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
             <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
