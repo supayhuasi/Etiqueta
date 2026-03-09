@@ -331,7 +331,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 FROM ecommerce_ordenes_produccion op
                 JOIN ecommerce_pedidos p ON p.id = op.pedido_id
                 WHERE op.fecha_entrega IS NOT NULL
-                  AND op.fecha_entrega < CURDATE()
+                AND DATE(op.fecha_entrega) <= CURDATE()
                   AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
                   AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
             ";
@@ -346,12 +346,12 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         c.nombre AS cliente_nombre,
                         op.fecha_entrega,
                         op.estado,
-                        DATEDIFF(CURDATE(), op.fecha_entrega) AS dias_atraso
+                                                DATEDIFF(CURDATE(), DATE(op.fecha_entrega)) AS dias_atraso
                     FROM ecommerce_ordenes_produccion op
                     JOIN ecommerce_pedidos p ON p.id = op.pedido_id
                     LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                     WHERE op.fecha_entrega IS NOT NULL
-                      AND op.fecha_entrega < CURDATE()
+                                            AND DATE(op.fecha_entrega) <= CURDATE()
                       AND LOWER(COALESCE(op.estado, '')) NOT IN ('terminado', 'entregado', 'cancelado')
                       AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
                     ORDER BY op.fecha_entrega ASC
@@ -845,8 +845,12 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     </div>
                                     <div class="small text-muted"><?= htmlspecialchars($notif['cliente_nombre'] ?: 'Cliente sin nombre') ?></div>
                                     <div class="small text-danger">
-                                        Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
-                                        · <?= max(1, (int)($notif['dias_atraso'] ?? 0)) ?> día(s) de atraso
+                                        <?php if ((int)($notif['dias_atraso'] ?? 0) <= 0): ?>
+                                            Vence hoy (<?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>)
+                                        <?php else: ?>
+                                            Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
+                                            · <?= (int)($notif['dias_atraso'] ?? 0) ?> día(s) de atraso
+                                        <?php endif; ?>
                                     </div>
                                 </a>
                             <?php endforeach; ?>

@@ -78,6 +78,24 @@ $sql .= " ORDER BY op.fecha_creacion DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+function orden_esta_vencida(array $orden): bool {
+    $estado = strtolower((string)($orden['estado'] ?? ''));
+    if (in_array($estado, ['terminado', 'entregado', 'cancelado'], true)) {
+        return false;
+    }
+    if (empty($orden['fecha_entrega'])) {
+        return false;
+    }
+
+    $ts_entrega = strtotime((string)$orden['fecha_entrega']);
+    if ($ts_entrega === false) {
+        return false;
+    }
+
+    $fecha_entrega = date('Y-m-d', $ts_entrega);
+    return $fecha_entrega <= date('Y-m-d');
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -158,11 +176,25 @@ $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </thead>
                     <tbody>
                         <?php foreach ($ordenes as $op): ?>
-                            <tr>
+                            <?php $vencida = orden_esta_vencida($op); ?>
+                            <tr class="<?= $vencida ? 'table-danger' : '' ?>">
                                 <td><strong><?= htmlspecialchars($op['numero_pedido']) ?></strong></td>
                                 <td><?= htmlspecialchars($op['cliente_nombre']) ?></td>
-                                <td><?= htmlspecialchars(str_replace('_',' ', $op['estado'])) ?></td>
-                                <td><?= !empty($op['fecha_entrega']) ? date('d/m/Y', strtotime($op['fecha_entrega'])) : '-' ?></td>
+                                <td>
+                                    <?= htmlspecialchars(str_replace('_',' ', $op['estado'])) ?>
+                                    <?php if ($vencida): ?>
+                                        <span class="badge bg-danger ms-2">Vencida</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?= !empty($op['fecha_entrega']) ? date('d/m/Y', strtotime($op['fecha_entrega'])) : '-' ?>
+                                    <?php if ($vencida && !empty($op['fecha_entrega'])): ?>
+                                        <?php $dias = (int)floor((strtotime(date('Y-m-d')) - strtotime(date('Y-m-d', strtotime($op['fecha_entrega'])))) / 86400); ?>
+                                        <div class="small text-danger fw-semibold">
+                                            <?= $dias > 0 ? ($dias . ' día(s) de atraso') : 'Vence hoy' ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= date('d/m/Y H:i', strtotime($op['fecha_creacion'])) ?></td>
                                 <td>
                                     <a href="orden_produccion_detalle.php?pedido_id=<?= $op['pedido_id'] ?>" class="btn btn-sm btn-primary">Ver orden</a>
