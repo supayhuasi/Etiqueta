@@ -429,15 +429,21 @@ $resumen_vendedores_hoy = [];
 try {
     if (
         admin_table_exists($pdo, 'usuarios')
-        && admin_table_exists($pdo, 'roles')
         && admin_table_exists($pdo, 'ecommerce_cotizaciones')
-        && admin_column_exists($pdo, 'usuarios', 'rol_id')
         && admin_column_exists($pdo, 'usuarios', 'activo')
         && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
     ) {
         $col_fecha_cotizacion = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
             ? 'fecha_creacion'
-            : null;
+            : (
+                admin_column_exists($pdo, 'ecommerce_cotizaciones', 'created_at')
+                    ? 'created_at'
+                    : (
+                        admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_actualizacion')
+                            ? 'fecha_actualizacion'
+                            : null
+                    )
+            );
 
         $col_fecha_cierre = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_actualizacion')
             ? 'fecha_actualizacion'
@@ -448,9 +454,12 @@ try {
             );
 
         if ($col_fecha_cotizacion && $col_fecha_cierre) {
+            $hoy_inicio = date('Y-m-d') . ' 00:00:00';
+            $hoy_fin = date('Y-m-d') . ' 23:59:59';
+
             $where_vendedores = [
                 "COALESCE(u.activo, 1) = 1",
-                "LOWER(COALESCE(r.nombre, '')) IN ('ventas', 'vendedor', 'vendedores')"
+                "c.creado_por IS NOT NULL"
             ];
             $params_vendedores = [];
 
@@ -464,23 +473,24 @@ try {
                 COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
                 SUM(CASE
                     WHEN c.`{$col_fecha_cotizacion}` IS NOT NULL
-                     AND DATE(c.`{$col_fecha_cotizacion}`) = CURDATE()
+                     AND c.`{$col_fecha_cotizacion}` >= ?
+                     AND c.`{$col_fecha_cotizacion}` <= ?
                     THEN 1 ELSE 0 END) AS cotizaciones_hoy,
                 SUM(CASE
                     WHEN LOWER(COALESCE(c.estado, '')) = 'convertida'
                      AND c.`{$col_fecha_cierre}` IS NOT NULL
-                     AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
+                     AND c.`{$col_fecha_cierre}` >= ?
+                     AND c.`{$col_fecha_cierre}` <= ?
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
-            FROM usuarios u
-            INNER JOIN roles r ON r.id = u.rol_id
-            LEFT JOIN ecommerce_cotizaciones c ON c.creado_por = u.id
+            FROM ecommerce_cotizaciones c
+            INNER JOIN usuarios u ON u.id = c.creado_por
             WHERE " . implode(' AND ', $where_vendedores) . "
             GROUP BY u.id, u.nombre, u.usuario
             HAVING cotizaciones_hoy > 0 OR pedidos_cerrados_hoy > 0
             ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
 
             $stmt = $pdo->prepare($sql_vendedores_hoy);
-            $stmt->execute($params_vendedores);
+            $stmt->execute(array_merge($params_vendedores, [$hoy_inicio, $hoy_fin, $hoy_inicio, $hoy_fin]));
             $resumen_vendedores_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
@@ -938,17 +948,17 @@ function format_minutos(?float $minutos): string {
 
 <div class="card mt-4">
     <div class="card-header bg-success text-white">
-        <h5 class="mb-0">Cierre del día por vendedor</h5>
+        <h5 class="mb-0">Cierre del día por usuario</h5>
     </div>
     <div class="card-body">
         <?php if (empty($resumen_vendedores_hoy)): ?>
-            <div class="alert alert-info mb-0">Sin cierres registrados hoy para vendedores.</div>
+            <div class="alert alert-info mb-0">Sin cotizaciones o cierres registrados hoy por usuario.</div>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead>
                         <tr>
-                            <th>Vendedor</th>
+                            <th>Usuario</th>
                             <th>Cotizaciones hoy</th>
                             <th>Pedidos cerrados hoy</th>
                         </tr>
