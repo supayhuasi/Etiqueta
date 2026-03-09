@@ -909,6 +909,89 @@ try {
     $actividad_cotizaciones = [];
 }
 
+// Recalcular métricas comerciales estrictamente del día (cotizaciones y cierres)
+try {
+    if ($tabla_cotizaciones !== null) {
+        $col_fecha_alta_dia = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'created_on', 'alta']);
+        $col_fecha_cierre_dia = admin_pick_column($cols_cotizaciones, ['fecha_actualizacion', 'fecha_cierre', 'fecha_envio']) ?: $col_fecha_alta_dia;
+
+        $inicio_hoy = date('Y-m-d') . ' 00:00:00';
+        $fin_hoy = date('Y-m-d') . ' 23:59:59';
+
+        if ($col_fecha_alta_dia !== null) {
+            $where_hoy = ["1=1"];
+            $params_hoy = [$inicio_hoy, $fin_hoy, $inicio_hoy, $fin_hoy];
+
+            if ($usuario_id_filtro > 0 && $col_usuario_cotizacion !== null) {
+                $where_hoy[] = "c.`{$col_usuario_cotizacion}` = ?";
+                $params_hoy[] = $usuario_id_filtro;
+            } elseif ($usuario_id_filtro > 0 && $col_usuario_cotizacion === null) {
+                $where_hoy[] = "1=0";
+            }
+
+            $usuario_id_expr = $col_usuario_cotizacion !== null ? "c.`{$col_usuario_cotizacion}`" : "0";
+            $usuario_nombre_expr = $col_usuario_cotizacion !== null
+                ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_cotizacion}`, ' (sin registro)'))"
+                : "'Sin vendedor asignado'";
+            $join_usuario = $col_usuario_cotizacion !== null
+                ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`"
+                : "";
+            $group_usuario = $col_usuario_cotizacion !== null
+                ? "GROUP BY c.`{$col_usuario_cotizacion}`, u.nombre, u.usuario"
+                : "GROUP BY usuario_id, usuario_nombre";
+
+            $cond_cierre_estado = $col_estado_cotizacion
+                ? "LOWER(COALESCE(c.`{$col_estado_cotizacion}`, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')"
+                : "0 = 1";
+
+            $sql_resumen_dia = "SELECT
+                {$usuario_id_expr} AS usuario_id,
+                {$usuario_nombre_expr} AS usuario_nombre,
+                SUM(CASE WHEN c.`{$col_fecha_alta_dia}` >= ? AND c.`{$col_fecha_alta_dia}` <= ? THEN 1 ELSE 0 END) AS cotizaciones_hoy,
+                0 AS pedidos_hoy,
+                SUM(CASE WHEN {$cond_cierre_estado} AND c.`{$col_fecha_cierre_dia}` >= ? AND c.`{$col_fecha_cierre_dia}` <= ? THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
+            FROM `{$tabla_cotizaciones}` c
+            {$join_usuario}
+            WHERE " . implode(' AND ', $where_hoy) . "
+            {$group_usuario}
+            HAVING cotizaciones_hoy > 0 OR pedidos_cerrados_hoy > 0
+            ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
+
+            $stmt = $pdo->prepare($sql_resumen_dia);
+            $stmt->execute($params_hoy);
+            $resumen_vendedores_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $where_detalle_hoy = ["c.`{$col_fecha_alta_dia}` >= ?", "c.`{$col_fecha_alta_dia}` <= ?"];
+            $params_detalle_hoy = [$inicio_hoy, $fin_hoy];
+            if ($usuario_id_filtro > 0 && $col_usuario_cotizacion !== null) {
+                $where_detalle_hoy[] = "c.`{$col_usuario_cotizacion}` = ?";
+                $params_detalle_hoy[] = $usuario_id_filtro;
+            } elseif ($usuario_id_filtro > 0 && $col_usuario_cotizacion === null) {
+                $where_detalle_hoy[] = "1=0";
+            }
+
+            $sql_detalle_hoy = "SELECT
+                {$expr_id_cotizacion} AS id,
+                {$expr_numero_cotizacion} AS numero_cotizacion,
+                {$expr_estado_cotizacion} AS estado,
+                {$expr_total_cotizacion} AS total,
+                c.`{$col_fecha_alta_dia}` AS fecha_cotizacion,
+                {$usuario_nombre_expr} AS usuario_nombre
+            FROM `{$tabla_cotizaciones}` c
+            {$join_usuario}
+            WHERE " . implode(' AND ', $where_detalle_hoy) . "
+            ORDER BY c.`{$col_fecha_alta_dia}` DESC
+            LIMIT 120";
+
+            $stmt = $pdo->prepare($sql_detalle_hoy);
+            $stmt->execute($params_detalle_hoy);
+            $actividad_cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (Throwable $e) {
+    // mantener los datos previos si falla el recálculo del día
+}
+
 $tareas_asignadas = [];
 try {
     $where_tareas = ["1=1"];
@@ -1548,14 +1631,14 @@ function format_minutos(?float $minutos): string {
 
 <div class="card mt-4">
     <div class="card-header bg-secondary text-white">
-        <h5 class="mb-0">Actividad de cotizaciones por usuario</h5>
+        <h5 class="mb-0">Actividad de cotizaciones del día por usuario</h5>
     </div>
     <div class="card-body">
         <div class="mb-3">
-            <span class="badge bg-dark">Total cotizaciones en el rango: <?= count($actividad_cotizaciones) ?></span>
+            <span class="badge bg-dark">Total cotizaciones del día: <?= count($actividad_cotizaciones) ?></span>
         </div>
         <?php if (empty($actividad_cotizaciones)): ?>
-            <div class="alert alert-info mb-0">No hay cotizaciones en el rango seleccionado.</div>
+            <div class="alert alert-info mb-0">No hay cotizaciones registradas hoy.</div>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-striped align-middle mb-0">
