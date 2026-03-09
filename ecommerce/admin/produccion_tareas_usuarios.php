@@ -430,7 +430,6 @@ try {
     if (
         admin_table_exists($pdo, 'usuarios')
         && admin_table_exists($pdo, 'ecommerce_cotizaciones')
-        && admin_column_exists($pdo, 'usuarios', 'activo')
         && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
     ) {
         $col_fecha_cotizacion = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
@@ -454,14 +453,14 @@ try {
             );
 
         if ($col_fecha_cotizacion && $col_fecha_cierre) {
-            $hoy_inicio = date('Y-m-d') . ' 00:00:00';
-            $hoy_fin = date('Y-m-d') . ' 23:59:59';
-
             $where_vendedores = [
-                "COALESCE(u.activo, 1) = 1",
                 "c.creado_por IS NOT NULL"
             ];
             $params_vendedores = [];
+
+            if (admin_column_exists($pdo, 'usuarios', 'activo')) {
+                $where_vendedores[] = "COALESCE(u.activo, 1) = 1";
+            }
 
             if ($usuario_id_filtro > 0) {
                 $where_vendedores[] = "u.id = ?";
@@ -473,14 +472,12 @@ try {
                 COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
                 SUM(CASE
                     WHEN c.`{$col_fecha_cotizacion}` IS NOT NULL
-                     AND c.`{$col_fecha_cotizacion}` >= ?
-                     AND c.`{$col_fecha_cotizacion}` <= ?
+                     AND DATE(c.`{$col_fecha_cotizacion}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS cotizaciones_hoy,
                 SUM(CASE
-                    WHEN LOWER(COALESCE(c.estado, '')) = 'convertida'
+                    WHEN LOWER(COALESCE(c.estado, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')
                      AND c.`{$col_fecha_cierre}` IS NOT NULL
-                     AND c.`{$col_fecha_cierre}` >= ?
-                     AND c.`{$col_fecha_cierre}` <= ?
+                     AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
             FROM ecommerce_cotizaciones c
             INNER JOIN usuarios u ON u.id = c.creado_por
@@ -490,7 +487,7 @@ try {
             ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
 
             $stmt = $pdo->prepare($sql_vendedores_hoy);
-            $stmt->execute(array_merge($params_vendedores, [$hoy_inicio, $hoy_fin, $hoy_inicio, $hoy_fin]));
+            $stmt->execute($params_vendedores);
             $resumen_vendedores_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
