@@ -168,7 +168,6 @@ $role_permissions = [
         'cotizacion_clientes',
         'clientes_web',
         'encuestas',
-        'ventas_reportes',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -272,6 +271,9 @@ $page_permissions = [
 ];
 
 $current_page = basename($_SERVER['PHP_SELF']);
+if ($current_page === 'ventas_reportes.php' && $role !== 'admin') {
+    die("Acceso denegado. No tenés permisos para esta sección.");
+}
 if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$current_page])) {
     die("Acceso denegado. No tenés permisos para esta sección.");
 }
@@ -422,6 +424,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             && admin_column_exists($pdo, 'asistencias', 'empleado_id')
             && admin_column_exists($pdo, 'asistencias', 'fecha')
             && admin_column_exists($pdo, 'asistencias', 'estado')
+            && admin_column_exists($pdo, 'asistencias', 'hora_entrada')
         ) {
             $sql_tardes_count = "
                 SELECT COUNT(*)
@@ -526,15 +529,32 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 + (int)$notificaciones_mensajes_total;
         }
     } catch (Throwable $e) {
-        $notificaciones_atrasos = [];
-        $notificaciones_atrasos_total = 0;
-        $notificaciones_tardanzas = [];
-        $notificaciones_tardanzas_total = 0;
-        $notificaciones_sin_tareas = [];
-        $notificaciones_sin_tareas_total = 0;
-        $notificaciones_mensajes = [];
-        $notificaciones_mensajes_total = 0;
-        $notificaciones_total = 0;
+        if (!is_array($notificaciones_atrasos)) {
+            $notificaciones_atrasos = [];
+            $notificaciones_atrasos_total = 0;
+        }
+        if (!is_array($notificaciones_tardanzas)) {
+            $notificaciones_tardanzas = [];
+            $notificaciones_tardanzas_total = 0;
+        }
+        if (!is_array($notificaciones_sin_tareas)) {
+            $notificaciones_sin_tareas = [];
+            $notificaciones_sin_tareas_total = 0;
+        }
+        if (!is_array($notificaciones_mensajes)) {
+            $notificaciones_mensajes = [];
+            $notificaciones_mensajes_total = 0;
+        }
+
+        $notificaciones_total = (int)$notificaciones_atrasos_total;
+        if ($notificaciones_permiso_admin) {
+            $notificaciones_total +=
+                (int)$notificaciones_tardanzas_total
+                + (int)$notificaciones_sin_tareas_total
+                + (int)$notificaciones_mensajes_total;
+        }
+
+        error_log('Header notificaciones warning: ' . $e->getMessage());
     }
 }
 ?>
