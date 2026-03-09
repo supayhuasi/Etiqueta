@@ -427,9 +427,10 @@ $resumen_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $resumen_vendedores_hoy = [];
 try {
+    $resumen_indexado = [];
+
     if (
-        admin_table_exists($pdo, 'usuarios')
-        && admin_table_exists($pdo, 'ecommerce_cotizaciones')
+        admin_table_exists($pdo, 'ecommerce_cotizaciones')
         && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
     ) {
         $col_fecha_cotizacion = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
@@ -453,21 +454,15 @@ try {
             );
 
         if ($col_fecha_cotizacion && $col_fecha_cierre) {
-            $where_vendedores = [
-                "c.creado_por IS NOT NULL"
-            ];
-            $params_vendedores = [];
-
-            if (admin_column_exists($pdo, 'usuarios', 'activo')) {
-                $where_vendedores[] = "COALESCE(u.activo, 1) = 1";
-            }
+            $where_cot_hoy = ["c.creado_por IS NOT NULL"];
+            $params_cot_hoy = [];
 
             if ($usuario_id_filtro > 0) {
-                $where_vendedores[] = "c.creado_por = ?";
-                $params_vendedores[] = $usuario_id_filtro;
+                $where_cot_hoy[] = "c.creado_por = ?";
+                $params_cot_hoy[] = $usuario_id_filtro;
             }
 
-            $sql_vendedores_hoy = "SELECT
+            $sql_cot_hoy = "SELECT
                 c.creado_por AS usuario_id,
                 COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.creado_por, ' (sin registro)')) AS usuario_nombre,
                 SUM(CASE
@@ -481,16 +476,115 @@ try {
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
             FROM ecommerce_cotizaciones c
             LEFT JOIN usuarios u ON u.id = c.creado_por
-            WHERE " . implode(' AND ', $where_vendedores) . "
-            GROUP BY c.creado_por, u.nombre, u.usuario
-            HAVING cotizaciones_hoy > 0 OR pedidos_cerrados_hoy > 0
-            ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
+            WHERE " . implode(' AND ', $where_cot_hoy) . "
+            GROUP BY c.creado_por, u.nombre, u.usuario";
 
-            $stmt = $pdo->prepare($sql_vendedores_hoy);
-            $stmt->execute($params_vendedores);
-            $resumen_vendedores_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $pdo->prepare($sql_cot_hoy);
+            $stmt->execute($params_cot_hoy);
+            $rows_cot_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($rows_cot_hoy as $row) {
+                $uid = (int)($row['usuario_id'] ?? 0);
+                if ($uid <= 0) {
+                    continue;
+                }
+                $resumen_indexado[$uid] = [
+                    'usuario_id' => $uid,
+                    'usuario_nombre' => $row['usuario_nombre'] ?? ('Usuario #' . $uid),
+                    'cotizaciones_hoy' => (int)($row['cotizaciones_hoy'] ?? 0),
+                    'pedidos_hoy' => 0,
+                    'pedidos_cerrados_hoy' => (int)($row['pedidos_cerrados_hoy'] ?? 0),
+                ];
+            }
         }
     }
+
+    if (admin_table_exists($pdo, 'ecommerce_pedidos')) {
+        $col_usuario_pedido = null;
+        foreach (['usuario_id', 'creado_por', 'vendedor_id', 'user_id'] as $candidate_col_usuario) {
+            if (admin_column_exists($pdo, 'ecommerce_pedidos', $candidate_col_usuario)) {
+                $col_usuario_pedido = $candidate_col_usuario;
+                break;
+            }
+        }
+
+        $col_fecha_pedido_hoy = null;
+        foreach (['fecha_pedido', 'fecha_creacion', 'created_at', 'fecha_actualizacion'] as $candidate_col_fecha) {
+            if (admin_column_exists($pdo, 'ecommerce_pedidos', $candidate_col_fecha)) {
+                $col_fecha_pedido_hoy = $candidate_col_fecha;
+                break;
+            }
+        }
+
+        if ($col_usuario_pedido && $col_fecha_pedido_hoy) {
+            $where_ped_hoy = ["p.`{$col_usuario_pedido}` IS NOT NULL"];
+            $params_ped_hoy = [];
+
+            if ($usuario_id_filtro > 0) {
+                $where_ped_hoy[] = "p.`{$col_usuario_pedido}` = ?";
+                $params_ped_hoy[] = $usuario_id_filtro;
+            }
+
+            $sql_ped_hoy = "SELECT
+                p.`{$col_usuario_pedido}` AS usuario_id,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', p.`{$col_usuario_pedido}`, ' (sin registro)')) AS usuario_nombre,
+                SUM(CASE
+                    WHEN p.`{$col_fecha_pedido_hoy}` IS NOT NULL
+                     AND DATE(p.`{$col_fecha_pedido_hoy}`) = CURDATE()
+                     AND LOWER(COALESCE(p.estado, '')) NOT IN ('cancelado', 'cancelada')
+                    THEN 1 ELSE 0 END) AS pedidos_hoy
+            FROM ecommerce_pedidos p
+            LEFT JOIN usuarios u ON u.id = p.`{$col_usuario_pedido}`
+            WHERE " . implode(' AND ', $where_ped_hoy) . "
+            GROUP BY p.`{$col_usuario_pedido}`, u.nombre, u.usuario";
+
+            $stmt = $pdo->prepare($sql_ped_hoy);
+            $stmt->execute($params_ped_hoy);
+            $rows_ped_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($rows_ped_hoy as $row) {
+                $uid = (int)($row['usuario_id'] ?? 0);
+                if ($uid <= 0) {
+                    continue;
+                }
+                if (!isset($resumen_indexado[$uid])) {
+                    $resumen_indexado[$uid] = [
+                        'usuario_id' => $uid,
+                        'usuario_nombre' => $row['usuario_nombre'] ?? ('Usuario #' . $uid),
+                        'cotizaciones_hoy' => 0,
+                        'pedidos_hoy' => 0,
+                        'pedidos_cerrados_hoy' => 0,
+                    ];
+                }
+                $resumen_indexado[$uid]['pedidos_hoy'] = (int)($row['pedidos_hoy'] ?? 0);
+                if (!empty($row['usuario_nombre'])) {
+                    $resumen_indexado[$uid]['usuario_nombre'] = $row['usuario_nombre'];
+                }
+            }
+        }
+    }
+
+    $resumen_vendedores_hoy = array_values(array_filter($resumen_indexado, static function (array $row): bool {
+        return (int)($row['cotizaciones_hoy'] ?? 0) > 0
+            || (int)($row['pedidos_hoy'] ?? 0) > 0
+            || (int)($row['pedidos_cerrados_hoy'] ?? 0) > 0;
+    }));
+
+    usort($resumen_vendedores_hoy, static function (array $a, array $b): int {
+        $cierre = ((int)($b['pedidos_cerrados_hoy'] ?? 0)) <=> ((int)($a['pedidos_cerrados_hoy'] ?? 0));
+        if ($cierre !== 0) {
+            return $cierre;
+        }
+        $pedidos = ((int)($b['pedidos_hoy'] ?? 0)) <=> ((int)($a['pedidos_hoy'] ?? 0));
+        if ($pedidos !== 0) {
+            return $pedidos;
+        }
+        $cotizaciones = ((int)($b['cotizaciones_hoy'] ?? 0)) <=> ((int)($a['cotizaciones_hoy'] ?? 0));
+        if ($cotizaciones !== 0) {
+            return $cotizaciones;
+        }
+        return strcasecmp((string)($a['usuario_nombre'] ?? ''), (string)($b['usuario_nombre'] ?? ''));
+    });
 } catch (Throwable $e) {
     $resumen_vendedores_hoy = [];
 }
@@ -949,7 +1043,7 @@ function format_minutos(?float $minutos): string {
     </div>
     <div class="card-body">
         <?php if (empty($resumen_vendedores_hoy)): ?>
-            <div class="alert alert-info mb-0">Sin cotizaciones o cierres registrados hoy por usuario.</div>
+            <div class="alert alert-info mb-0">Sin cotizaciones, pedidos ni cierres registrados hoy por usuario.</div>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
@@ -957,6 +1051,7 @@ function format_minutos(?float $minutos): string {
                         <tr>
                             <th>Usuario</th>
                             <th>Cotizaciones hoy</th>
+                            <th>Pedidos hoy</th>
                             <th>Pedidos cerrados hoy</th>
                         </tr>
                     </thead>
@@ -965,6 +1060,7 @@ function format_minutos(?float $minutos): string {
                             <tr>
                                 <td><strong><?= htmlspecialchars($row['usuario_nombre']) ?></strong></td>
                                 <td><?= (int)$row['cotizaciones_hoy'] ?></td>
+                                <td><?= (int)($row['pedidos_hoy'] ?? 0) ?></td>
                                 <td><strong><?= (int)$row['pedidos_cerrados_hoy'] ?></strong></td>
                             </tr>
                         <?php endforeach; ?>
