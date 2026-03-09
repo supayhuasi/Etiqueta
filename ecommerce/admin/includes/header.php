@@ -312,6 +312,7 @@ $notificaciones_sin_tareas = [];
 $notificaciones_sin_tareas_total = 0;
 $notificaciones_tareas_vencidas = [];
 $notificaciones_tareas_vencidas_total = 0;
+$notificaciones_tareas_vencidas_criticas_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_total = 0;
@@ -455,6 +456,13 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     LIMIT 8
                 ";
                 $notificaciones_tareas_vencidas = $pdo->query($sql_tareas_vencidas)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $notificaciones_tareas_vencidas_criticas_total = 0;
+                foreach ($notificaciones_tareas_vencidas as $tv) {
+                    if ((int)($tv['dias_atraso'] ?? 0) > 3) {
+                        $notificaciones_tareas_vencidas_criticas_total++;
+                    }
+                }
             }
         }
 
@@ -981,12 +989,25 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
-                            <div class="notif-section-title">Tareas manuales vencidas (<?= (int)$notificaciones_tareas_vencidas_total ?>)</div>
+                            <div class="notif-section-title">
+                                Tareas manuales vencidas (<?= (int)$notificaciones_tareas_vencidas_total ?>)
+                                <?php if ($notificaciones_tareas_vencidas_criticas_total > 0): ?>
+                                    · Críticas: <?= (int)$notificaciones_tareas_vencidas_criticas_total ?>
+                                <?php endif; ?>
+                            </div>
                             <?php foreach ($notificaciones_tareas_vencidas as $tarea): ?>
+                                <?php $es_critica = (int)($tarea['dias_atraso'] ?? 0) > 3; ?>
                                 <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
-                                    <div class="fw-semibold"><?= htmlspecialchars($tarea['titulo'] ?? 'Tarea manual') ?></div>
+                                    <div class="fw-semibold">
+                                        <?= htmlspecialchars($tarea['titulo'] ?? 'Tarea manual') ?>
+                                        <?php if ($es_critica): ?>
+                                            <span class="badge bg-danger ms-2">CRÍTICA</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-warning text-dark ms-2">VENCIDA</span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div class="small text-muted">Usuario: <?= htmlspecialchars($tarea['usuario_nombre'] ?? 'Sin asignar') ?></div>
-                                    <div class="small text-danger">
+                                    <div class="small <?= $es_critica ? 'text-danger fw-bold' : 'text-warning' ?>">
                                         Venció el <?= !empty($tarea['fecha_limite']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$tarea['fecha_limite']))) : '-' ?>
                                         · <?= max(1, (int)($tarea['dias_atraso'] ?? 0)) ?> día(s) de atraso
                                     </div>
@@ -1048,6 +1069,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
             <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tareas_vencidas_total ?> tarea(s) manual(es) vencida(s)
+            <?php if ($notificaciones_tareas_vencidas_criticas_total > 0): ?>
+                (<?= (int)$notificaciones_tareas_vencidas_criticas_total ?> crítica(s))
+            <?php endif; ?>
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
             <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
