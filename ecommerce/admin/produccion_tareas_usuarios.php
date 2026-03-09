@@ -102,6 +102,66 @@ function admin_pick_column(array $columns, array $candidates): ?string {
     return null;
 }
 
+function admin_discover_table(PDO $pdo, array $preferredNames, array $namePatterns = [], array $requiredLikeColumns = []): ?string {
+    foreach ($preferredNames as $table) {
+        if (admin_table_exists($pdo, $table)) {
+            return $table;
+        }
+    }
+
+    $candidates = [];
+    try {
+        $rows = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_NUM) ?: [];
+        foreach ($rows as $row) {
+            $table = (string)($row[0] ?? '');
+            if ($table === '') {
+                continue;
+            }
+
+            $lower = strtolower($table);
+            $matched = false;
+            foreach ($namePatterns as $pattern) {
+                if ($pattern !== '' && strpos($lower, strtolower($pattern)) !== false) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
+                continue;
+            }
+
+            $cols = admin_get_table_columns($pdo, $table);
+            if (empty($cols)) {
+                continue;
+            }
+
+            $score = 0;
+            foreach ($requiredLikeColumns as $col) {
+                if (in_array($col, $cols, true)) {
+                    $score++;
+                }
+            }
+            if ($score <= 0) {
+                continue;
+            }
+
+            $candidates[] = ['table' => $table, 'score' => $score];
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    if (empty($candidates)) {
+        return null;
+    }
+
+    usort($candidates, static function (array $a, array $b): int {
+        return ((int)$b['score']) <=> ((int)$a['score']);
+    });
+
+    return (string)$candidates[0]['table'];
+}
+
 ensure_produccion_scans_schema($pdo);
 ensure_tareas_usuarios_schema($pdo);
 ensure_recordatorios_schema($pdo);
@@ -262,9 +322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->query("SELECT id, nombre FROM usuarios WHERE activo = 1 ORDER BY nombre ASC");
 $usuarios_filtro = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$tabla_cotizaciones = admin_table_exists($pdo, 'ecommerce_cotizaciones')
-    ? 'ecommerce_cotizaciones'
-    : (admin_table_exists($pdo, 'cotizaciones') ? 'cotizaciones' : null);
+$tabla_cotizaciones = admin_discover_table(
+    $pdo,
+    ['ecommerce_cotizaciones', 'cotizaciones'],
+    ['cotiz', 'presup'],
+    ['numero_cotizacion', 'fecha_creacion', 'creado_por', 'total', 'estado']
+);
 
 $cols_cotizaciones = $tabla_cotizaciones !== null
     ? admin_get_table_columns($pdo, $tabla_cotizaciones)
@@ -994,16 +1057,16 @@ try {
 
     // Fallback duro: misma base de cotizaciones.php
     if (
-        admin_table_exists($pdo, 'ecommerce_cotizaciones')
-        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+        $tabla_cotizaciones !== null
+        && in_array('fecha_creacion', $cols_cotizaciones, true)
     ) {
         $where_fallback = ["c.fecha_creacion >= ?", "c.fecha_creacion <= ?"];
         $params_fallback = [$inicio_hoy, $fin_hoy];
 
-        $col_usuario_fallback = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
+        $col_usuario_fallback = in_array('creado_por', $cols_cotizaciones, true)
             ? 'creado_por'
             : (
-                admin_column_exists($pdo, 'ecommerce_cotizaciones', 'usuario_id')
+            in_array('usuario_id', $cols_cotizaciones, true)
                     ? 'usuario_id'
                     : null
             );
@@ -1026,7 +1089,7 @@ try {
             ? "GROUP BY c.`{$col_usuario_fallback}`, u.nombre, u.usuario"
             : "GROUP BY usuario_id, usuario_nombre";
 
-        $col_estado_fb = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'estado') ? 'estado' : null;
+        $col_estado_fb = in_array('estado', $cols_cotizaciones, true) ? 'estado' : null;
         $cond_cierre_fb = $col_estado_fb !== null
             ? "LOWER(COALESCE(c.`{$col_estado_fb}`, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')"
             : "0 = 1";
@@ -1037,7 +1100,7 @@ try {
             COUNT(*) AS cotizaciones_hoy,
             0 AS pedidos_hoy,
             SUM(CASE WHEN {$cond_cierre_fb} THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
-        FROM ecommerce_cotizaciones c
+        FROM `{$tabla_cotizaciones}` c
         {$join_usuario_fb}
         WHERE " . implode(' AND ', $where_fallback) . "
         {$group_usuario_fb}
@@ -1052,12 +1115,12 @@ try {
 
         $sql_detalle_fb = "SELECT
             c.id,
-            " . (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'numero_cotizacion') ? "c.numero_cotizacion" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+            " . (in_array('numero_cotizacion', $cols_cotizaciones, true) ? "c.numero_cotizacion" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
             " . ($col_estado_fb !== null ? "c.`{$col_estado_fb}`" : "'pendiente'") . " AS estado,
-            " . (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total') ? "c.total" : "0") . " AS total,
+            " . (in_array('total', $cols_cotizaciones, true) ? "c.total" : "0") . " AS total,
             c.fecha_creacion AS fecha_cotizacion,
             {$usuario_nombre_fb} AS usuario_nombre
-        FROM ecommerce_cotizaciones c
+        FROM `{$tabla_cotizaciones}` c
         {$join_usuario_fb}
         WHERE " . implode(' AND ', $where_fallback) . "
         ORDER BY c.fecha_creacion DESC
