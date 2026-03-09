@@ -50,6 +50,32 @@ function ensure_tareas_usuarios_schema(PDO $pdo): void {
     $initialized = true;
 }
 
+function ensure_recordatorios_schema(PDO $pdo): void {
+    static $initialized = false;
+    if ($initialized) {
+        return;
+    }
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_recordatorios_usuarios (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        usuario_id INT NULL,
+        creado_por INT NULL,
+        titulo VARCHAR(255) NOT NULL,
+        descripcion TEXT NULL,
+        estado ENUM('pendiente','revisado') NOT NULL DEFAULT 'pendiente',
+        fecha_recordatorio DATE NULL,
+        fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+        fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        fecha_revisado DATETIME NULL,
+        INDEX idx_usuario (usuario_id),
+        INDEX idx_estado (estado),
+        INDEX idx_fecha_recordatorio (fecha_recordatorio),
+        INDEX idx_fecha_creacion (fecha_creacion)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $initialized = true;
+}
+
 function admin_get_table_columns(PDO $pdo, string $table): array {
     static $cache = [];
     if (isset($cache[$table])) {
@@ -78,6 +104,7 @@ function admin_pick_column(array $columns, array $candidates): ?string {
 
 ensure_produccion_scans_schema($pdo);
 ensure_tareas_usuarios_schema($pdo);
+ensure_recordatorios_schema($pdo);
 
 $etapas_validas = ['corte', 'armado', 'terminado'];
 $usuario_id_filtro = isset($_GET['usuario_id']) ? (int)$_GET['usuario_id'] : 0;
@@ -86,6 +113,8 @@ $fecha_desde = trim($_GET['fecha_desde'] ?? date('Y-m-d'));
 $fecha_hasta = trim($_GET['fecha_hasta'] ?? date('Y-m-d'));
 $mensaje_tareas = '';
 $error_tareas = '';
+$mensaje_recordatorios = '';
+$error_recordatorios = '';
 
 if (!in_array($etapa_filtro, $etapas_validas, true)) {
     $etapa_filtro = '';
@@ -102,11 +131,16 @@ if ($fecha_desde !== '' && $fecha_hasta !== '' && $fecha_desde > $fecha_hasta) {
     [$fecha_desde, $fecha_hasta] = [$fecha_hasta, $fecha_desde];
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($role ?? '') === 'admin') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     admin_require_csrf_post();
     $accion_tarea = $_POST['accion_tarea'] ?? '';
 
     try {
+        $es_recordatorio = str_starts_with((string)$accion_tarea, 'recordatorio');
+        if (!$es_recordatorio && ($role ?? '') !== 'admin') {
+            throw new Exception('No tenés permisos para esta acción.');
+        }
+
         if ($accion_tarea === 'asignar') {
             $usuario_destino = (int)($_POST['tarea_usuario_id'] ?? 0);
             $titulo_tarea = trim((string)($_POST['tarea_titulo'] ?? ''));
@@ -154,8 +188,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($role ?? '') === 'admin') {
 
             $mensaje_tareas = 'Estado de tarea actualizado.';
         }
+
+        if ($accion_tarea === 'recordatorio_crear') {
+            $recordatorio_usuario_id = (int)($_POST['recordatorio_usuario_id'] ?? 0);
+            $recordatorio_titulo = trim((string)($_POST['recordatorio_titulo'] ?? ''));
+            $recordatorio_descripcion = trim((string)($_POST['recordatorio_descripcion'] ?? ''));
+            $recordatorio_fecha = trim((string)($_POST['recordatorio_fecha'] ?? ''));
+
+            if ($recordatorio_titulo === '') {
+                throw new Exception('Ingresá un título para el recordatorio.');
+            }
+            if ($recordatorio_fecha !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $recordatorio_fecha)) {
+                $recordatorio_fecha = '';
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_recordatorios_usuarios (usuario_id, creado_por, titulo, descripcion, estado, fecha_recordatorio) VALUES (?, ?, ?, ?, 'pendiente', ?)");
+            $stmt->execute([
+                $recordatorio_usuario_id > 0 ? $recordatorio_usuario_id : null,
+                (int)($_SESSION['user']['id'] ?? 0),
+                $recordatorio_titulo,
+                $recordatorio_descripcion !== '' ? $recordatorio_descripcion : null,
+                $recordatorio_fecha !== '' ? $recordatorio_fecha : null,
+            ]);
+
+            $mensaje_recordatorios = 'Recordatorio creado correctamente.';
+        }
+
+        if ($accion_tarea === 'recordatorio_estado') {
+            $recordatorio_id = (int)($_POST['recordatorio_id'] ?? 0);
+            $recordatorio_estado = trim((string)($_POST['recordatorio_estado'] ?? ''));
+            if ($recordatorio_id <= 0 || !in_array($recordatorio_estado, ['pendiente', 'revisado'], true)) {
+                throw new Exception('Datos inválidos para actualizar el recordatorio.');
+            }
+
+            if ($recordatorio_estado === 'revisado') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_recordatorios_usuarios SET estado = ?, fecha_revisado = NOW() WHERE id = ?");
+                $stmt->execute([$recordatorio_estado, $recordatorio_id]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE ecommerce_recordatorios_usuarios SET estado = ?, fecha_revisado = NULL WHERE id = ?");
+                $stmt->execute([$recordatorio_estado, $recordatorio_id]);
+            }
+
+            $mensaje_recordatorios = 'Estado de recordatorio actualizado.';
+        }
+
+        if ($accion_tarea === 'recordatorio_rapido_crear') {
+            $recordatorio_titulo = trim((string)($_POST['recordatorio_rapido_titulo'] ?? ''));
+
+            if ($recordatorio_titulo === '') {
+                throw new Exception('Ingresá un recordatorio rápido.');
+            }
+
+            $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
+            if ($usuario_actual_id <= 0) {
+                throw new Exception('No se pudo identificar el usuario actual.');
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_recordatorios_usuarios (usuario_id, creado_por, titulo, estado, fecha_recordatorio) VALUES (?, ?, ?, 'pendiente', CURDATE())");
+            $stmt->execute([$usuario_actual_id, $usuario_actual_id, $recordatorio_titulo]);
+
+            $mensaje_recordatorios = 'Recordatorio rápido guardado.';
+        }
     } catch (Throwable $e) {
-        $error_tareas = $e->getMessage();
+        if (str_contains((string)$accion_tarea, 'recordatorio')) {
+            $error_recordatorios = $e->getMessage();
+        } else {
+            $error_tareas = $e->getMessage();
+        }
     }
 }
 
@@ -170,6 +269,9 @@ $col_usuario_cotizacion = admin_pick_column($cols_cotizaciones, ['creado_por', '
 
 $col_fecha_cotizacion_actividad = null;
 $col_fecha_cotizacion_actividad = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
+$col_numero_cotizacion = admin_pick_column($cols_cotizaciones, ['numero_cotizacion', 'numero', 'nro_cotizacion', 'codigo']);
+$col_estado_cotizacion = admin_pick_column($cols_cotizaciones, ['estado', 'status', 'situacion']);
+$col_total_cotizacion = admin_pick_column($cols_cotizaciones, ['total', 'monto_total', 'importe_total', 'monto', 'precio_total']);
 
 $where_latest_sub = [];
 $params_latest_sub = [];
@@ -364,9 +466,9 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
         NULL AS numero_pedido,
-        c.numero_cotizacion,
-        c.estado AS cotizacion_estado,
-        c.total AS cotizacion_total
+        " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+        " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS cotizacion_estado,
+        " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS cotizacion_total
     FROM ecommerce_cotizaciones c
     LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`
     INNER JOIN (
@@ -436,9 +538,9 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
         NULL AS numero_pedido,
-        c.numero_cotizacion,
-        c.estado AS cotizacion_estado,
-        c.total AS cotizacion_total
+        " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+        " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS cotizacion_estado,
+        " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS cotizacion_total
     FROM ecommerce_cotizaciones c
     WHERE " . implode(' AND ', $where_cot_latest) . "
     ORDER BY c.`{$col_fecha_cotizacion_actividad}` DESC
@@ -527,6 +629,10 @@ try {
                 ? "GROUP BY c.`{$col_usuario_cotizacion}`, u.nombre, u.usuario"
                 : "GROUP BY usuario_id, usuario_nombre";
 
+            $cond_cierre_estado = $col_estado_cotizacion
+                ? "LOWER(COALESCE(c.`{$col_estado_cotizacion}`, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')"
+                : "0 = 1";
+
             $sql_cot_hoy = "SELECT
                 {$usuario_id_expr} AS usuario_id,
                 {$usuario_nombre_expr} AS usuario_nombre,
@@ -535,7 +641,7 @@ try {
                      AND DATE(c.`{$col_fecha_cotizacion}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS cotizaciones_hoy,
                 SUM(CASE
-                    WHEN LOWER(COALESCE(c.estado, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')
+                    WHEN {$cond_cierre_estado}
                      AND c.`{$col_fecha_cierre}` IS NOT NULL
                      AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
@@ -683,9 +789,9 @@ try {
 
             $sql_cotizaciones = "SELECT
                 c.id,
-                c.numero_cotizacion,
-                c.estado,
-                c.total,
+                " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+                " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS estado,
+                " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS total,
                 c.`{$col_fecha_cot}` AS fecha_cotizacion,
                 " . (
                     $col_usuario_cotizacion !== null
@@ -718,9 +824,9 @@ try {
 
             $sql_cotizaciones = "SELECT
                 c.id,
-                c.numero_cotizacion,
-                c.estado,
-                c.total,
+                " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+                " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS estado,
+                " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS total,
                 NULL AS fecha_cotizacion,
                 " . (
                     $col_usuario_cotizacion !== null
@@ -780,6 +886,68 @@ try {
     $tareas_asignadas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $tareas_asignadas = [];
+}
+
+$recordatorios = [];
+try {
+    $where_recordatorios = ["1=1"];
+    $params_recordatorios = [];
+
+    if ($usuario_id_filtro > 0) {
+        $where_recordatorios[] = "(r.usuario_id = ? OR r.usuario_id IS NULL)";
+        $params_recordatorios[] = $usuario_id_filtro;
+    }
+    if ($fecha_desde !== '') {
+        $where_recordatorios[] = "(
+            (r.fecha_recordatorio IS NOT NULL AND r.fecha_recordatorio >= ?)
+            OR (r.fecha_recordatorio IS NULL AND r.fecha_creacion >= ?)
+        )";
+        $params_recordatorios[] = $fecha_desde;
+        $params_recordatorios[] = $fecha_desde . ' 00:00:00';
+    }
+    if ($fecha_hasta !== '') {
+        $where_recordatorios[] = "(
+            (r.fecha_recordatorio IS NOT NULL AND r.fecha_recordatorio <= ?)
+            OR (r.fecha_recordatorio IS NULL AND r.fecha_creacion <= ?)
+        )";
+        $params_recordatorios[] = $fecha_hasta;
+        $params_recordatorios[] = $fecha_hasta . ' 23:59:59';
+    }
+
+    $sql_recordatorios = "SELECT
+        r.*,
+        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'General') AS usuario_nombre,
+        COALESCE(NULLIF(TRIM(c.nombre), ''), c.usuario) AS creado_por_nombre
+    FROM ecommerce_recordatorios_usuarios r
+    LEFT JOIN usuarios u ON u.id = r.usuario_id
+    LEFT JOIN usuarios c ON c.id = r.creado_por
+    WHERE " . implode(' AND ', $where_recordatorios) . "
+    ORDER BY FIELD(r.estado, 'pendiente', 'revisado'),
+             COALESCE(r.fecha_recordatorio, DATE(r.fecha_creacion)) ASC,
+             r.fecha_creacion DESC
+    LIMIT 150";
+
+    $stmt = $pdo->prepare($sql_recordatorios);
+    $stmt->execute($params_recordatorios);
+    $recordatorios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $recordatorios = [];
+}
+
+$recordatorios_personales = [];
+try {
+    $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
+    if ($usuario_actual_id > 0) {
+        $stmt = $pdo->prepare("SELECT id, titulo, estado, fecha_recordatorio, fecha_creacion
+            FROM ecommerce_recordatorios_usuarios
+            WHERE creado_por = ?
+            ORDER BY FIELD(estado, 'pendiente', 'revisado'), COALESCE(fecha_recordatorio, DATE(fecha_creacion)) ASC, fecha_creacion DESC
+            LIMIT 20");
+        $stmt->execute([$usuario_actual_id]);
+        $recordatorios_personales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $recordatorios_personales = [];
 }
 
 $where_informe = [];
@@ -927,6 +1095,153 @@ function format_minutos(?float $minutos): string {
 <?php endif; ?>
 <?php if (!empty($error_tareas)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error_tareas) ?></div>
+<?php endif; ?>
+<?php if (!empty($mensaje_recordatorios)): ?>
+    <div class="alert alert-success"><?= htmlspecialchars($mensaje_recordatorios) ?></div>
+<?php endif; ?>
+<?php if (!empty($error_recordatorios)): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($error_recordatorios) ?></div>
+<?php endif; ?>
+
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Recordatorios rápidos (personales)</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="row g-3 align-items-end mb-3">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion_tarea" value="recordatorio_rapido_crear">
+            <div class="col-md-10">
+                <label class="form-label">Qué tenés que recordar</label>
+                <input type="text" name="recordatorio_rapido_titulo" class="form-control" placeholder="Ej: Llamar cliente por cotización pendiente" required>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Agregar</button>
+            </div>
+        </form>
+
+        <?php if (empty($recordatorios_personales)): ?>
+            <div class="alert alert-info mb-0">No tenés recordatorios personales cargados.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Recordatorio</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recordatorios_personales as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($r['titulo'] ?? '-') ?></td>
+                                <td>
+                                    <span class="badge bg-<?= ($r['estado'] ?? '') === 'revisado' ? 'success' : 'warning text-dark' ?>">
+                                        <?= strtoupper(htmlspecialchars((string)($r['estado'] ?? 'pendiente'))) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php
+                                        $f = $r['fecha_recordatorio'] ?? null;
+                                        if (empty($f)) {
+                                            $f = $r['fecha_creacion'] ?? null;
+                                        }
+                                    ?>
+                                    <?= !empty($f) ? date('d/m/Y', strtotime((string)$f)) : '-' ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if (($role ?? '') === 'admin'): ?>
+<div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0">Recordatorios para revisar</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="row g-3 align-items-end mb-4">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion_tarea" value="recordatorio_crear">
+            <div class="col-md-3">
+                <label class="form-label">Para usuario</label>
+                <select name="recordatorio_usuario_id" class="form-select">
+                    <option value="0">General (sin usuario)</option>
+                    <?php foreach ($usuarios_filtro as $usuario): ?>
+                        <option value="<?= (int)$usuario['id'] ?>"><?= htmlspecialchars($usuario['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Recordatorio</label>
+                <input type="text" name="recordatorio_titulo" class="form-control" placeholder="Ej: Revisar cotización COT-0006" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Detalle</label>
+                <input type="text" name="recordatorio_descripcion" class="form-control" placeholder="Opcional">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Fecha a revisar</label>
+                <input type="date" name="recordatorio_fecha" class="form-control">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-dark">Guardar</button>
+            </div>
+        </form>
+
+        <?php if (empty($recordatorios)): ?>
+            <div class="alert alert-info mb-0">No hay recordatorios cargados en el rango seleccionado.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Para</th>
+                            <th>Recordatorio</th>
+                            <th>Detalle</th>
+                            <th>Fecha revisar</th>
+                            <th>Estado</th>
+                            <th>Creado por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recordatorios as $r): ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($r['usuario_nombre'] ?? 'General') ?></strong></td>
+                                <td><?= htmlspecialchars($r['titulo'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($r['descripcion'] ?? '-') ?></td>
+                                <td>
+                                    <?php if (!empty($r['fecha_recordatorio'])): ?>
+                                        <?= date('d/m/Y', strtotime((string)$r['fecha_recordatorio'])) ?>
+                                    <?php else: ?>
+                                        -
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <form method="POST" class="d-flex gap-2 align-items-center">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                                        <input type="hidden" name="accion_tarea" value="recordatorio_estado">
+                                        <input type="hidden" name="recordatorio_id" value="<?= (int)$r['id'] ?>">
+                                        <select name="recordatorio_estado" class="form-select form-select-sm" style="min-width: 130px" onchange="this.form.submit()">
+                                            <option value="pendiente" <?= ($r['estado'] ?? '') === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                                            <option value="revisado" <?= ($r['estado'] ?? '') === 'revisado' ? 'selected' : '' ?>>Revisado</option>
+                                        </select>
+                                    </form>
+                                </td>
+                                <td><?= htmlspecialchars($r['creado_por_nombre'] ?? '-') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
 <?php endif; ?>
 
 <?php if (($role ?? '') === 'admin'): ?>
