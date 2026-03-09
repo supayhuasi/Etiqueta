@@ -463,13 +463,13 @@ try {
             }
 
             if ($usuario_id_filtro > 0) {
-                $where_vendedores[] = "u.id = ?";
+                $where_vendedores[] = "c.creado_por = ?";
                 $params_vendedores[] = $usuario_id_filtro;
             }
 
             $sql_vendedores_hoy = "SELECT
-                u.id AS usuario_id,
-                COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+                c.creado_por AS usuario_id,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.creado_por, ' (sin registro)')) AS usuario_nombre,
                 SUM(CASE
                     WHEN c.`{$col_fecha_cotizacion}` IS NOT NULL
                      AND DATE(c.`{$col_fecha_cotizacion}`) = CURDATE()
@@ -480,9 +480,9 @@ try {
                      AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
             FROM ecommerce_cotizaciones c
-            INNER JOIN usuarios u ON u.id = c.creado_por
+            LEFT JOIN usuarios u ON u.id = c.creado_por
             WHERE " . implode(' AND ', $where_vendedores) . "
-            GROUP BY u.id, u.nombre, u.usuario
+            GROUP BY c.creado_por, u.nombre, u.usuario
             HAVING cotizaciones_hoy > 0 OR pedidos_cerrados_hoy > 0
             ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
 
