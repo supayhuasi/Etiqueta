@@ -911,12 +911,14 @@ try {
 
 // Recalcular métricas comerciales estrictamente del día (cotizaciones y cierres)
 try {
+    $fecha_objetivo_cot = $fecha_desde !== '' ? $fecha_desde : date('Y-m-d');
+
     if ($tabla_cotizaciones !== null) {
         $col_fecha_alta_dia = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'created_on', 'alta']);
         $col_fecha_cierre_dia = admin_pick_column($cols_cotizaciones, ['fecha_actualizacion', 'fecha_cierre', 'fecha_envio']) ?: $col_fecha_alta_dia;
 
-        $inicio_hoy = date('Y-m-d') . ' 00:00:00';
-        $fin_hoy = date('Y-m-d') . ' 23:59:59';
+        $inicio_hoy = $fecha_objetivo_cot . ' 00:00:00';
+        $fin_hoy = $fecha_objetivo_cot . ' 23:59:59';
 
         if ($col_fecha_alta_dia !== null) {
             $where_hoy = ["1=1"];
@@ -986,6 +988,85 @@ try {
             $stmt = $pdo->prepare($sql_detalle_hoy);
             $stmt->execute($params_detalle_hoy);
             $actividad_cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+
+    // Fallback duro: misma base de cotizaciones.php
+    if (
+        admin_table_exists($pdo, 'ecommerce_cotizaciones')
+        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+    ) {
+        $where_fallback = ["c.fecha_creacion >= ?", "c.fecha_creacion <= ?"];
+        $params_fallback = [$inicio_hoy, $fin_hoy];
+
+        $col_usuario_fallback = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
+            ? 'creado_por'
+            : (
+                admin_column_exists($pdo, 'ecommerce_cotizaciones', 'usuario_id')
+                    ? 'usuario_id'
+                    : null
+            );
+
+        if ($usuario_id_filtro > 0 && $col_usuario_fallback !== null) {
+            $where_fallback[] = "c.`{$col_usuario_fallback}` = ?";
+            $params_fallback[] = $usuario_id_filtro;
+        } elseif ($usuario_id_filtro > 0 && $col_usuario_fallback === null) {
+            $where_fallback[] = "1=0";
+        }
+
+        $usuario_expr_fb = $col_usuario_fallback !== null ? "c.`{$col_usuario_fallback}`" : "0";
+        $usuario_nombre_fb = $col_usuario_fallback !== null
+            ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_fallback}`, ' (sin registro)'))"
+            : "'Sin vendedor asignado'";
+        $join_usuario_fb = $col_usuario_fallback !== null
+            ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_fallback}`"
+            : "";
+        $group_usuario_fb = $col_usuario_fallback !== null
+            ? "GROUP BY c.`{$col_usuario_fallback}`, u.nombre, u.usuario"
+            : "GROUP BY usuario_id, usuario_nombre";
+
+        $col_estado_fb = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'estado') ? 'estado' : null;
+        $cond_cierre_fb = $col_estado_fb !== null
+            ? "LOWER(COALESCE(c.`{$col_estado_fb}`, '')) IN ('convertida', 'aceptada', 'cerrada', 'cerrado')"
+            : "0 = 1";
+
+        $sql_resumen_fb = "SELECT
+            {$usuario_expr_fb} AS usuario_id,
+            {$usuario_nombre_fb} AS usuario_nombre,
+            COUNT(*) AS cotizaciones_hoy,
+            0 AS pedidos_hoy,
+            SUM(CASE WHEN {$cond_cierre_fb} THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
+        FROM ecommerce_cotizaciones c
+        {$join_usuario_fb}
+        WHERE " . implode(' AND ', $where_fallback) . "
+        {$group_usuario_fb}
+        ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
+
+        $stmt = $pdo->prepare($sql_resumen_fb);
+        $stmt->execute($params_fallback);
+        $resumen_fb = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($resumen_fb)) {
+            $resumen_vendedores_hoy = $resumen_fb;
+        }
+
+        $sql_detalle_fb = "SELECT
+            c.id,
+            " . (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'numero_cotizacion') ? "c.numero_cotizacion" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
+            " . ($col_estado_fb !== null ? "c.`{$col_estado_fb}`" : "'pendiente'") . " AS estado,
+            " . (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total') ? "c.total" : "0") . " AS total,
+            c.fecha_creacion AS fecha_cotizacion,
+            {$usuario_nombre_fb} AS usuario_nombre
+        FROM ecommerce_cotizaciones c
+        {$join_usuario_fb}
+        WHERE " . implode(' AND ', $where_fallback) . "
+        ORDER BY c.fecha_creacion DESC
+        LIMIT 120";
+
+        $stmt = $pdo->prepare($sql_detalle_fb);
+        $stmt->execute($params_fallback);
+        $detalle_fb = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($detalle_fb)) {
+            $actividad_cotizaciones = $detalle_fb;
         }
     }
 } catch (Throwable $e) {
@@ -1631,11 +1712,11 @@ function format_minutos(?float $minutos): string {
 
 <div class="card mt-4">
     <div class="card-header bg-secondary text-white">
-        <h5 class="mb-0">Actividad de cotizaciones del día por usuario</h5>
+        <h5 class="mb-0">Actividad de cotizaciones de la fecha seleccionada por usuario</h5>
     </div>
     <div class="card-body">
         <div class="mb-3">
-            <span class="badge bg-dark">Total cotizaciones del día: <?= count($actividad_cotizaciones) ?></span>
+            <span class="badge bg-dark">Total cotizaciones de la fecha seleccionada: <?= count($actividad_cotizaciones) ?></span>
         </div>
         <?php if (empty($actividad_cotizaciones)): ?>
             <div class="alert alert-info mb-0">No hay cotizaciones registradas hoy.</div>
