@@ -166,10 +166,10 @@ $cols_cotizaciones = admin_table_exists($pdo, 'ecommerce_cotizaciones')
     ? admin_get_table_columns($pdo, 'ecommerce_cotizaciones')
     : [];
 
-$col_usuario_cotizacion = admin_pick_column($cols_cotizaciones, ['creado_por', 'usuario_id', 'vendedor_id', 'user_id']);
+$col_usuario_cotizacion = admin_pick_column($cols_cotizaciones, ['creado_por', 'usuario_id', 'id_usuario', 'vendedor_id', 'id_vendedor', 'user_id', 'usuario', 'vendedor']);
 
 $col_fecha_cotizacion_actividad = null;
-$col_fecha_cotizacion_actividad = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'created_at', 'fecha_actualizacion']);
+$col_fecha_cotizacion_actividad = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
 
 $where_latest_sub = [];
 $params_latest_sub = [];
@@ -502,8 +502,8 @@ try {
     $resumen_indexado = [];
 
     if (admin_table_exists($pdo, 'ecommerce_cotizaciones')) {
-        $col_fecha_cotizacion = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'created_at', 'fecha_actualizacion']);
-        $col_fecha_cierre = admin_pick_column($cols_cotizaciones, ['fecha_actualizacion', 'fecha_envio']) ?: $col_fecha_cotizacion;
+        $col_fecha_cotizacion = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
+        $col_fecha_cierre = admin_pick_column($cols_cotizaciones, ['fecha_actualizacion', 'fecha_envio', 'fecha_cierre']) ?: $col_fecha_cotizacion;
 
         if ($col_fecha_cotizacion && $col_fecha_cierre) {
             $where_cot_hoy = ["1=1"];
@@ -549,13 +549,13 @@ try {
             $rows_cot_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($rows_cot_hoy as $row) {
-                $uid = (int)($row['usuario_id'] ?? 0);
-                if ($uid <= 0) {
-                    continue;
+                $uid = isset($row['usuario_id']) ? (string)$row['usuario_id'] : '0';
+                if ($uid === '' || strtolower($uid) === 'null') {
+                    $uid = '0';
                 }
                 $resumen_indexado[$uid] = [
                     'usuario_id' => $uid,
-                    'usuario_nombre' => $row['usuario_nombre'] ?? ('Usuario #' . $uid),
+                    'usuario_nombre' => $row['usuario_nombre'] ?? ($uid === '0' ? 'Sin vendedor asignado' : ('Usuario #' . $uid)),
                     'cotizaciones_hoy' => (int)($row['cotizaciones_hoy'] ?? 0),
                     'pedidos_hoy' => 0,
                     'pedidos_cerrados_hoy' => (int)($row['pedidos_cerrados_hoy'] ?? 0),
@@ -660,7 +660,7 @@ try {
     if (
         admin_table_exists($pdo, 'ecommerce_cotizaciones')
     ) {
-        $col_fecha_cot = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'created_at', 'fecha_actualizacion']);
+        $col_fecha_cot = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
 
         if ($col_fecha_cot) {
             $where_cot = ["1=1"];
@@ -700,6 +700,41 @@ try {
             ) . "
             WHERE " . implode(' AND ', $where_cot) . "
             ORDER BY c.`{$col_fecha_cot}` DESC
+            LIMIT 80";
+
+            $stmt = $pdo->prepare($sql_cotizaciones);
+            $stmt->execute($params_cot);
+            $actividad_cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            $where_cot = ["1=1"];
+            $params_cot = [];
+
+            if ($col_usuario_cotizacion !== null && $usuario_id_filtro > 0) {
+                $where_cot[] = "c.`{$col_usuario_cotizacion}` = ?";
+                $params_cot[] = $usuario_id_filtro;
+            } elseif ($col_usuario_cotizacion === null && $usuario_id_filtro > 0) {
+                $where_cot[] = "1=0";
+            }
+
+            $sql_cotizaciones = "SELECT
+                c.id,
+                c.numero_cotizacion,
+                c.estado,
+                c.total,
+                NULL AS fecha_cotizacion,
+                " . (
+                    $col_usuario_cotizacion !== null
+                        ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_cotizacion}`, ' (sin registro)'))"
+                        : "'Sin vendedor asignado'"
+                ) . " AS usuario_nombre
+            FROM ecommerce_cotizaciones c
+            " . (
+                $col_usuario_cotizacion !== null
+                    ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`"
+                    : ""
+            ) . "
+            WHERE " . implode(' AND ', $where_cot) . "
+            ORDER BY c.id DESC
             LIMIT 80";
 
             $stmt = $pdo->prepare($sql_cotizaciones);
