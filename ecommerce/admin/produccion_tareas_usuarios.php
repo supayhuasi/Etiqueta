@@ -115,6 +115,7 @@ $mensaje_tareas = '';
 $error_tareas = '';
 $mensaje_recordatorios = '';
 $error_recordatorios = '';
+$debug_cotizaciones = [];
 
 if (!in_array($etapa_filtro, $etapas_validas, true)) {
     $etapa_filtro = '';
@@ -1077,6 +1078,10 @@ try {
 try {
     if ($tabla_cotizaciones !== null) {
         $fecha_objetivo_forzada = $fecha_desde !== '' ? $fecha_desde : date('Y-m-d');
+        $debug_cotizaciones['fecha_objetivo'] = $fecha_objetivo_forzada;
+        $debug_cotizaciones['tabla_detectada'] = $tabla_cotizaciones;
+        $debug_cotizaciones['col_usuario'] = $col_usuario_cotizacion;
+        $debug_cotizaciones['col_fecha'] = $col_fecha_cotizacion_actividad;
 
         $sql_forzada = "SELECT c.*";
         if ($col_usuario_cotizacion !== null) {
@@ -1096,9 +1101,12 @@ try {
             $rows_forzadas = [];
         }
 
+        $debug_cotizaciones['filas_leidas_brutas'] = count($rows_forzadas);
+
         if (!empty($rows_forzadas)) {
             $resumen_forzado = [];
             $detalle_forzado = [];
+            $filas_misma_fecha = 0;
 
             foreach ($rows_forzadas as $row) {
                 $fecha_cruda = null;
@@ -1113,6 +1121,7 @@ try {
                 if ($fecha_row !== $fecha_objetivo_forzada) {
                     continue;
                 }
+                $filas_misma_fecha++;
 
                 $uid = '0';
                 if ($col_usuario_cotizacion !== null && isset($row[$col_usuario_cotizacion])) {
@@ -1215,10 +1224,21 @@ try {
 
                 $actividad_cotizaciones = $detalle_forzado;
             }
+
+            $debug_cotizaciones['filas_fecha_objetivo'] = $filas_misma_fecha;
+            $debug_cotizaciones['resumen_usuarios'] = count($resumen_vendedores_hoy);
+            $debug_cotizaciones['detalle_cotizaciones'] = count($actividad_cotizaciones);
+        }
+
+        if (!isset($debug_cotizaciones['filas_fecha_objetivo'])) {
+            $debug_cotizaciones['filas_fecha_objetivo'] = 0;
+            $debug_cotizaciones['resumen_usuarios'] = count($resumen_vendedores_hoy);
+            $debug_cotizaciones['detalle_cotizaciones'] = count($actividad_cotizaciones);
         }
     }
 } catch (Throwable $e) {
     // último fallback silencioso
+    $debug_cotizaciones['error'] = $e->getMessage();
 }
 
 $tareas_asignadas = [];
@@ -1470,6 +1490,31 @@ function format_minutos(?float $minutos): string {
 <?php endif; ?>
 <?php if (!empty($error_recordatorios)): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error_recordatorios) ?></div>
+<?php endif; ?>
+
+<?php if (($role ?? '') === 'admin'): ?>
+    <div class="card mb-3 border-info">
+        <div class="card-header bg-info text-white">
+            <h6 class="mb-0">Diagnóstico cotizaciones (admin)</h6>
+        </div>
+        <div class="card-body py-2">
+            <div class="small">
+                Fecha objetivo: <strong><?= htmlspecialchars((string)($debug_cotizaciones['fecha_objetivo'] ?? ($fecha_desde !== '' ? $fecha_desde : date('Y-m-d')))) ?></strong> |
+                Tabla: <strong><?= htmlspecialchars((string)($debug_cotizaciones['tabla_detectada'] ?? ($tabla_cotizaciones ?? 'no detectada'))) ?></strong> |
+                Col usuario: <strong><?= htmlspecialchars((string)($debug_cotizaciones['col_usuario'] ?? ($col_usuario_cotizacion ?? 'null'))) ?></strong> |
+                Col fecha: <strong><?= htmlspecialchars((string)($debug_cotizaciones['col_fecha'] ?? ($col_fecha_cotizacion_actividad ?? 'null'))) ?></strong>
+            </div>
+            <div class="small mt-1">
+                Filas brutas leídas: <strong><?= (int)($debug_cotizaciones['filas_leidas_brutas'] ?? 0) ?></strong> |
+                Filas en fecha objetivo: <strong><?= (int)($debug_cotizaciones['filas_fecha_objetivo'] ?? 0) ?></strong> |
+                Usuarios en resumen: <strong><?= (int)($debug_cotizaciones['resumen_usuarios'] ?? count($resumen_vendedores_hoy)) ?></strong> |
+                Cotizaciones en detalle: <strong><?= (int)($debug_cotizaciones['detalle_cotizaciones'] ?? count($actividad_cotizaciones)) ?></strong>
+            </div>
+            <?php if (!empty($debug_cotizaciones['error'])): ?>
+                <div class="small text-danger mt-1">Error: <?= htmlspecialchars((string)$debug_cotizaciones['error']) ?></div>
+            <?php endif; ?>
+        </div>
+    </div>
 <?php endif; ?>
 
 <div class="card mb-4">
