@@ -158,6 +158,69 @@ $stmt = $pdo->prepare($sql_resumen);
 $stmt->execute($params_resumen);
 $resumen_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$resumen_vendedores_hoy = [];
+try {
+    if (
+        admin_table_exists($pdo, 'usuarios')
+        && admin_table_exists($pdo, 'roles')
+        && admin_table_exists($pdo, 'ecommerce_cotizaciones')
+        && admin_column_exists($pdo, 'usuarios', 'rol_id')
+        && admin_column_exists($pdo, 'usuarios', 'activo')
+        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
+    ) {
+        $col_fecha_cotizacion = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+            ? 'fecha_creacion'
+            : null;
+
+        $col_fecha_cierre = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_actualizacion')
+            ? 'fecha_actualizacion'
+            : (
+                admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_envio')
+                    ? 'fecha_envio'
+                    : $col_fecha_cotizacion
+            );
+
+        if ($col_fecha_cotizacion && $col_fecha_cierre) {
+            $where_vendedores = [
+                "COALESCE(u.activo, 1) = 1",
+                "LOWER(COALESCE(r.nombre, '')) IN ('ventas', 'vendedor', 'vendedores')"
+            ];
+            $params_vendedores = [];
+
+            if ($usuario_id_filtro > 0) {
+                $where_vendedores[] = "u.id = ?";
+                $params_vendedores[] = $usuario_id_filtro;
+            }
+
+            $sql_vendedores_hoy = "SELECT
+                u.id AS usuario_id,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+                SUM(CASE
+                    WHEN c.`{$col_fecha_cotizacion}` IS NOT NULL
+                     AND DATE(c.`{$col_fecha_cotizacion}`) = CURDATE()
+                    THEN 1 ELSE 0 END) AS cotizaciones_hoy,
+                SUM(CASE
+                    WHEN LOWER(COALESCE(c.estado, '')) = 'convertida'
+                     AND c.`{$col_fecha_cierre}` IS NOT NULL
+                     AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
+                    THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
+            FROM usuarios u
+            INNER JOIN roles r ON r.id = u.rol_id
+            LEFT JOIN ecommerce_cotizaciones c ON c.creado_por = u.id
+            WHERE " . implode(' AND ', $where_vendedores) . "
+            GROUP BY u.id, u.nombre, u.usuario
+            HAVING cotizaciones_hoy > 0 OR pedidos_cerrados_hoy > 0
+            ORDER BY pedidos_cerrados_hoy DESC, cotizaciones_hoy DESC, usuario_nombre ASC";
+
+            $stmt = $pdo->prepare($sql_vendedores_hoy);
+            $stmt->execute($params_vendedores);
+            $resumen_vendedores_hoy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (Throwable $e) {
+    $resumen_vendedores_hoy = [];
+}
+
 $where_informe = [];
 $params_informe = [];
 if ($usuario_id_filtro > 0) {
@@ -375,6 +438,38 @@ function format_minutos(?float $minutos): string {
                                 <td><?= (int)$row['armados'] ?></td>
                                 <td><?= (int)$row['terminados'] ?></td>
                                 <td><strong><?= (int)$row['total'] ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0">Cierre del día por vendedor</h5>
+    </div>
+    <div class="card-body">
+        <?php if (empty($resumen_vendedores_hoy)): ?>
+            <div class="alert alert-info mb-0">Sin cierres registrados hoy para vendedores.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Vendedor</th>
+                            <th>Cotizaciones hoy</th>
+                            <th>Pedidos cerrados hoy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($resumen_vendedores_hoy as $row): ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($row['usuario_nombre']) ?></strong></td>
+                                <td><?= (int)$row['cotizaciones_hoy'] ?></td>
+                                <td><strong><?= (int)$row['pedidos_cerrados_hoy'] ?></strong></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

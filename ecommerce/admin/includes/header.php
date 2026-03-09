@@ -335,6 +335,7 @@ if ($role === 'admin') {
             if ($notificaciones_atrasos_total > 0) {
                 $sql_lista = "
                     SELECT
+                        op.id AS orden_produccion_id,
                         p.id AS pedido_id,
                         p.numero_pedido,
                         c.nombre AS cliente_nombre,
@@ -823,10 +824,12 @@ if ($role === 'admin') {
                         <?php endif; ?>
 
                         <?php if ($notificaciones_atrasos_total > 0): ?>
-                            <div class="notif-section-title">Pedidos atrasados (<?= (int)$notificaciones_atrasos_total ?>)</div>
+                            <div class="notif-section-title">Órdenes de producción atrasadas (<?= (int)$notificaciones_atrasos_total ?>)</div>
                             <?php foreach ($notificaciones_atrasos as $notif): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>orden_produccion_detalle.php?pedido_id=<?= (int)($notif['pedido_id'] ?? 0) ?>">
-                                    <div class="fw-semibold"><?= htmlspecialchars($notif['numero_pedido'] ?? ('Pedido #' . (int)($notif['pedido_id'] ?? 0))) ?></div>
+                                    <div class="fw-semibold">
+                                        OP #<?= (int)($notif['orden_produccion_id'] ?? 0) ?> · <?= htmlspecialchars($notif['numero_pedido'] ?? ('Pedido #' . (int)($notif['pedido_id'] ?? 0))) ?>
+                                    </div>
                                     <div class="small text-muted"><?= htmlspecialchars($notif['cliente_nombre'] ?: 'Cliente sin nombre') ?></div>
                                     <div class="small text-danger">
                                         Venció el <?= !empty($notif['fecha_entrega']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$notif['fecha_entrega']))) : '-' ?>
@@ -834,7 +837,7 @@ if ($role === 'admin') {
                                     </div>
                                 </a>
                             <?php endforeach; ?>
-                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pedidos</a>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>ordenes_produccion.php">Ver órdenes de producción</a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_tardanzas_total > 0): ?>
@@ -883,7 +886,7 @@ if ($role === 'admin') {
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
         <?php if ($notificaciones_atrasos_total > 0): ?>
-            <?= (int)$notificaciones_atrasos_total ?> pedido(s) atrasado(s)
+            <?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
         <?php endif; ?>
         <?php if ($notificaciones_tardanzas_total > 0): ?>
             <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
