@@ -24,13 +24,42 @@ function ensure_produccion_scans_schema(PDO $pdo): void {
     $initialized = true;
 }
 
+function ensure_tareas_usuarios_schema(PDO $pdo): void {
+    static $initialized = false;
+    if ($initialized) {
+        return;
+    }
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_tareas_usuarios (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        usuario_id INT NOT NULL,
+        asignada_por INT NULL,
+        titulo VARCHAR(255) NOT NULL,
+        descripcion TEXT NULL,
+        estado ENUM('pendiente','en_progreso','completada','cancelada') NOT NULL DEFAULT 'pendiente',
+        fecha_limite DATE NULL,
+        fecha_asignacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+        fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        fecha_completada DATETIME NULL,
+        INDEX idx_usuario (usuario_id),
+        INDEX idx_estado (estado),
+        INDEX idx_fecha_asignacion (fecha_asignacion),
+        INDEX idx_fecha_limite (fecha_limite)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $initialized = true;
+}
+
 ensure_produccion_scans_schema($pdo);
+ensure_tareas_usuarios_schema($pdo);
 
 $etapas_validas = ['corte', 'armado', 'terminado'];
 $usuario_id_filtro = isset($_GET['usuario_id']) ? (int)$_GET['usuario_id'] : 0;
 $etapa_filtro = trim($_GET['etapa'] ?? '');
 $fecha_desde = trim($_GET['fecha_desde'] ?? date('Y-m-d'));
 $fecha_hasta = trim($_GET['fecha_hasta'] ?? date('Y-m-d'));
+$mensaje_tareas = '';
+$error_tareas = '';
 
 if (!in_array($etapa_filtro, $etapas_validas, true)) {
     $etapa_filtro = '';
@@ -45,6 +74,63 @@ if ($fecha_hasta !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_hasta)) {
 
 if ($fecha_desde !== '' && $fecha_hasta !== '' && $fecha_desde > $fecha_hasta) {
     [$fecha_desde, $fecha_hasta] = [$fecha_hasta, $fecha_desde];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($role ?? '') === 'admin') {
+    admin_require_csrf_post();
+    $accion_tarea = $_POST['accion_tarea'] ?? '';
+
+    try {
+        if ($accion_tarea === 'asignar') {
+            $usuario_destino = (int)($_POST['tarea_usuario_id'] ?? 0);
+            $titulo_tarea = trim((string)($_POST['tarea_titulo'] ?? ''));
+            $descripcion_tarea = trim((string)($_POST['tarea_descripcion'] ?? ''));
+            $fecha_limite_tarea = trim((string)($_POST['tarea_fecha_limite'] ?? ''));
+
+            if ($usuario_destino <= 0) {
+                throw new Exception('Seleccioná un usuario para asignar la tarea.');
+            }
+            if ($titulo_tarea === '') {
+                throw new Exception('Ingresá un título para la tarea.');
+            }
+
+            if ($fecha_limite_tarea !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_limite_tarea)) {
+                $fecha_limite_tarea = '';
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_tareas_usuarios (usuario_id, asignada_por, titulo, descripcion, estado, fecha_limite) VALUES (?, ?, ?, ?, 'pendiente', ?)");
+            $stmt->execute([
+                $usuario_destino,
+                (int)($_SESSION['user']['id'] ?? 0),
+                $titulo_tarea,
+                $descripcion_tarea !== '' ? $descripcion_tarea : null,
+                $fecha_limite_tarea !== '' ? $fecha_limite_tarea : null,
+            ]);
+
+            $mensaje_tareas = 'Tarea asignada correctamente.';
+        }
+
+        if ($accion_tarea === 'cambiar_estado') {
+            $tarea_id = (int)($_POST['tarea_id'] ?? 0);
+            $nuevo_estado = trim((string)($_POST['nuevo_estado'] ?? ''));
+            $estados_validos = ['pendiente', 'en_progreso', 'completada', 'cancelada'];
+            if ($tarea_id <= 0 || !in_array($nuevo_estado, $estados_validos, true)) {
+                throw new Exception('Datos inválidos para actualizar la tarea.');
+            }
+
+            if ($nuevo_estado === 'completada') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_tareas_usuarios SET estado = ?, fecha_completada = NOW() WHERE id = ?");
+                $stmt->execute([$nuevo_estado, $tarea_id]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE ecommerce_tareas_usuarios SET estado = ?, fecha_completada = NULL WHERE id = ?");
+                $stmt->execute([$nuevo_estado, $tarea_id]);
+            }
+
+            $mensaje_tareas = 'Estado de tarea actualizado.';
+        }
+    } catch (Throwable $e) {
+        $error_tareas = $e->getMessage();
+    }
 }
 
 $stmt = $pdo->query("SELECT id, nombre FROM usuarios WHERE activo = 1 ORDER BY nombre ASC");
@@ -131,6 +217,98 @@ $sql_actividad .= " ORDER BY s.created_at DESC";
 $stmt = $pdo->prepare($sql_actividad);
 $stmt->execute(array_merge($params_latest_sub, $params_latest_outer));
 $actividad_actual = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$where_tarea_sub = ["estado NOT IN ('completada','cancelada')"];
+$params_tarea_sub = [];
+$where_tarea_outer = [];
+$params_tarea_outer = [];
+
+if ($usuario_id_filtro > 0) {
+    $where_tarea_sub[] = "usuario_id = ?";
+    $params_tarea_sub[] = $usuario_id_filtro;
+    $where_tarea_outer[] = "u.id = ?";
+    $params_tarea_outer[] = $usuario_id_filtro;
+}
+if ($fecha_desde !== '') {
+    $where_tarea_sub[] = "fecha_asignacion >= ?";
+    $params_tarea_sub[] = $fecha_desde . ' 00:00:00';
+    $where_tarea_outer[] = "t.fecha_asignacion >= ?";
+    $params_tarea_outer[] = $fecha_desde . ' 00:00:00';
+}
+if ($fecha_hasta !== '') {
+    $where_tarea_sub[] = "fecha_asignacion <= ?";
+    $params_tarea_sub[] = $fecha_hasta . ' 23:59:59';
+    $where_tarea_outer[] = "t.fecha_asignacion <= ?";
+    $params_tarea_outer[] = $fecha_hasta . ' 23:59:59';
+}
+
+$sql_tarea_actividad = "SELECT
+    u.id AS usuario_id,
+    COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+    'tarea_manual' AS origen_tarea,
+    'tarea' AS etapa,
+    t.fecha_asignacion AS created_at,
+    t.estado AS estado_item,
+    NULL AS numero_item,
+    NULL AS codigo_barcode,
+    t.titulo AS producto_nombre,
+    NULL AS numero_pedido,
+    NULL AS numero_cotizacion,
+    NULL AS cotizacion_estado,
+    NULL AS cotizacion_total,
+    t.descripcion AS tarea_descripcion,
+    t.fecha_limite AS tarea_fecha_limite
+FROM ecommerce_tareas_usuarios t
+JOIN (
+    SELECT usuario_id, MAX(id) AS max_id
+    FROM ecommerce_tareas_usuarios";
+
+if (!empty($where_tarea_sub)) {
+    $sql_tarea_actividad .= " WHERE " . implode(' AND ', $where_tarea_sub);
+}
+
+$sql_tarea_actividad .= "
+    GROUP BY usuario_id
+) ult ON ult.max_id = t.id
+JOIN usuarios u ON u.id = t.usuario_id";
+
+if (!empty($where_tarea_outer)) {
+    $sql_tarea_actividad .= " WHERE " . implode(' AND ', $where_tarea_outer);
+}
+
+$stmt = $pdo->prepare($sql_tarea_actividad);
+$stmt->execute(array_merge($params_tarea_sub, $params_tarea_outer));
+$actividad_tareas_manuales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+if (!empty($actividad_tareas_manuales)) {
+    $actividad_indexada = [];
+    foreach ($actividad_actual as $row) {
+        $uid = (int)($row['usuario_id'] ?? 0);
+        if ($uid > 0) {
+            $actividad_indexada[$uid] = $row;
+        }
+    }
+
+    foreach ($actividad_tareas_manuales as $row) {
+        $uid = (int)($row['usuario_id'] ?? 0);
+        if ($uid <= 0) {
+            continue;
+        }
+        $actual = $actividad_indexada[$uid] ?? null;
+        $fecha_nueva = !empty($row['created_at']) ? strtotime((string)$row['created_at']) : 0;
+        $fecha_actual = ($actual && !empty($actual['created_at'])) ? strtotime((string)$actual['created_at']) : 0;
+        if (!$actual || $fecha_nueva >= $fecha_actual) {
+            $actividad_indexada[$uid] = $row;
+        }
+    }
+
+    $actividad_actual = array_values($actividad_indexada);
+    usort($actividad_actual, static function (array $a, array $b): int {
+        $ta = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
+        $tb = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
+        return $tb <=> $ta;
+    });
+}
 
 if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')) {
     $where_cot_latest = ["c.creado_por IS NOT NULL"];
@@ -364,6 +542,42 @@ try {
     $actividad_cotizaciones = [];
 }
 
+$tareas_asignadas = [];
+try {
+    $where_tareas = ["1=1"];
+    $params_tareas = [];
+
+    if ($usuario_id_filtro > 0) {
+        $where_tareas[] = "t.usuario_id = ?";
+        $params_tareas[] = $usuario_id_filtro;
+    }
+    if ($fecha_desde !== '') {
+        $where_tareas[] = "t.fecha_asignacion >= ?";
+        $params_tareas[] = $fecha_desde . ' 00:00:00';
+    }
+    if ($fecha_hasta !== '') {
+        $where_tareas[] = "t.fecha_asignacion <= ?";
+        $params_tareas[] = $fecha_hasta . ' 23:59:59';
+    }
+
+    $sql_tareas = "SELECT
+        t.*,
+        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+        COALESCE(NULLIF(TRIM(a.nombre), ''), a.usuario) AS asignada_por_nombre
+    FROM ecommerce_tareas_usuarios t
+    JOIN usuarios u ON u.id = t.usuario_id
+    LEFT JOIN usuarios a ON a.id = t.asignada_por
+    WHERE " . implode(' AND ', $where_tareas) . "
+    ORDER BY FIELD(t.estado, 'pendiente', 'en_progreso', 'completada', 'cancelada'), t.fecha_asignacion DESC
+    LIMIT 120";
+
+    $stmt = $pdo->prepare($sql_tareas);
+    $stmt->execute($params_tareas);
+    $tareas_asignadas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $tareas_asignadas = [];
+}
+
 $where_informe = [];
 $params_informe = [];
 if ($usuario_id_filtro > 0) {
@@ -504,6 +718,114 @@ function format_minutos(?float $minutos): string {
     </div>
 </div>
 
+<?php if (!empty($mensaje_tareas)): ?>
+    <div class="alert alert-success"><?= htmlspecialchars($mensaje_tareas) ?></div>
+<?php endif; ?>
+<?php if (!empty($error_tareas)): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($error_tareas) ?></div>
+<?php endif; ?>
+
+<?php if (($role ?? '') === 'admin'): ?>
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">Asignar tarea manual</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="row g-3 align-items-end">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion_tarea" value="asignar">
+            <div class="col-md-3">
+                <label class="form-label">Usuario</label>
+                <select name="tarea_usuario_id" class="form-select" required>
+                    <option value="">Seleccionar</option>
+                    <?php foreach ($usuarios_filtro as $usuario): ?>
+                        <option value="<?= (int)$usuario['id'] ?>"><?= htmlspecialchars($usuario['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Título</label>
+                <input type="text" name="tarea_titulo" class="form-control" placeholder="Ej: Ir a comprar tornillos" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Descripción</label>
+                <input type="text" name="tarea_descripcion" class="form-control" placeholder="Detalle opcional">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Fecha límite</label>
+                <input type="date" name="tarea_fecha_limite" class="form-control">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-primary">Asignar</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<div class="card mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0">Tareas manuales asignadas</h5>
+    </div>
+    <div class="card-body">
+        <?php if (empty($tareas_asignadas)): ?>
+            <div class="alert alert-info mb-0">No hay tareas manuales en el rango seleccionado.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Tarea</th>
+                            <th>Descripción</th>
+                            <th>Estado</th>
+                            <th>Límite</th>
+                            <th>Asignada</th>
+                            <th>Por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($tareas_asignadas as $t): ?>
+                            <?php
+                                $badge_estado = 'secondary';
+                                if (($t['estado'] ?? '') === 'pendiente') $badge_estado = 'warning text-dark';
+                                if (($t['estado'] ?? '') === 'en_progreso') $badge_estado = 'primary';
+                                if (($t['estado'] ?? '') === 'completada') $badge_estado = 'success';
+                                if (($t['estado'] ?? '') === 'cancelada') $badge_estado = 'danger';
+                            ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($t['usuario_nombre']) ?></strong></td>
+                                <td><?= htmlspecialchars($t['titulo']) ?></td>
+                                <td><?= htmlspecialchars($t['descripcion'] ?? '-') ?></td>
+                                <td>
+                                    <?php if (($role ?? '') === 'admin'): ?>
+                                        <form method="POST" class="d-flex gap-2 align-items-center">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                                            <input type="hidden" name="accion_tarea" value="cambiar_estado">
+                                            <input type="hidden" name="tarea_id" value="<?= (int)$t['id'] ?>">
+                                            <select name="nuevo_estado" class="form-select form-select-sm" style="min-width: 145px" onchange="this.form.submit()">
+                                                <option value="pendiente" <?= ($t['estado'] ?? '') === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                                                <option value="en_progreso" <?= ($t['estado'] ?? '') === 'en_progreso' ? 'selected' : '' ?>>En progreso</option>
+                                                <option value="completada" <?= ($t['estado'] ?? '') === 'completada' ? 'selected' : '' ?>>Completada</option>
+                                                <option value="cancelada" <?= ($t['estado'] ?? '') === 'cancelada' ? 'selected' : '' ?>>Cancelada</option>
+                                            </select>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="badge bg-<?= $badge_estado ?>"><?= strtoupper(htmlspecialchars((string)$t['estado'])) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= !empty($t['fecha_limite']) ? date('d/m/Y', strtotime((string)$t['fecha_limite'])) : '-' ?></td>
+                                <td><?= !empty($t['fecha_asignacion']) ? date('d/m/Y H:i', strtotime((string)$t['fecha_asignacion'])) : '-' ?></td>
+                                <td><?= htmlspecialchars($t['asignada_por_nombre'] ?? '-') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card mb-4">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0">Qué está haciendo cada usuario (último escaneo del rango)</h5>
@@ -537,18 +859,27 @@ function format_minutos(?float $minutos): string {
                                         if ($row['etapa'] === 'armado') $badge = 'warning text-dark';
                                         if ($row['etapa'] === 'terminado') $badge = 'success';
                                         if (($row['origen_tarea'] ?? '') === 'cotizacion') $badge = 'info';
+                                        if (($row['origen_tarea'] ?? '') === 'tarea_manual') $badge = 'dark';
                                     ?>
                                     <span class="badge bg-<?= $badge ?>"><?= strtoupper(htmlspecialchars($row['etapa'])) ?></span>
                                 </td>
                                 <td>
-                                    <?= ($row['origen_tarea'] ?? '') === 'cotizacion'
-                                        ? 'Cotización comercial'
-                                        : htmlspecialchars($row['producto_nombre'] ?? '-') ?>
+                                    <?php if (($row['origen_tarea'] ?? '') === 'cotizacion'): ?>
+                                        Cotización comercial
+                                    <?php elseif (($row['origen_tarea'] ?? '') === 'tarea_manual'): ?>
+                                        <?= htmlspecialchars($row['producto_nombre'] ?? 'Tarea manual') ?>
+                                    <?php else: ?>
+                                        <?= htmlspecialchars($row['producto_nombre'] ?? '-') ?>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
-                                    <?= ($row['origen_tarea'] ?? '') === 'cotizacion'
-                                        ? htmlspecialchars($row['numero_cotizacion'] ?? '-')
-                                        : htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                    <?php if (($row['origen_tarea'] ?? '') === 'cotizacion'): ?>
+                                        <?= htmlspecialchars($row['numero_cotizacion'] ?? '-') ?>
+                                    <?php elseif (($row['origen_tarea'] ?? '') === 'tarea_manual'): ?>
+                                        <?= htmlspecialchars($row['tarea_descripcion'] ?? '-') ?>
+                                    <?php else: ?>
+                                        <?= htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                    <?php endif; ?>
                                 </td>
                                 <td><?= htmlspecialchars($row['numero_item'] ?? '-') ?></td>
                                 <td><code><?= htmlspecialchars($row['codigo_barcode'] ?? '-') ?></code></td>

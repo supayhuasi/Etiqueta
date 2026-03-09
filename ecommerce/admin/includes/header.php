@@ -310,6 +310,8 @@ $notificaciones_tardanzas = [];
 $notificaciones_tardanzas_total = 0;
 $notificaciones_sin_tareas = [];
 $notificaciones_sin_tareas_total = 0;
+$notificaciones_tareas_vencidas = [];
+$notificaciones_tareas_vencidas_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_total = 0;
@@ -413,6 +415,46 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         $notificaciones_atrasos_clientes_texto .= ' y ' . (count($clientes_lista) - 4) . ' más';
                     }
                 }
+            }
+        }
+
+        if (
+            $notificaciones_permiso_admin
+            &&
+            admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
+            && admin_table_exists($pdo, 'usuarios')
+            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'usuario_id')
+            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'titulo')
+            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'estado')
+            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_limite')
+        ) {
+            $sql_tareas_vencidas_count = "
+                SELECT COUNT(*)
+                FROM ecommerce_tareas_usuarios t
+                WHERE t.fecha_limite IS NOT NULL
+                  AND t.fecha_limite < CURDATE()
+                  AND LOWER(COALESCE(t.estado, '')) IN ('pendiente', 'en_progreso')
+            ";
+            $notificaciones_tareas_vencidas_total = (int)$pdo->query($sql_tareas_vencidas_count)->fetchColumn();
+
+            if ($notificaciones_tareas_vencidas_total > 0) {
+                $sql_tareas_vencidas = "
+                    SELECT
+                        t.id,
+                        t.titulo,
+                        t.estado,
+                        t.fecha_limite,
+                        DATEDIFF(CURDATE(), t.fecha_limite) AS dias_atraso,
+                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre
+                    FROM ecommerce_tareas_usuarios t
+                    LEFT JOIN usuarios u ON u.id = t.usuario_id
+                    WHERE t.fecha_limite IS NOT NULL
+                      AND t.fecha_limite < CURDATE()
+                      AND LOWER(COALESCE(t.estado, '')) IN ('pendiente', 'en_progreso')
+                    ORDER BY t.fecha_limite ASC
+                    LIMIT 8
+                ";
+                $notificaciones_tareas_vencidas = $pdo->query($sql_tareas_vencidas)->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
         }
 
@@ -524,6 +566,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         $notificaciones_total = (int)$notificaciones_atrasos_total;
         if ($notificaciones_permiso_admin) {
             $notificaciones_total +=
+                (int)$notificaciones_tareas_vencidas_total
+                +
                 (int)$notificaciones_tardanzas_total
                 + (int)$notificaciones_sin_tareas_total
                 + (int)$notificaciones_mensajes_total;
@@ -541,6 +585,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             $notificaciones_sin_tareas = [];
             $notificaciones_sin_tareas_total = 0;
         }
+        if (!is_array($notificaciones_tareas_vencidas)) {
+            $notificaciones_tareas_vencidas = [];
+            $notificaciones_tareas_vencidas_total = 0;
+        }
         if (!is_array($notificaciones_mensajes)) {
             $notificaciones_mensajes = [];
             $notificaciones_mensajes_total = 0;
@@ -549,6 +597,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         $notificaciones_total = (int)$notificaciones_atrasos_total;
         if ($notificaciones_permiso_admin) {
             $notificaciones_total +=
+                (int)$notificaciones_tareas_vencidas_total
+                +
                 (int)$notificaciones_tardanzas_total
                 + (int)$notificaciones_sin_tareas_total
                 + (int)$notificaciones_mensajes_total;
@@ -930,6 +980,21 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>ordenes_produccion.php">Ver órdenes de producción</a>
                         <?php endif; ?>
 
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
+                            <div class="notif-section-title">Tareas manuales vencidas (<?= (int)$notificaciones_tareas_vencidas_total ?>)</div>
+                            <?php foreach ($notificaciones_tareas_vencidas as $tarea): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
+                                    <div class="fw-semibold"><?= htmlspecialchars($tarea['titulo'] ?? 'Tarea manual') ?></div>
+                                    <div class="small text-muted">Usuario: <?= htmlspecialchars($tarea['usuario_nombre'] ?? 'Sin asignar') ?></div>
+                                    <div class="small text-danger">
+                                        Venció el <?= !empty($tarea['fecha_limite']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$tarea['fecha_limite']))) : '-' ?>
+                                        · <?= max(1, (int)($tarea['dias_atraso'] ?? 0)) ?> día(s) de atraso
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">Ver tareas por usuario</a>
+                        <?php endif; ?>
+
                         <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
                             <div class="notif-section-title">Llegadas tarde hoy (<?= (int)$notificaciones_tardanzas_total ?>)</div>
                             <?php foreach ($notificaciones_tardanzas as $tarde): ?>
@@ -972,7 +1037,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     </div>
 </div>
 
-<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
+<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
         <?php if ($notificaciones_atrasos_total > 0): ?>
@@ -981,11 +1046,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 · Clientes: <?= htmlspecialchars($notificaciones_atrasos_clientes_texto) ?>
             <?php endif; ?>
         <?php endif; ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
+            <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tareas_vencidas_total ?> tarea(s) manual(es) vencida(s)
+        <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
-            <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
+            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0): ?>
-            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
+            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
         <?php endif; ?>
     </div>
 <?php endif; ?>
