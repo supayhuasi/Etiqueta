@@ -312,9 +312,14 @@ $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_total = 0;
 
-if ($role === 'admin') {
+$notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes_produccion');
+$notificaciones_permiso_admin = ($role === 'admin');
+
+if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     try {
         if (
+            $notificaciones_permiso_produccion
+            &&
             admin_table_exists($pdo, 'ecommerce_ordenes_produccion')
             && admin_table_exists($pdo, 'ecommerce_pedidos')
             && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'pedido_id')
@@ -357,6 +362,8 @@ if ($role === 'admin') {
         }
 
         if (
+            $notificaciones_permiso_admin
+            &&
             admin_table_exists($pdo, 'asistencias')
             && admin_table_exists($pdo, 'empleados')
             && admin_column_exists($pdo, 'asistencias', 'empleado_id')
@@ -390,6 +397,8 @@ if ($role === 'admin') {
         }
 
         if (
+            $notificaciones_permiso_admin
+            &&
             admin_table_exists($pdo, 'usuarios')
             && admin_table_exists($pdo, 'roles')
             && admin_table_exists($pdo, 'ecommerce_produccion_items_barcode')
@@ -437,6 +446,8 @@ if ($role === 'admin') {
         }
 
         if (
+            $notificaciones_permiso_admin
+            &&
             admin_table_exists($pdo, 'ecommerce_admin_mensajes')
             && isset($_SESSION['user']['id'])
             && is_numeric($_SESSION['user']['id'])
@@ -454,11 +465,13 @@ if ($role === 'admin') {
             }
         }
 
-        $notificaciones_total =
-            (int)$notificaciones_atrasos_total
-            + (int)$notificaciones_tardanzas_total
-            + (int)$notificaciones_sin_tareas_total
-            + (int)$notificaciones_mensajes_total;
+        $notificaciones_total = (int)$notificaciones_atrasos_total;
+        if ($notificaciones_permiso_admin) {
+            $notificaciones_total +=
+                (int)$notificaciones_tardanzas_total
+                + (int)$notificaciones_sin_tareas_total
+                + (int)$notificaciones_mensajes_total;
+        }
     } catch (Throwable $e) {
         $notificaciones_atrasos = [];
         $notificaciones_atrasos_total = 0;
@@ -798,7 +811,7 @@ if ($role === 'admin') {
 <div class="top-navbar">
     <h5 style="margin: 0; color: #007bff;"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
     <div class="top-navbar-right">
-        <?php if ($role === 'admin'): ?>
+        <?php if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin): ?>
             <div class="dropdown">
                 <button class="btn btn-outline-danger btn-sm notif-btn" type="button" data-bs-toggle="dropdown" aria-label="Notificaciones">
                     <i class="bi bi-bell"></i>
@@ -811,7 +824,7 @@ if ($role === 'admin') {
                     <?php if ($notificaciones_total <= 0): ?>
                         <div class="notif-empty">No hay notificaciones nuevas en este momento.</div>
                     <?php else: ?>
-                        <?php if ($notificaciones_mensajes_total > 0): ?>
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_mensajes_total > 0): ?>
                             <div class="notif-section-title">Mensajes sin leer (<?= (int)$notificaciones_mensajes_total ?>)</div>
                             <?php foreach ($notificaciones_mensajes as $msg): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>admin_mensajes.php?leer=<?= (int)$msg['id'] ?>">
@@ -840,7 +853,7 @@ if ($role === 'admin') {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>ordenes_produccion.php">Ver órdenes de producción</a>
                         <?php endif; ?>
 
-                        <?php if ($notificaciones_tardanzas_total > 0): ?>
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
                             <div class="notif-section-title">Llegadas tarde hoy (<?= (int)$notificaciones_tardanzas_total ?>)</div>
                             <?php foreach ($notificaciones_tardanzas as $tarde): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>asistencias/asistencias.php">
@@ -851,7 +864,7 @@ if ($role === 'admin') {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>asistencias/asistencias.php">Ver asistencias</a>
                         <?php endif; ?>
 
-                        <?php if ($notificaciones_sin_tareas_total > 0): ?>
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0): ?>
                             <div class="notif-section-title">Sin tareas activas (<?= (int)$notificaciones_sin_tareas_total ?>)</div>
                             <?php foreach ($notificaciones_sin_tareas as $idle): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
@@ -882,16 +895,16 @@ if ($role === 'admin') {
     </div>
 </div>
 
-<?php if ($role === 'admin' && ($notificaciones_atrasos_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0)): ?>
+<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
         <?php if ($notificaciones_atrasos_total > 0): ?>
             <?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
         <?php endif; ?>
-        <?php if ($notificaciones_tardanzas_total > 0): ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
             <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
         <?php endif; ?>
-        <?php if ($notificaciones_sin_tareas_total > 0): ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0): ?>
             <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
         <?php endif; ?>
     </div>

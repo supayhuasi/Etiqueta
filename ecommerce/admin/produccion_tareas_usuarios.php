@@ -50,6 +50,15 @@ if ($fecha_desde !== '' && $fecha_hasta !== '' && $fecha_desde > $fecha_hasta) {
 $stmt = $pdo->query("SELECT id, nombre FROM usuarios WHERE activo = 1 ORDER BY nombre ASC");
 $usuarios_filtro = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$col_fecha_cotizacion_actividad = null;
+if (admin_table_exists($pdo, 'ecommerce_cotizaciones')) {
+    if (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')) {
+        $col_fecha_cotizacion_actividad = 'fecha_creacion';
+    } elseif (admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_actualizacion')) {
+        $col_fecha_cotizacion_actividad = 'fecha_actualizacion';
+    }
+}
+
 $where_latest_sub = [];
 $params_latest_sub = [];
 $where_latest_outer = [];
@@ -83,13 +92,17 @@ if ($fecha_hasta !== '') {
 $sql_actividad = "SELECT
     u.id AS usuario_id,
     u.nombre AS usuario_nombre,
+    'produccion' AS origen_tarea,
     s.etapa,
     s.created_at,
     pib.estado AS estado_item,
     pib.numero_item,
     pib.codigo_barcode,
     pr.nombre AS producto_nombre,
-    p.numero_pedido
+    p.numero_pedido,
+    NULL AS numero_cotizacion,
+    NULL AS cotizacion_estado,
+    NULL AS cotizacion_total
 FROM ecommerce_produccion_scans s
 JOIN (
     SELECT usuario_id, MAX(id) AS max_id
@@ -118,6 +131,82 @@ $sql_actividad .= " ORDER BY s.created_at DESC";
 $stmt = $pdo->prepare($sql_actividad);
 $stmt->execute(array_merge($params_latest_sub, $params_latest_outer));
 $actividad_actual = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')) {
+    $where_cot_latest = ["c.creado_por IS NOT NULL"];
+    $params_cot_latest = [];
+
+    if ($usuario_id_filtro > 0) {
+        $where_cot_latest[] = "u.id = ?";
+        $params_cot_latest[] = $usuario_id_filtro;
+    }
+    if ($fecha_desde !== '') {
+        $where_cot_latest[] = "c.`{$col_fecha_cotizacion_actividad}` >= ?";
+        $params_cot_latest[] = $fecha_desde . ' 00:00:00';
+    }
+    if ($fecha_hasta !== '') {
+        $where_cot_latest[] = "c.`{$col_fecha_cotizacion_actividad}` <= ?";
+        $params_cot_latest[] = $fecha_hasta . ' 23:59:59';
+    }
+
+    $sql_cot_latest = "SELECT
+        u.id AS usuario_id,
+        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre,
+        'cotizacion' AS origen_tarea,
+        'cotizacion' AS etapa,
+        c.`{$col_fecha_cotizacion_actividad}` AS created_at,
+        NULL AS estado_item,
+        NULL AS numero_item,
+        NULL AS codigo_barcode,
+        NULL AS producto_nombre,
+        NULL AS numero_pedido,
+        c.numero_cotizacion,
+        c.estado AS cotizacion_estado,
+        c.total AS cotizacion_total
+    FROM ecommerce_cotizaciones c
+    INNER JOIN usuarios u ON u.id = c.creado_por
+    INNER JOIN (
+        SELECT creado_por, MAX(id) AS max_id
+        FROM ecommerce_cotizaciones
+        WHERE creado_por IS NOT NULL
+        GROUP BY creado_por
+    ) ultc ON ultc.max_id = c.id
+    WHERE " . implode(' AND ', $where_cot_latest) . "
+    ORDER BY c.`{$col_fecha_cotizacion_actividad}` DESC";
+
+    $stmt = $pdo->prepare($sql_cot_latest);
+    $stmt->execute($params_cot_latest);
+    $actividad_cotizaciones_reciente = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $actividad_indexada = [];
+    foreach ($actividad_actual as $row) {
+        $uid = (int)($row['usuario_id'] ?? 0);
+        if ($uid <= 0) {
+            continue;
+        }
+        $actividad_indexada[$uid] = $row;
+    }
+
+    foreach ($actividad_cotizaciones_reciente as $row) {
+        $uid = (int)($row['usuario_id'] ?? 0);
+        if ($uid <= 0) {
+            continue;
+        }
+        $actual = $actividad_indexada[$uid] ?? null;
+        $fecha_nueva = !empty($row['created_at']) ? strtotime((string)$row['created_at']) : 0;
+        $fecha_actual = ($actual && !empty($actual['created_at'])) ? strtotime((string)$actual['created_at']) : 0;
+        if (!$actual || $fecha_nueva >= $fecha_actual) {
+            $actividad_indexada[$uid] = $row;
+        }
+    }
+
+    $actividad_actual = array_values($actividad_indexada);
+    usort($actividad_actual, static function (array $a, array $b): int {
+        $ta = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
+        $tb = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
+        return $tb <=> $ta;
+    });
+}
 
 $where_resumen = [];
 $params_resumen = [];
@@ -219,6 +308,60 @@ try {
     }
 } catch (Throwable $e) {
     $resumen_vendedores_hoy = [];
+}
+
+$actividad_cotizaciones = [];
+try {
+    if (
+        admin_table_exists($pdo, 'ecommerce_cotizaciones')
+        && admin_table_exists($pdo, 'usuarios')
+        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'creado_por')
+    ) {
+        $col_fecha_cot = admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+            ? 'fecha_creacion'
+            : (
+                admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_actualizacion')
+                    ? 'fecha_actualizacion'
+                    : null
+            );
+
+        if ($col_fecha_cot) {
+            $where_cot = ["c.creado_por IS NOT NULL"];
+            $params_cot = [];
+
+            if ($usuario_id_filtro > 0) {
+                $where_cot[] = "u.id = ?";
+                $params_cot[] = $usuario_id_filtro;
+            }
+            if ($fecha_desde !== '') {
+                $where_cot[] = "c.`{$col_fecha_cot}` >= ?";
+                $params_cot[] = $fecha_desde . ' 00:00:00';
+            }
+            if ($fecha_hasta !== '') {
+                $where_cot[] = "c.`{$col_fecha_cot}` <= ?";
+                $params_cot[] = $fecha_hasta . ' 23:59:59';
+            }
+
+            $sql_cotizaciones = "SELECT
+                c.id,
+                c.numero_cotizacion,
+                c.estado,
+                c.total,
+                c.`{$col_fecha_cot}` AS fecha_cotizacion,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS usuario_nombre
+            FROM ecommerce_cotizaciones c
+            INNER JOIN usuarios u ON u.id = c.creado_por
+            WHERE " . implode(' AND ', $where_cot) . "
+            ORDER BY c.`{$col_fecha_cot}` DESC
+            LIMIT 80";
+
+            $stmt = $pdo->prepare($sql_cotizaciones);
+            $stmt->execute($params_cot);
+            $actividad_cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (Throwable $e) {
+    $actividad_cotizaciones = [];
 }
 
 $where_informe = [];
@@ -393,14 +536,29 @@ function format_minutos(?float $minutos): string {
                                         if ($row['etapa'] === 'corte') $badge = 'danger';
                                         if ($row['etapa'] === 'armado') $badge = 'warning text-dark';
                                         if ($row['etapa'] === 'terminado') $badge = 'success';
+                                        if (($row['origen_tarea'] ?? '') === 'cotizacion') $badge = 'info';
                                     ?>
                                     <span class="badge bg-<?= $badge ?>"><?= strtoupper(htmlspecialchars($row['etapa'])) ?></span>
                                 </td>
-                                <td><?= htmlspecialchars($row['producto_nombre'] ?? '-') ?></td>
-                                <td><?= htmlspecialchars($row['numero_pedido'] ?? '-') ?></td>
+                                <td>
+                                    <?= ($row['origen_tarea'] ?? '') === 'cotizacion'
+                                        ? 'Cotización comercial'
+                                        : htmlspecialchars($row['producto_nombre'] ?? '-') ?>
+                                </td>
+                                <td>
+                                    <?= ($row['origen_tarea'] ?? '') === 'cotizacion'
+                                        ? htmlspecialchars($row['numero_cotizacion'] ?? '-')
+                                        : htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                </td>
                                 <td><?= htmlspecialchars($row['numero_item'] ?? '-') ?></td>
                                 <td><code><?= htmlspecialchars($row['codigo_barcode'] ?? '-') ?></code></td>
-                                <td><?= htmlspecialchars(strtoupper(str_replace('_', ' ', (string)($row['estado_item'] ?? '-')))) ?></td>
+                                <td>
+                                    <?php if (($row['origen_tarea'] ?? '') === 'cotizacion'): ?>
+                                        <?= htmlspecialchars(strtoupper((string)($row['cotizacion_estado'] ?? '-'))) ?>
+                                    <?php else: ?>
+                                        <?= htmlspecialchars(strtoupper(str_replace('_', ' ', (string)($row['estado_item'] ?? '-')))) ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= !empty($row['created_at']) ? date('d/m/Y H:i:s', strtotime($row['created_at'])) : '-' ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -470,6 +628,54 @@ function format_minutos(?float $minutos): string {
                                 <td><strong><?= htmlspecialchars($row['usuario_nombre']) ?></strong></td>
                                 <td><?= (int)$row['cotizaciones_hoy'] ?></td>
                                 <td><strong><?= (int)$row['pedidos_cerrados_hoy'] ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0">Actividad de cotizaciones por usuario</h5>
+    </div>
+    <div class="card-body">
+        <?php if (empty($actividad_cotizaciones)): ?>
+            <div class="alert alert-info mb-0">No hay cotizaciones en el rango seleccionado.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>N° Cotización</th>
+                            <th>Estado</th>
+                            <th>Total</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($actividad_cotizaciones as $row): ?>
+                            <?php
+                                $badge = 'secondary';
+                                if (($row['estado'] ?? '') === 'pendiente') $badge = 'warning text-dark';
+                                if (($row['estado'] ?? '') === 'enviada') $badge = 'info';
+                                if (($row['estado'] ?? '') === 'aceptada') $badge = 'success';
+                                if (($row['estado'] ?? '') === 'rechazada') $badge = 'danger';
+                                if (($row['estado'] ?? '') === 'convertida') $badge = 'primary';
+                            ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($row['usuario_nombre']) ?></strong></td>
+                                <td>
+                                    <a href="cotizacion_detalle.php?id=<?= (int)$row['id'] ?>" class="text-decoration-none fw-semibold">
+                                        <?= htmlspecialchars($row['numero_cotizacion'] ?? ('COT-' . (int)$row['id'])) ?>
+                                    </a>
+                                </td>
+                                <td><span class="badge bg-<?= $badge ?>"><?= strtoupper(htmlspecialchars((string)($row['estado'] ?? '-'))) ?></span></td>
+                                <td>$<?= number_format((float)($row['total'] ?? 0), 2, ',', '.') ?></td>
+                                <td><?= !empty($row['fecha_cotizacion']) ? date('d/m/Y H:i', strtotime((string)$row['fecha_cotizacion'])) : '-' ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
