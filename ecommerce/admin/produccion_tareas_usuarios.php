@@ -261,17 +261,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->query("SELECT id, nombre FROM usuarios WHERE activo = 1 ORDER BY nombre ASC");
 $usuarios_filtro = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$cols_cotizaciones = admin_table_exists($pdo, 'ecommerce_cotizaciones')
-    ? admin_get_table_columns($pdo, 'ecommerce_cotizaciones')
+$tabla_cotizaciones = admin_table_exists($pdo, 'ecommerce_cotizaciones')
+    ? 'ecommerce_cotizaciones'
+    : (admin_table_exists($pdo, 'cotizaciones') ? 'cotizaciones' : null);
+
+$cols_cotizaciones = $tabla_cotizaciones !== null
+    ? admin_get_table_columns($pdo, $tabla_cotizaciones)
     : [];
 
 $col_usuario_cotizacion = admin_pick_column($cols_cotizaciones, ['creado_por', 'usuario_id', 'id_usuario', 'vendedor_id', 'id_vendedor', 'user_id', 'usuario', 'vendedor']);
+$col_id_cotizacion = admin_pick_column($cols_cotizaciones, ['id', 'id_cotizacion', 'cotizacion_id']);
 
 $col_fecha_cotizacion_actividad = null;
 $col_fecha_cotizacion_actividad = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
 $col_numero_cotizacion = admin_pick_column($cols_cotizaciones, ['numero_cotizacion', 'numero', 'nro_cotizacion', 'codigo']);
 $col_estado_cotizacion = admin_pick_column($cols_cotizaciones, ['estado', 'status', 'situacion']);
 $col_total_cotizacion = admin_pick_column($cols_cotizaciones, ['total', 'monto_total', 'importe_total', 'monto', 'precio_total']);
+$expr_id_cotizacion = $col_id_cotizacion ? "c.`{$col_id_cotizacion}`" : "0";
+$expr_numero_cotizacion = $col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', {$expr_id_cotizacion})";
+$expr_estado_cotizacion = $col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'";
+$expr_total_cotizacion = $col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0";
+$order_cotizacion_default = $col_id_cotizacion
+    ? "c.`{$col_id_cotizacion}` DESC"
+    : ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}` DESC" : "1 DESC");
 
 $where_latest_sub = [];
 $params_latest_sub = [];
@@ -438,7 +450,7 @@ if (!empty($actividad_tareas_manuales)) {
     });
 }
 
-if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usuario_cotizacion !== null) {
+if ($etapa_filtro === '' && $tabla_cotizaciones !== null && $col_fecha_cotizacion_actividad !== null && $col_usuario_cotizacion !== null) {
     $where_cot_latest = ["c.`{$col_usuario_cotizacion}` IS NOT NULL"];
     $params_cot_latest = [];
 
@@ -466,19 +478,14 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
         NULL AS numero_pedido,
-        " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
-        " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS cotizacion_estado,
-        " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS cotizacion_total
-    FROM ecommerce_cotizaciones c
+        {$expr_numero_cotizacion} AS numero_cotizacion,
+        {$expr_estado_cotizacion} AS cotizacion_estado,
+        {$expr_total_cotizacion} AS cotizacion_total
+    FROM `{$tabla_cotizaciones}` c
     LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`
-    INNER JOIN (
-        SELECT `{$col_usuario_cotizacion}` AS usuario_ref, MAX(id) AS max_id
-        FROM ecommerce_cotizaciones
-        WHERE `{$col_usuario_cotizacion}` IS NOT NULL
-        GROUP BY `{$col_usuario_cotizacion}`
-    ) ultc ON ultc.max_id = c.id
     WHERE " . implode(' AND ', $where_cot_latest) . "
-    ORDER BY c.`{$col_fecha_cotizacion_actividad}` DESC";
+    ORDER BY c.`{$col_fecha_cotizacion_actividad}` DESC
+    LIMIT 500";
 
     $stmt = $pdo->prepare($sql_cot_latest);
     $stmt->execute($params_cot_latest);
@@ -498,6 +505,9 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
         if ($uid <= 0) {
             continue;
         }
+        if (isset($actividad_indexada[$uid])) {
+            continue;
+        }
         $actual = $actividad_indexada[$uid] ?? null;
         $fecha_nueva = !empty($row['created_at']) ? strtotime((string)$row['created_at']) : 0;
         $fecha_actual = ($actual && !empty($actual['created_at'])) ? strtotime((string)$actual['created_at']) : 0;
@@ -514,7 +524,7 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
     });
 }
 
-if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usuario_cotizacion === null) {
+if ($etapa_filtro === '' && $tabla_cotizaciones !== null && $col_fecha_cotizacion_actividad !== null && $col_usuario_cotizacion === null) {
     $where_cot_latest = ["1=1"];
     $params_cot_latest = [];
 
@@ -538,10 +548,10 @@ if ($etapa_filtro === '' && $col_fecha_cotizacion_actividad !== null && $col_usu
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
         NULL AS numero_pedido,
-        " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
-        " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS cotizacion_estado,
-        " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS cotizacion_total
-    FROM ecommerce_cotizaciones c
+        {$expr_numero_cotizacion} AS numero_cotizacion,
+        {$expr_estado_cotizacion} AS cotizacion_estado,
+        {$expr_total_cotizacion} AS cotizacion_total
+    FROM `{$tabla_cotizaciones}` c
     WHERE " . implode(' AND ', $where_cot_latest) . "
     ORDER BY c.`{$col_fecha_cotizacion_actividad}` DESC
     LIMIT 1";
@@ -603,7 +613,7 @@ $resumen_vendedores_hoy = [];
 try {
     $resumen_indexado = [];
 
-    if (admin_table_exists($pdo, 'ecommerce_cotizaciones')) {
+    if ($tabla_cotizaciones !== null) {
         $col_fecha_cotizacion = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
         $col_fecha_cierre = admin_pick_column($cols_cotizaciones, ['fecha_actualizacion', 'fecha_envio', 'fecha_cierre']) ?: $col_fecha_cotizacion;
 
@@ -645,7 +655,7 @@ try {
                      AND c.`{$col_fecha_cierre}` IS NOT NULL
                      AND DATE(c.`{$col_fecha_cierre}`) = CURDATE()
                     THEN 1 ELSE 0 END) AS pedidos_cerrados_hoy
-            FROM ecommerce_cotizaciones c
+                FROM `{$tabla_cotizaciones}` c
                     {$join_usuario}
             WHERE " . implode(' AND ', $where_cot_hoy) . "
                     {$group_usuario}";
@@ -665,6 +675,55 @@ try {
                     'cotizaciones_hoy' => (int)($row['cotizaciones_hoy'] ?? 0),
                     'pedidos_hoy' => 0,
                     'pedidos_cerrados_hoy' => (int)($row['pedidos_cerrados_hoy'] ?? 0),
+                ];
+            }
+        } else {
+            $where_cot_total = ["1=1"];
+            $params_cot_total = [];
+
+            if ($col_usuario_cotizacion !== null && $usuario_id_filtro > 0) {
+                $where_cot_total[] = "c.`{$col_usuario_cotizacion}` = ?";
+                $params_cot_total[] = $usuario_id_filtro;
+            } elseif ($col_usuario_cotizacion === null && $usuario_id_filtro > 0) {
+                $where_cot_total[] = "1=0";
+            }
+
+            $usuario_id_expr = $col_usuario_cotizacion !== null ? "c.`{$col_usuario_cotizacion}`" : "0";
+            $usuario_nombre_expr = $col_usuario_cotizacion !== null
+                ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_cotizacion}`, ' (sin registro)'))"
+                : "'Sin vendedor asignado'";
+            $join_usuario = $col_usuario_cotizacion !== null
+                ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`"
+                : "";
+            $group_usuario = $col_usuario_cotizacion !== null
+                ? "GROUP BY c.`{$col_usuario_cotizacion}`, u.nombre, u.usuario"
+                : "GROUP BY usuario_id, usuario_nombre";
+
+            $sql_cot_total = "SELECT
+                {$usuario_id_expr} AS usuario_id,
+                {$usuario_nombre_expr} AS usuario_nombre,
+                COUNT(*) AS cotizaciones_hoy,
+                0 AS pedidos_cerrados_hoy
+            FROM `{$tabla_cotizaciones}` c
+                    {$join_usuario}
+            WHERE " . implode(' AND ', $where_cot_total) . "
+                    {$group_usuario}";
+
+            $stmt = $pdo->prepare($sql_cot_total);
+            $stmt->execute($params_cot_total);
+            $rows_cot_total = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($rows_cot_total as $row) {
+                $uid = isset($row['usuario_id']) ? (string)$row['usuario_id'] : '0';
+                if ($uid === '' || strtolower($uid) === 'null') {
+                    $uid = '0';
+                }
+                $resumen_indexado[$uid] = [
+                    'usuario_id' => $uid,
+                    'usuario_nombre' => $row['usuario_nombre'] ?? ($uid === '0' ? 'Sin vendedor asignado' : ('Usuario #' . $uid)),
+                    'cotizaciones_hoy' => (int)($row['cotizaciones_hoy'] ?? 0),
+                    'pedidos_hoy' => 0,
+                    'pedidos_cerrados_hoy' => 0,
                 ];
             }
         }
@@ -763,9 +822,7 @@ try {
 
 $actividad_cotizaciones = [];
 try {
-    if (
-        admin_table_exists($pdo, 'ecommerce_cotizaciones')
-    ) {
+    if ($tabla_cotizaciones !== null) {
         $col_fecha_cot = admin_pick_column($cols_cotizaciones, ['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'fecha_actualizacion', 'created_on', 'alta']);
 
         if ($col_fecha_cot) {
@@ -788,17 +845,17 @@ try {
             }
 
             $sql_cotizaciones = "SELECT
-                c.id,
-                " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
-                " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS estado,
-                " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS total,
+                {$expr_id_cotizacion} AS id,
+                {$expr_numero_cotizacion} AS numero_cotizacion,
+                {$expr_estado_cotizacion} AS estado,
+                {$expr_total_cotizacion} AS total,
                 c.`{$col_fecha_cot}` AS fecha_cotizacion,
                 " . (
                     $col_usuario_cotizacion !== null
                         ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_cotizacion}`, ' (sin registro)'))"
                         : "'Sin vendedor asignado'"
                 ) . " AS usuario_nombre
-            FROM ecommerce_cotizaciones c
+            FROM `{$tabla_cotizaciones}` c
             " . (
                 $col_usuario_cotizacion !== null
                     ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`"
@@ -823,24 +880,24 @@ try {
             }
 
             $sql_cotizaciones = "SELECT
-                c.id,
-                " . ($col_numero_cotizacion ? "c.`{$col_numero_cotizacion}`" : "CONCAT('COT-', c.id)") . " AS numero_cotizacion,
-                " . ($col_estado_cotizacion ? "c.`{$col_estado_cotizacion}`" : "'pendiente'") . " AS estado,
-                " . ($col_total_cotizacion ? "c.`{$col_total_cotizacion}`" : "0") . " AS total,
+                {$expr_id_cotizacion} AS id,
+                {$expr_numero_cotizacion} AS numero_cotizacion,
+                {$expr_estado_cotizacion} AS estado,
+                {$expr_total_cotizacion} AS total,
                 NULL AS fecha_cotizacion,
                 " . (
                     $col_usuario_cotizacion !== null
                         ? "COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u.usuario), ''), CONCAT('Usuario #', c.`{$col_usuario_cotizacion}`, ' (sin registro)'))"
                         : "'Sin vendedor asignado'"
                 ) . " AS usuario_nombre
-            FROM ecommerce_cotizaciones c
+            FROM `{$tabla_cotizaciones}` c
             " . (
                 $col_usuario_cotizacion !== null
                     ? "LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`"
                     : ""
             ) . "
             WHERE " . implode(' AND ', $where_cot) . "
-            ORDER BY c.id DESC
+            ORDER BY {$order_cotizacion_default}
             LIMIT 80";
 
             $stmt = $pdo->prepare($sql_cotizaciones);
@@ -1524,9 +1581,13 @@ function format_minutos(?float $minutos): string {
                             <tr>
                                 <td><strong><?= htmlspecialchars($row['usuario_nombre']) ?></strong></td>
                                 <td>
-                                    <a href="cotizacion_detalle.php?id=<?= (int)$row['id'] ?>" class="text-decoration-none fw-semibold">
-                                        <?= htmlspecialchars($row['numero_cotizacion'] ?? ('COT-' . (int)$row['id'])) ?>
-                                    </a>
+                                    <?php if ((int)($row['id'] ?? 0) > 0): ?>
+                                        <a href="cotizacion_detalle.php?id=<?= (int)$row['id'] ?>" class="text-decoration-none fw-semibold">
+                                            <?= htmlspecialchars($row['numero_cotizacion'] ?? ('COT-' . (int)$row['id'])) ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="fw-semibold"><?= htmlspecialchars($row['numero_cotizacion'] ?? '-') ?></span>
+                                    <?php endif; ?>
                                 </td>
                                 <td><span class="badge bg-<?= $badge ?>"><?= strtoupper(htmlspecialchars((string)($row['estado'] ?? '-'))) ?></span></td>
                                 <td>$<?= number_format((float)($row['total'] ?? 0), 2, ',', '.') ?></td>
