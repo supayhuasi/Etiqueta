@@ -1073,6 +1073,154 @@ try {
     // mantener los datos previos si falla el recálculo del día
 }
 
+// Forzado final: usar lógica tipo cotizaciones.php (c.*) y calcular por PHP
+try {
+    if ($tabla_cotizaciones !== null) {
+        $fecha_objetivo_forzada = $fecha_desde !== '' ? $fecha_desde : date('Y-m-d');
+
+        $sql_forzada = "SELECT c.*";
+        if ($col_usuario_cotizacion !== null) {
+            $sql_forzada .= ", COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS vendedor_nombre";
+        }
+        $sql_forzada .= " FROM `{$tabla_cotizaciones}` c";
+        if ($col_usuario_cotizacion !== null) {
+            $sql_forzada .= " LEFT JOIN usuarios u ON u.id = c.`{$col_usuario_cotizacion}`";
+        }
+        $sql_forzada .= " ORDER BY " . ($col_fecha_cotizacion_actividad !== null ? "c.`{$col_fecha_cotizacion_actividad}` DESC" : $order_cotizacion_default) . " LIMIT 500";
+
+        $rows_forzadas = [];
+        try {
+            $stmt = $pdo->query($sql_forzada);
+            $rows_forzadas = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        } catch (Throwable $e) {
+            $rows_forzadas = [];
+        }
+
+        if (!empty($rows_forzadas)) {
+            $resumen_forzado = [];
+            $detalle_forzado = [];
+
+            foreach ($rows_forzadas as $row) {
+                $fecha_cruda = null;
+                foreach (['fecha_creacion', 'fecha', 'fecha_cotizacion', 'created_at', 'created_on', 'alta', 'fecha_actualizacion'] as $candidate_fecha) {
+                    if (!empty($row[$candidate_fecha])) {
+                        $fecha_cruda = (string)$row[$candidate_fecha];
+                        break;
+                    }
+                }
+
+                $fecha_row = $fecha_cruda ? date('Y-m-d', strtotime($fecha_cruda)) : null;
+                if ($fecha_row !== $fecha_objetivo_forzada) {
+                    continue;
+                }
+
+                $uid = '0';
+                if ($col_usuario_cotizacion !== null && isset($row[$col_usuario_cotizacion])) {
+                    $uid = trim((string)$row[$col_usuario_cotizacion]);
+                    if ($uid === '' || strtolower($uid) === 'null') {
+                        $uid = '0';
+                    }
+                }
+
+                if ($usuario_id_filtro > 0 && (string)$usuario_id_filtro !== $uid) {
+                    continue;
+                }
+
+                $nombre_usuario = 'Sin vendedor asignado';
+                if (!empty($row['vendedor_nombre'])) {
+                    $nombre_usuario = (string)$row['vendedor_nombre'];
+                } elseif ($uid !== '0') {
+                    $nombre_usuario = 'Usuario #' . $uid;
+                }
+
+                if (!isset($resumen_forzado[$uid])) {
+                    $resumen_forzado[$uid] = [
+                        'usuario_id' => $uid,
+                        'usuario_nombre' => $nombre_usuario,
+                        'cotizaciones_hoy' => 0,
+                        'pedidos_hoy' => 0,
+                        'pedidos_cerrados_hoy' => 0,
+                    ];
+                }
+
+                $resumen_forzado[$uid]['cotizaciones_hoy']++;
+
+                $estado_row = '';
+                foreach (['estado', 'status', 'situacion'] as $candidate_estado) {
+                    if (isset($row[$candidate_estado])) {
+                        $estado_row = strtolower(trim((string)$row[$candidate_estado]));
+                        break;
+                    }
+                }
+                if (in_array($estado_row, ['convertida', 'aceptada', 'cerrada', 'cerrado'], true)) {
+                    $resumen_forzado[$uid]['pedidos_cerrados_hoy']++;
+                }
+
+                $id_row = 0;
+                foreach (['id', 'id_cotizacion', 'cotizacion_id'] as $candidate_id) {
+                    if (isset($row[$candidate_id]) && (int)$row[$candidate_id] > 0) {
+                        $id_row = (int)$row[$candidate_id];
+                        break;
+                    }
+                }
+
+                $numero_row = '';
+                foreach (['numero_cotizacion', 'numero', 'nro_cotizacion', 'codigo'] as $candidate_numero) {
+                    if (!empty($row[$candidate_numero])) {
+                        $numero_row = (string)$row[$candidate_numero];
+                        break;
+                    }
+                }
+                if ($numero_row === '') {
+                    $numero_row = $id_row > 0 ? ('COT-' . $id_row) : 'COT-S/N';
+                }
+
+                $total_row = 0;
+                foreach (['total', 'monto_total', 'importe_total', 'monto', 'precio_total'] as $candidate_total) {
+                    if (isset($row[$candidate_total])) {
+                        $total_row = (float)$row[$candidate_total];
+                        break;
+                    }
+                }
+
+                $detalle_forzado[] = [
+                    'id' => $id_row,
+                    'numero_cotizacion' => $numero_row,
+                    'estado' => $estado_row !== '' ? $estado_row : 'pendiente',
+                    'total' => $total_row,
+                    'fecha_cotizacion' => $fecha_cruda,
+                    'usuario_nombre' => $nombre_usuario,
+                ];
+            }
+
+            if (!empty($resumen_forzado) || !empty($detalle_forzado)) {
+                $resumen_vendedores_hoy = array_values($resumen_forzado);
+                usort($resumen_vendedores_hoy, static function (array $a, array $b): int {
+                    $cierre = ((int)($b['pedidos_cerrados_hoy'] ?? 0)) <=> ((int)($a['pedidos_cerrados_hoy'] ?? 0));
+                    if ($cierre !== 0) {
+                        return $cierre;
+                    }
+                    $cot = ((int)($b['cotizaciones_hoy'] ?? 0)) <=> ((int)($a['cotizaciones_hoy'] ?? 0));
+                    if ($cot !== 0) {
+                        return $cot;
+                    }
+                    return strcasecmp((string)($a['usuario_nombre'] ?? ''), (string)($b['usuario_nombre'] ?? ''));
+                });
+
+                usort($detalle_forzado, static function (array $a, array $b): int {
+                    $ta = !empty($a['fecha_cotizacion']) ? strtotime((string)$a['fecha_cotizacion']) : 0;
+                    $tb = !empty($b['fecha_cotizacion']) ? strtotime((string)$b['fecha_cotizacion']) : 0;
+                    return $tb <=> $ta;
+                });
+
+                $actividad_cotizaciones = $detalle_forzado;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // último fallback silencioso
+}
+
 $tareas_asignadas = [];
 try {
     $where_tareas = ["1=1"];
