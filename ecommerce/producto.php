@@ -183,11 +183,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
 
                 if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
-                    if ($opcion_id === null || !isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                    $opcion = null;
+
+                    if ($opcion_id !== null && isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                        $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+                    } else {
+                        // Fallback: algunos navegadores recuerdan el radio seleccionado,
+                        // pero no re-disparan el change del hidden attr_opcion_id.
+                        foreach ($opciones_por_atributo[(int)$attr['id']] as $op) {
+                            if (strtolower(trim((string)($op['nombre'] ?? ''))) === strtolower(trim((string)$valor))) {
+                                $opcion = $op;
+                                $opcion_id = (int)($op['id'] ?? 0);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!$opcion) {
                         $error = "Seleccioná una opción válida para '{$attr['nombre']}'";
                         break;
                     }
-                    $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+
                     $valor = (string)($opcion['nombre'] ?? $valor);
                     $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
                 }
@@ -207,11 +223,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
 
                     if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
-                        if ($opcion_id === null || !isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                        $opcion = null;
+
+                        if ($opcion_id !== null && isset($opciones_por_atributo[(int)$attr['id']][$opcion_id])) {
+                            $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+                        } else {
+                            foreach ($opciones_por_atributo[(int)$attr['id']] as $op) {
+                                if (strtolower(trim((string)($op['nombre'] ?? ''))) === strtolower(trim((string)$valor))) {
+                                    $opcion = $op;
+                                    $opcion_id = (int)($op['id'] ?? 0);
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!$opcion) {
                             $error = "Seleccioná una opción válida para '{$attr['nombre']}'";
                             break;
                         }
-                        $opcion = $opciones_por_atributo[(int)$attr['id']][$opcion_id];
+
                         $valor = (string)($opcion['nombre'] ?? $valor);
                         $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
                     }
