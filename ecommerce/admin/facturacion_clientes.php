@@ -3,9 +3,19 @@ require 'includes/header.php';
 
 $estadoPago = $_GET['estado_pago'] ?? 'todos';
 $busqueda = trim($_GET['busqueda'] ?? '');
+$orden = $_GET['orden'] ?? 'nombre';
 $estadosPermitidos = ['todos', 'por_pagar', 'sin_pagar'];
 if (!in_array($estadoPago, $estadosPermitidos, true)) {
     $estadoPago = 'todos';
+}
+
+$ordenesPermitidos = ['nombre', 'saldo_desc', 'saldo_asc'];
+if (!in_array($orden, $ordenesPermitidos, true)) {
+    $orden = 'nombre';
+}
+
+if (isset($_GET['toggle_saldo']) && $_GET['toggle_saldo'] === '1') {
+    $orden = $orden === 'saldo_desc' ? 'saldo_asc' : 'saldo_desc';
 }
 
 $whereAdicional = '';
@@ -19,6 +29,14 @@ $params = [];
 if ($busqueda !== '') {
     $whereAdicional .= ' AND (c.nombre LIKE :busqueda OR c.email LIKE :busqueda)';
     $params[':busqueda'] = '%' . $busqueda . '%';
+}
+
+$saldoExpr = '(COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0))';
+$orderBy = 'c.nombre ASC';
+if ($orden === 'saldo_desc') {
+    $orderBy = $saldoExpr . ' DESC, c.nombre ASC';
+} elseif ($orden === 'saldo_asc') {
+    $orderBy = $saldoExpr . ' ASC, c.nombre ASC';
 }
 
 $sql = "
@@ -48,7 +66,7 @@ $sql = "
     LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p_last.id
     WHERE COALESCE(ped.total_pedidos, 0) > 0
     {$whereAdicional}
-    ORDER BY c.nombre
+    ORDER BY {$orderBy}
 ";
 
 $stmt = $pdo->prepare($sql);
@@ -116,8 +134,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 >
             </div>
             <div class="col-md-4">
+                <input type="hidden" name="orden" value="<?= htmlspecialchars($orden) ?>">
                 <button type="submit" class="btn btn-primary">Filtrar</button>
                 <a href="facturacion_clientes.php" class="btn btn-outline-secondary">Limpiar</a>
+                <button type="submit" name="toggle_saldo" value="1" class="btn btn-outline-dark">
+                    Ordenar saldo pendiente: <?= $orden === 'saldo_asc' ? 'Menor a mayor' : 'Mayor a menor' ?>
+                </button>
             </div>
         </form>
 
