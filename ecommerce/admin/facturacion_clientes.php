@@ -64,10 +64,52 @@ function actualizarTotal() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('input[name="cliente_check"]').forEach(checkbox => {
-        checkbox.addEventListener('change', actualizarTotal);
+    const checksClientes = Array.from(document.querySelectorAll('input[name="cliente_check"]'));
+    const checkTodos = document.getElementById('seleccionar-todos');
+
+    function actualizarCheckTodos() {
+        if (!checkTodos) return;
+        const seleccionados = checksClientes.filter(ch => ch.checked).length;
+        checkTodos.checked = checksClientes.length > 0 && seleccionados === checksClientes.length;
+        checkTodos.indeterminate = seleccionados > 0 && seleccionados < checksClientes.length;
+    }
+
+    checksClientes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            actualizarTotal();
+            actualizarCheckTodos();
+        });
     });
+
+    if (checkTodos) {
+        checkTodos.addEventListener('change', function() {
+            checksClientes.forEach(ch => {
+                ch.checked = checkTodos.checked;
+            });
+            actualizarTotal();
+            actualizarCheckTodos();
+        });
+    }
+
+    const btnReporte = document.getElementById('btn-generar-reporte');
+    if (btnReporte) {
+        btnReporte.addEventListener('click', function() {
+            const seleccionados = Array.from(document.querySelectorAll('input[name="cliente_check"]:checked'))
+                .map(el => el.value)
+                .filter(Boolean);
+
+            if (seleccionados.length === 0) {
+                alert('Seleccioná al menos un cliente para generar el reporte.');
+                return;
+            }
+
+            document.getElementById('reporte_cliente_ids').value = seleccionados.join(',');
+            document.getElementById('form-reporte-clientes').submit();
+        });
+    }
+
     actualizarTotal();
+    actualizarCheckTodos();
 });
 </script>
 
@@ -86,18 +128,25 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </div>
                 </div>
+                <div class="col-md-6 d-flex align-items-end justify-content-md-end mt-3 mt-md-0">
+                    <form id="form-reporte-clientes" method="GET" action="facturacion_clientes_reporte.php" target="_blank" class="d-inline">
+                        <input type="hidden" name="cliente_ids" id="reporte_cliente_ids" value="">
+                        <button type="button" id="btn-generar-reporte" class="btn btn-primary">Generar reporte</button>
+                    </form>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 40px;"></th>
+                            <th style="width: 40px;"><input type="checkbox" id="seleccionar-todos" class="form-check-input" title="Seleccionar todos"></th>
                             <th>Cliente</th>
                             <th>Contacto</th>
                             <th>Pedido / Orden</th>
                             <th class="text-end">Total pedidos</th>
                             <th class="text-end">Total pagado</th>
                             <th class="text-end">Saldo</th>
+                            <th class="text-center">Acción</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -132,6 +181,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php else: ?>
                                         <span class="text-success">$<?= number_format($c['saldo'], 2, ',', '.') ?></span>
                                     <?php endif; ?></strong>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($c['saldo'] > 0 && !empty($c['ultimo_pedido_id'])): ?>
+                                        <a href="pedidos_detalle.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>#pagos" class="btn btn-sm btn-success">Pagar</a>
+                                    <?php else: ?>
+                                        <span class="text-muted small">-</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
