@@ -1,6 +1,16 @@
 <?php
 require 'includes/header.php';
 
+$mensaje = $_GET['mensaje'] ?? '';
+$mensajeTexto = '';
+if ($mensaje === 'eliminada') {
+    $mensajeTexto = 'Compra eliminada correctamente.';
+} elseif ($mensaje === 'creada') {
+    $mensajeTexto = 'Compra creada correctamente.';
+} elseif ($mensaje === 'editada') {
+    $mensajeTexto = 'Compra editada correctamente.';
+}
+
 $stmt = $pdo->query("
     SELECT c.*, p.nombre as proveedor_nombre
     FROM ecommerce_compras c
@@ -20,6 +30,10 @@ $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <div class="card">
     <div class="card-body">
+        <?php if ($mensajeTexto): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($mensajeTexto) ?></div>
+        <?php endif; ?>
+
         <?php if (empty($compras)): ?>
             <div class="alert alert-info">No hay compras registradas.</div>
         <?php else: ?>
@@ -43,6 +57,8 @@ $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td>$<?= number_format($compra['total'], 2) ?></td>
                                 <td>
                                     <a href="compras_detalle.php?id=<?= $compra['id'] ?>" class="btn btn-sm btn-primary">👁️ Ver</a>
+                                    <a href="compras_editar.php?id=<?= $compra['id'] ?>" class="btn btn-sm btn-warning">✏️ Editar</a>
+                                    <a href="compras_eliminar.php?id=<?= $compra['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar esta compra? Esta accion descontara el stock cargado por la compra.')">🗑️ Eliminar</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
