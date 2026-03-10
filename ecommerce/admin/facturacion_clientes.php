@@ -1,6 +1,44 @@
 <?php
 require 'includes/header.php';
 
+$estadoPago = $_GET['estado_pago'] ?? 'todos';
+$busqueda = trim($_GET['busqueda'] ?? '');
+$orden = $_GET['orden'] ?? 'nombre';
+$estadosPermitidos = ['todos', 'por_pagar', 'sin_pagar'];
+if (!in_array($estadoPago, $estadosPermitidos, true)) {
+    $estadoPago = 'todos';
+}
+
+$ordenesPermitidos = ['nombre', 'saldo_desc', 'saldo_asc'];
+if (!in_array($orden, $ordenesPermitidos, true)) {
+    $orden = 'nombre';
+}
+
+if (isset($_GET['toggle_saldo']) && $_GET['toggle_saldo'] === '1') {
+    $orden = $orden === 'saldo_desc' ? 'saldo_asc' : 'saldo_desc';
+}
+
+$whereAdicional = '';
+if ($estadoPago === 'por_pagar') {
+    $whereAdicional = ' AND (COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0)) > 0';
+} elseif ($estadoPago === 'sin_pagar') {
+    $whereAdicional = ' AND (COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0)) <= 0';
+}
+
+$params = [];
+if ($busqueda !== '') {
+    $whereAdicional .= ' AND (c.nombre LIKE :busqueda OR c.email LIKE :busqueda)';
+    $params[':busqueda'] = '%' . $busqueda . '%';
+}
+
+$saldoExpr = '(COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0))';
+$orderBy = 'c.nombre ASC';
+if ($orden === 'saldo_desc') {
+    $orderBy = $saldoExpr . ' DESC, c.nombre ASC';
+} elseif ($orden === 'saldo_asc') {
+    $orderBy = $saldoExpr . ' ASC, c.nombre ASC';
+}
+
 $sql = "
     SELECT c.id, c.nombre, c.email, c.telefono,
            COALESCE(ped.total_pedidos, 0) AS total_pedidos,
@@ -27,10 +65,12 @@ $sql = "
     LEFT JOIN ecommerce_pedidos p_last ON p_last.id = ped.ultimo_pedido_id
     LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p_last.id
     WHERE COALESCE(ped.total_pedidos, 0) > 0
-    ORDER BY c.nombre
+    {$whereAdicional}
+    ORDER BY {$orderBy}
 ";
 
-$stmt = $pdo->query($sql);
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -115,6 +155,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="card">
     <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end mb-3">
+            <div class="col-md-4">
+                <label for="estado_pago" class="form-label">Estado de pago</label>
+                <select name="estado_pago" id="estado_pago" class="form-select" onchange="this.form.submit()">
+                    <option value="todos" <?= $estadoPago === 'todos' ? 'selected' : '' ?>>Todos</option>
+                    <option value="por_pagar" <?= $estadoPago === 'por_pagar' ? 'selected' : '' ?>>Por pagar (saldo pendiente)</option>
+                    <option value="sin_pagar" <?= $estadoPago === 'sin_pagar' ? 'selected' : '' ?>>Sin pagar pendiente</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="busqueda" class="form-label">Buscar cliente</label>
+                <input
+                    type="text"
+                    name="busqueda"
+                    id="busqueda"
+                    class="form-control"
+                    value="<?= htmlspecialchars($busqueda) ?>"
+                    placeholder="Nombre o email"
+                >
+            </div>
+            <div class="col-md-4">
+                <input type="hidden" name="orden" value="<?= htmlspecialchars($orden) ?>">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+                <a href="facturacion_clientes.php" class="btn btn-outline-secondary">Limpiar</a>
+                <button type="submit" name="toggle_saldo" value="1" class="btn btn-outline-dark">
+                    Ordenar saldo pendiente: <?= $orden === 'saldo_asc' ? 'Menor a mayor' : 'Mayor a menor' ?>
+                </button>
+            </div>
+        </form>
+
         <?php if (empty($clientes)): ?>
             <div class="alert alert-info">No hay clientes.</div>
         <?php else: ?>

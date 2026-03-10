@@ -9,6 +9,11 @@ $estados_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 $mensaje = '';
 $error = '';
 
+$mensaje_get = trim($_GET['mensaje'] ?? '');
+if ($mensaje_get === 'editada') {
+    $mensaje = 'Visita actualizada correctamente.';
+}
+
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_visitas (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -354,6 +359,8 @@ try {
                                 </td>
                                 <td>
                                     <div class="d-flex flex-wrap gap-1">
+                                        <a href="visitas_editar.php?id=<?= (int)$visita['id'] ?>" class="btn btn-sm btn-outline-dark">Editar</a>
+
                                         <?php if ($estado !== 'pendiente'): ?>
                                             <form method="POST">
                                                 <input type="hidden" name="action" value="cambiar_estado">
