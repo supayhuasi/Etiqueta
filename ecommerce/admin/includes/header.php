@@ -124,9 +124,23 @@ if ($public_base === '') {
 
 // Verificar que esté logueado
 if (!isset($_SESSION['user'])) {
-    // Redirigir al login del admin usando la base detectada
-    header("Location: {$admin_url}auth/login.php");
-    exit;
+    // Si es AJAX, responder JSON de error
+    $is_ajax = false;
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        $is_ajax = true;
+    }
+    if (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false) {
+        $is_ajax = true;
+    }
+    if ($is_ajax) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
+        exit;
+    } else {
+        header("Location: {$admin_url}auth/login.php");
+        exit;
+    }
 }
 
 // Verificar que tenga rol válido
