@@ -142,7 +142,7 @@ $role_permissions = [
     'usuario' => [
         'dashboard',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
-        'pedidos', 'ordenes_produccion', 'instalaciones', 'visitas',
+        'pedidos', 'ordenes_produccion', 'instalaciones',
         'recordatorios',
         'clientes_web',
         'inventario',
@@ -165,7 +165,6 @@ $role_permissions = [
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
-        'visitas',
         'recordatorios',
         'cotizaciones',
         'cotizacion_clientes',
@@ -229,7 +228,8 @@ $page_permissions = [
     'instalaciones.php' => 'instalaciones',
     'instalaciones_reporte_direcciones.php' => 'instalaciones',
     'instalaciones_reporte_productos.php' => 'instalaciones',
-    'visitas.php' => 'visitas',
+    'visitas.php' => 'instalaciones',
+    'visitas_editar.php' => 'instalaciones',
     'facturacion_clientes.php' => 'facturacion_clientes',
     'clientes_web.php' => 'clientes_web',
     'cotizaciones.php' => 'cotizaciones',
@@ -278,7 +278,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
 if ($current_page === 'ventas_reportes.php' && $role !== 'admin') {
     die("Acceso denegado. No tenés permisos para esta sección.");
 }
-if (isset($page_permissions[$current_page]) && !$can_access($page_permissions[$current_page])) {
+if ($current_page === 'instalaciones.php' && !$can_access('instalaciones')) {
+    die("Acceso denegado. No tenés permisos para esta sección.");
+}
+if (isset($page_permissions[$current_page]) && !($current_page === 'instalaciones.php') && !$can_access($page_permissions[$current_page])) {
     die("Acceso denegado. No tenés permisos para esta sección.");
 }
 
@@ -1213,7 +1216,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'visitas', 'recordatorios', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -1228,10 +1231,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <a href="<?= $admin_url ?>produccion_tareas_usuarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'produccion_tareas_usuarios.php' ? 'active' : '' ?>"><i class="bi bi-person-workspace"></i> Tareas por Usuario</a>
                         <?php endif; ?>
                         <?php if ($can_access('instalaciones')): ?>
-                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones</a>
-                        <?php endif; ?>
-                        <?php if ($can_access('visitas')): ?>
-                        <a href="<?= $admin_url ?>visitas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'visitas.php' ? 'active' : '' ?>"><i class="bi bi-list-task"></i> Visitas</a>
+                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php', 'visitas.php', 'visitas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones y visitas</a>
                         <?php endif; ?>
                         <?php if ($can_access('recordatorios')): ?>
                         <a href="<?= $admin_url ?>recordatorios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'recordatorios.php' ? 'active' : '' ?>"><i class="bi bi-journal-check"></i> Recordatorios</a>
