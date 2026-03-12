@@ -249,6 +249,57 @@ $tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
 $estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($action === 'eliminar_visita') {
+            header('Content-Type: application/json; charset=utf-8');
+            $item_id = (int)($_POST['item_id'] ?? 0);
+            if (!$tiene_visitas || $item_id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para eliminar la visita']);
+                exit;
+            }
+            try {
+                $stmt = $pdo->prepare("DELETE FROM ecommerce_visitas WHERE id = ? LIMIT 1");
+                $stmt->execute([$item_id]);
+                if ($stmt->rowCount() < 1) {
+                    http_response_code(404);
+                    echo json_encode(['ok' => false, 'msg' => 'La visita no existe']);
+                    exit;
+                }
+                echo json_encode(['ok' => true, 'item_id' => $item_id]);
+                exit;
+            } catch (Exception $e) {
+                error_log('eliminar_visita: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => 'No se pudo eliminar la visita']);
+                exit;
+            }
+        }
+
+        if ($action === 'eliminar_orden') {
+            header('Content-Type: application/json; charset=utf-8');
+            $item_id = (int)($_POST['item_id'] ?? 0);
+            if (!$tablas_base_ok || $item_id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para eliminar la orden']);
+                exit;
+            }
+            try {
+                $stmt = $pdo->prepare("DELETE FROM ecommerce_ordenes_produccion WHERE id = ? LIMIT 1");
+                $stmt->execute([$item_id]);
+                if ($stmt->rowCount() < 1) {
+                    http_response_code(404);
+                    echo json_encode(['ok' => false, 'msg' => 'La orden no existe']);
+                    exit;
+                }
+                echo json_encode(['ok' => true, 'item_id' => $item_id]);
+                exit;
+            } catch (Exception $e) {
+                error_log('eliminar_orden: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => 'No se pudo eliminar la orden']);
+                exit;
+            }
+        }
     $action = $_POST['action'] ?? '';
 
     if ($action === 'crear_instalacion_manual') {
@@ -929,6 +980,7 @@ function render_tarjeta_instalacion($item) {
                 <button type="button" class="btn btn-sm btn-outline-primary inst-btn-guardar-texto">Guardar texto</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-subir" title="Subir">↑</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-bajar" title="Bajar">↓</button>
+                <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">Eliminar</button>
             </div>
         </div>
 
@@ -1650,7 +1702,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
                     method: 'POST',
                     body: fd,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
                 })
                 .then(function (r) { return r.json(); })
                 .then(function (res) {
@@ -1664,6 +1719,52 @@ document.addEventListener('DOMContentLoaded', function () {
                 })
                 .catch(function (err) {
                     alert(err.message || 'No se pudo guardar el texto');
+                });
+            });
+        }
+
+        var btnEliminar = card.querySelector('.inst-btn-eliminar');
+        if (btnEliminar) {
+            btnEliminar.addEventListener('click', function () {
+                var tipo = card.getAttribute('data-tipo');
+                var itemId = card.getAttribute('data-id');
+                if (!itemId) {
+                    alert('No hay item seleccionado para eliminar.');
+                    return;
+                }
+                if (!confirm('¿Seguro que querés eliminar este item? Esta acción no se puede deshacer.')) {
+                    return;
+                }
+                var fd = new FormData();
+                if (tipo === 'manual') {
+                    fd.append('action', 'eliminar_instalacion_manual');
+                } else if (tipo === 'visita') {
+                    fd.append('action', 'eliminar_visita');
+                } else {
+                    fd.append('action', 'eliminar_orden');
+                }
+                fd.append('item_id', itemId);
+                fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(function (r) {
+                    try { return r.json(); } catch (e) { throw new Error('Respuesta inválida del servidor'); }
+                })
+                .then(function (res) {
+                    if (!res || !res.ok) {
+                        throw new Error((res && res.msg) ? res.msg : 'No se pudo eliminar');
+                    }
+                    card.remove();
+                    actualizarBadgeColumna(card.parentNode);
+                    actualizarResumenInstalaciones();
+                })
+                .catch(function (err) {
+                    alert(err.message || 'Error al eliminar');
                 });
             });
         }
@@ -1685,7 +1786,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 parent.insertBefore(sibling, cardMover);
             }
 
-            guardarOrdenColumna(parent);
+            guardarOrdenColumna(parent, function () {
+                alert('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida.');
+            });
         }
 
         var btnSubir = card.querySelector('.inst-btn-subir');
