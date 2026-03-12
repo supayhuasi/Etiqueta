@@ -293,8 +293,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $qs = $_SERVER['QUERY_STRING'] ?? '';
-        header('Location: instalaciones.php' . ($qs ? ('?' . $qs . '&msg=' . urlencode($ok_msg)) : ('?msg=' . urlencode($ok_msg))));
+        header('Content-Type: application/json; charset=utf-8');
+        if ($ok_msg === 'Instalación manual creada correctamente.') {
+            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        }
         exit;
     }
 
@@ -344,8 +349,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $qs = $_SERVER['QUERY_STRING'] ?? '';
-        header('Location: instalaciones.php' . ($qs ? ('?' . $qs . '&msg=' . urlencode($ok_msg)) : ('?msg=' . urlencode($ok_msg))));
+        header('Content-Type: application/json; charset=utf-8');
+        if ($ok_msg === 'Visita cargada correctamente.') {
+            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        }
         exit;
     }
 
