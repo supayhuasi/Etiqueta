@@ -1394,7 +1394,10 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
             method: 'POST',
             body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
         })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -1420,10 +1423,42 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
             method: 'POST',
             body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
         })
         .then(function (r) { return r.json(); })
         .then(function (res) {
+                // AJAX para agregar visita
+                var formVisita = document.querySelector('form[action="crear_visita"]') || document.querySelector('form input[name="action"][value="crear_visita"]').closest('form');
+                if (formVisita) {
+                    formVisita.addEventListener('submit', function (e) {
+                        e.preventDefault();
+                        var fd = new FormData(formVisita);
+                        fd.append('action', 'crear_visita');
+                        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                            method: 'POST',
+                            body: fd,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            }
+                        })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (res && res.ok) {
+                                alert(res.msg || 'Visita agregada correctamente');
+                                formVisita.reset();
+                            } else {
+                                throw new Error(res && res.msg ? res.msg : 'No se pudo agregar la visita');
+                            }
+                        })
+                        .catch(function (err) {
+                            alert(err.message || 'No se pudo agregar la visita');
+                        });
+                    });
+                }
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'Error moviendo instalación');
             }
