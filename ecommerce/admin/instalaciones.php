@@ -217,6 +217,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'mover_instalacion') {
         header('Content-Type: application/json; charset=utf-8');
+        if (empty($_SESSION['user'])) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
+            exit;
+        }
 
         $tipo = $_POST['tipo'] ?? '';
         $item_id = (int)($_POST['item_id'] ?? 0);
@@ -257,6 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'editar_instalacion_manual') {
         header('Content-Type: application/json; charset=utf-8');
+        if (empty($_SESSION['user'])) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
+            exit;
+        }
 
         $item_id = (int)($_POST['item_id'] ?? 0);
         $titulo = trim($_POST['titulo'] ?? '');
@@ -319,6 +329,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'eliminar_instalacion_manual') {
         header('Content-Type: application/json; charset=utf-8');
+        if (empty($_SESSION['user'])) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
+            exit;
+        }
 
         $item_id = (int)($_POST['item_id'] ?? 0);
 
