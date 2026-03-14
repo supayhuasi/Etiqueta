@@ -78,7 +78,7 @@ if (dashboard_table_exists($pdo, 'ecommerce_pedidos')) {
 $modulos = [
     ['perm' => 'pedidos', 'titulo' => 'Pedidos', 'desc' => 'Ventas y estados de compra', 'url' => 'pedidos.php', 'icon' => 'bi-cart-check'],
     ['perm' => 'ordenes_produccion', 'titulo' => 'Producción', 'desc' => 'Órdenes y fabricación', 'url' => 'ordenes_produccion.php', 'icon' => 'bi-gear-wide-connected'],
-    ['perm' => 'instalaciones', 'titulo' => 'Instalaciones', 'desc' => 'Programación de trabajos', 'url' => 'instalaciones.php', 'icon' => 'bi-calendar-check'],
+    ['perm' => 'instalaciones', 'titulo' => 'Instalaciones y visitas', 'desc' => 'Programación y seguimiento en un solo tablero', 'url' => 'instalaciones.php', 'icon' => 'bi-calendar-check'],
     ['perm' => 'gastos', 'titulo' => 'Gastos', 'desc' => 'Control financiero diario', 'url' => 'gastos/gastos.php', 'icon' => 'bi-cash-coin'],
     ['perm' => 'cheques', 'titulo' => 'Cheques', 'desc' => 'Seguimiento y vencimientos', 'url' => 'cheques/cheques.php', 'icon' => 'bi-journal-check'],
     ['perm' => 'inventario', 'titulo' => 'Inventario', 'desc' => 'Stock y reposición', 'url' => 'inventario.php', 'icon' => 'bi-box-seam'],
@@ -259,8 +259,8 @@ $modulos = [
                 <?php if (isset($can_access) && $can_access('ordenes_produccion')): ?>
                     <a href="ordenes_produccion.php" class="btn btn-outline-secondary"><i class="bi bi-gear me-1"></i>Ver producción</a>
                 <?php endif; ?>
-                <?php if (isset($can_access) && $can_access('visitas')): ?>
-                    <a href="visitas.php" class="btn btn-outline-dark"><i class="bi bi-calendar2-week me-1"></i>Visitas pendientes (<?= number_format($visitas_pendientes) ?>)</a>
+                <?php if (isset($can_access) && $can_access('instalaciones')): ?>
+                    <a href="instalaciones.php" class="btn btn-outline-dark"><i class="bi bi-calendar2-week me-1"></i>Instalaciones y visitas (pendientes: <?= number_format($visitas_pendientes) ?>)</a>
                 <?php endif; ?>
             </div>
         </div>

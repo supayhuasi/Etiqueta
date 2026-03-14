@@ -96,6 +96,16 @@ function asegurar_estructura_minima_instalaciones($pdo) {
             $mensajes[] = 'Se agregó columna fecha_instalacion.';
         }
 
+        if (tabla_existe($pdo, 'ecommerce_ordenes_produccion') && !columna_existe($pdo, 'ecommerce_ordenes_produccion', 'notas_instalacion')) {
+            $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN notas_instalacion TEXT NULL AFTER fecha_instalacion");
+            $mensajes[] = 'Se agregó columna notas_instalacion.';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_ordenes_produccion') && !columna_existe($pdo, 'ecommerce_ordenes_produccion', 'orden_visual')) {
+            $pdo->exec("ALTER TABLE ecommerce_ordenes_produccion ADD COLUMN orden_visual INT NOT NULL DEFAULT 0 AFTER notas_instalacion");
+            $mensajes[] = 'Se agregó columna orden_visual en órdenes de producción.';
+        }
+
         if (!tabla_existe($pdo, 'ecommerce_instalaciones_manuales')) {
             $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_instalaciones_manuales (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -115,6 +125,42 @@ function asegurar_estructura_minima_instalaciones($pdo) {
                 INDEX idx_estado (estado)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $mensajes[] = 'Se creó tabla ecommerce_instalaciones_manuales.';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_instalaciones_manuales') && !columna_existe($pdo, 'ecommerce_instalaciones_manuales', 'orden_visual')) {
+            $pdo->exec("ALTER TABLE ecommerce_instalaciones_manuales ADD COLUMN orden_visual INT NOT NULL DEFAULT 0 AFTER fecha_instalacion");
+            $mensajes[] = 'Se agregó columna orden_visual en instalaciones manuales.';
+        }
+
+        if (!tabla_existe($pdo, 'ecommerce_visitas')) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_visitas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                titulo VARCHAR(180) NOT NULL,
+                descripcion TEXT NULL,
+                cliente_nombre VARCHAR(150) NULL,
+                telefono VARCHAR(60) NULL,
+                direccion VARCHAR(255) NULL,
+                fecha_visita DATE NOT NULL,
+                hora_visita TIME NULL,
+                estado ENUM('pendiente','en_proceso','completada','cancelada') NOT NULL DEFAULT 'pendiente',
+                orden_visual INT NOT NULL DEFAULT 0,
+                creado_por INT NULL,
+                fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                fecha_actualizacion DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_fecha_visita (fecha_visita),
+                INDEX idx_estado (estado)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $mensajes[] = 'Se creó tabla ecommerce_visitas.';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_visitas') && !columna_existe($pdo, 'ecommerce_visitas', 'hora_visita')) {
+            $pdo->exec("ALTER TABLE ecommerce_visitas ADD COLUMN hora_visita TIME NULL AFTER fecha_visita");
+            $mensajes[] = 'Se agregó columna hora_visita en visitas.';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_visitas') && !columna_existe($pdo, 'ecommerce_visitas', 'orden_visual')) {
+            $pdo->exec("ALTER TABLE ecommerce_visitas ADD COLUMN orden_visual INT NOT NULL DEFAULT 0 AFTER estado");
+            $mensajes[] = 'Se agregó columna orden_visual en visitas.';
         }
     } catch (Exception $e) {
         error_log('asegurar_estructura_minima_instalaciones: ' . $e->getMessage());
@@ -143,6 +189,39 @@ function valor_fecha_valido($valor) {
     return $dt && $dt->format('Y-m-d') === $valor;
 }
 
+function proximo_orden_visual($pdo, $tipo, $fecha) {
+    $map = [
+        'orden' => ['tabla' => 'ecommerce_ordenes_produccion', 'campo_fecha' => 'fecha_instalacion'],
+        'manual' => ['tabla' => 'ecommerce_instalaciones_manuales', 'campo_fecha' => 'fecha_instalacion'],
+        'visita' => ['tabla' => 'ecommerce_visitas', 'campo_fecha' => 'fecha_visita'],
+    ];
+
+    if (!isset($map[$tipo])) {
+        return 10;
+    }
+
+    $tabla = $map[$tipo]['tabla'];
+    $campo_fecha = $map[$tipo]['campo_fecha'];
+
+    if (!tabla_existe($pdo, $tabla) || !columna_existe($pdo, $tabla, 'orden_visual')) {
+        return 10;
+    }
+
+    if ($fecha === '' || $fecha === null) {
+        $stmt = $pdo->query("SELECT COALESCE(MAX(orden_visual), 0) + 10 AS prox FROM {$tabla} WHERE {$campo_fecha} IS NULL");
+    } else {
+        $stmt = $pdo->prepare("SELECT COALESCE(MAX(orden_visual), 0) + 10 AS prox FROM {$tabla} WHERE {$campo_fecha} = ?");
+        $stmt->execute([$fecha]);
+    }
+
+    if (!isset($stmt)) {
+        return 10;
+    }
+
+    $prox = (int)$stmt->fetchColumn();
+    return $prox > 0 ? $prox : 10;
+}
+
 $hoy = date('Y-m-d');
 $en_7_dias = date('Y-m-d', strtotime('+6 days'));
 
@@ -166,8 +245,61 @@ $tablas_base_ok = tabla_existe($pdo, 'ecommerce_ordenes_produccion') && tabla_ex
 $tiene_clientes = tabla_existe($pdo, 'ecommerce_clientes');
 $tiene_fecha_instalacion = $tablas_base_ok && columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_instalacion');
 $tiene_instalaciones_manuales = tabla_existe($pdo, 'ecommerce_instalaciones_manuales');
+$tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
+$estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($action === 'eliminar_visita') {
+            header('Content-Type: application/json; charset=utf-8');
+            $item_id = (int)($_POST['item_id'] ?? 0);
+            if (!$tiene_visitas || $item_id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para eliminar la visita']);
+                exit;
+            }
+            try {
+                $stmt = $pdo->prepare("DELETE FROM ecommerce_visitas WHERE id = ? LIMIT 1");
+                $stmt->execute([$item_id]);
+                if ($stmt->rowCount() < 1) {
+                    http_response_code(404);
+                    echo json_encode(['ok' => false, 'msg' => 'La visita no existe']);
+                    exit;
+                }
+                echo json_encode(['ok' => true, 'item_id' => $item_id]);
+                exit;
+            } catch (Exception $e) {
+                error_log('eliminar_visita: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => 'No se pudo eliminar la visita']);
+                exit;
+            }
+        }
+
+        if ($action === 'eliminar_orden') {
+            header('Content-Type: application/json; charset=utf-8');
+            $item_id = (int)($_POST['item_id'] ?? 0);
+            if (!$tablas_base_ok || $item_id <= 0) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para eliminar la orden']);
+                exit;
+            }
+            try {
+                $stmt = $pdo->prepare("DELETE FROM ecommerce_ordenes_produccion WHERE id = ? LIMIT 1");
+                $stmt->execute([$item_id]);
+                if ($stmt->rowCount() < 1) {
+                    http_response_code(404);
+                    echo json_encode(['ok' => false, 'msg' => 'La orden no existe']);
+                    exit;
+                }
+                echo json_encode(['ok' => true, 'item_id' => $item_id]);
+                exit;
+            } catch (Exception $e) {
+                error_log('eliminar_orden: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => 'No se pudo eliminar la orden']);
+                exit;
+            }
+        }
     $action = $_POST['action'] ?? '';
 
     if ($action === 'crear_instalacion_manual') {
@@ -190,8 +322,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_instalaciones_manuales
-                    (titulo, cliente, telefono, direccion, localidad, provincia, codigo_postal, fecha_instalacion, notas)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    (titulo, cliente, telefono, direccion, localidad, provincia, codigo_postal, fecha_instalacion, orden_visual, notas)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $orden_visual = proximo_orden_visual($pdo, 'manual', $fecha_instalacion !== '' ? $fecha_instalacion : null);
                 $stmt->execute([
                     $titulo,
                     $cliente !== '' ? $cliente : null,
@@ -201,6 +334,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $provincia !== '' ? $provincia : null,
                     $codigo_postal !== '' ? $codigo_postal : null,
                     $fecha_instalacion !== '' ? $fecha_instalacion : null,
+                    $orden_visual,
                     $notas !== '' ? $notas : null,
                 ]);
                 $ok_msg = 'Instalación manual creada correctamente.';
@@ -210,8 +344,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $qs = $_SERVER['QUERY_STRING'] ?? '';
-        header('Location: instalaciones.php' . ($qs ? ('?' . $qs . '&msg=' . urlencode($ok_msg)) : ('?msg=' . urlencode($ok_msg))));
+        header('Content-Type: application/json; charset=utf-8');
+        if ($ok_msg === 'Instalación manual creada correctamente.') {
+            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        }
+        exit;
+    }
+
+    if ($action === 'crear_visita') {
+        $titulo = trim($_POST['titulo'] ?? '');
+        $descripcion = trim($_POST['descripcion'] ?? '');
+        $cliente_nombre = trim($_POST['cliente_nombre'] ?? '');
+        $telefono = trim($_POST['telefono'] ?? '');
+        $direccion = trim($_POST['direccion'] ?? '');
+        $fecha_visita = trim($_POST['fecha_visita'] ?? '');
+        $hora_visita = trim($_POST['hora_visita'] ?? '');
+        $estado = trim($_POST['estado'] ?? 'pendiente');
+
+        if (!$tiene_visitas) {
+            $ok_msg = 'No existe la tabla de visitas.';
+        } elseif ($titulo === '' || !valor_fecha_valido($fecha_visita) || $fecha_visita === '') {
+            $ok_msg = 'El título y la fecha de visita son obligatorios.';
+        } elseif ($hora_visita !== '' && !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $hora_visita)) {
+            $ok_msg = 'La hora de visita no es válida.';
+        } elseif (!in_array($estado, $estados_visita_validos, true)) {
+            $ok_msg = 'El estado de visita no es válido.';
+        } else {
+            try {
+                $orden_visual = proximo_orden_visual($pdo, 'visita', $fecha_visita);
+                $hora_visita_sql = $hora_visita !== '' ? ($hora_visita . ':00') : null;
+                $creado_por = isset($_SESSION['user']['id']) && is_numeric($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null;
+
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_visitas
+                    (titulo, descripcion, cliente_nombre, telefono, direccion, fecha_visita, hora_visita, estado, orden_visual, creado_por)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $titulo,
+                    $descripcion !== '' ? $descripcion : null,
+                    $cliente_nombre !== '' ? $cliente_nombre : null,
+                    $telefono !== '' ? $telefono : null,
+                    $direccion !== '' ? $direccion : null,
+                    $fecha_visita,
+                    $hora_visita_sql,
+                    $estado,
+                    $orden_visual,
+                    $creado_por,
+                ]);
+                $ok_msg = 'Visita cargada correctamente.';
+            } catch (Exception $e) {
+                error_log('crear_visita_instalaciones: ' . $e->getMessage());
+                $ok_msg = 'No se pudo crear la visita.';
+            }
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+        if ($ok_msg === 'Visita cargada correctamente.') {
+            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        }
         exit;
     }
 
@@ -227,7 +422,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $item_id = (int)($_POST['item_id'] ?? 0);
         $fecha_destino = trim($_POST['fecha_destino'] ?? '');
 
-        if (!in_array($tipo, ['orden', 'manual'], true) || $item_id <= 0 || !valor_fecha_valido($fecha_destino)) {
+        if (!in_array($tipo, ['orden', 'manual', 'visita'], true) || $item_id <= 0 || !valor_fecha_valido($fecha_destino)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'msg' => 'Datos inválidos']);
             exit;
@@ -240,14 +435,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$tiene_fecha_instalacion) {
                     throw new RuntimeException('No se puede mover: falta columna fecha_instalacion.');
                 }
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, fecha_actualizacion = NOW() WHERE id = ?");
-                $stmt->execute([$fecha_sql, $item_id]);
-            } else {
+                $orden_visual = proximo_orden_visual($pdo, 'orden', $fecha_sql);
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
+            } elseif ($tipo === 'manual') {
                 if (!$tiene_instalaciones_manuales) {
                     throw new RuntimeException('No existe la tabla de instalaciones manuales.');
                 }
-                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, fecha_actualizacion = NOW() WHERE id = ?");
-                $stmt->execute([$fecha_sql, $item_id]);
+                $orden_visual = proximo_orden_visual($pdo, 'manual', $fecha_sql);
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
+            } else {
+                if (!$tiene_visitas) {
+                    throw new RuntimeException('No existe la tabla de visitas.');
+                }
+                $orden_visual = proximo_orden_visual($pdo, 'visita', $fecha_sql);
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             }
 
             echo json_encode(['ok' => true]);
@@ -362,6 +566,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
     }
+
+    if ($action === 'guardar_texto_tarjeta') {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $tipo = trim($_POST['tipo'] ?? '');
+        $item_id = (int)($_POST['item_id'] ?? 0);
+        $texto = trim($_POST['texto'] ?? '');
+
+        if (!in_array($tipo, ['orden', 'manual', 'visita'], true) || $item_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para guardar texto']);
+            exit;
+        }
+
+        try {
+            if ($tipo === 'orden') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET notas_instalacion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+            } elseif ($tipo === 'manual') {
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET notas = ?, fecha_actualizacion = NOW() WHERE id = ?");
+            } else {
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET descripcion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+            }
+
+            $stmt->execute([$texto !== '' ? $texto : null, $item_id]);
+            echo json_encode(['ok' => true]);
+            exit;
+        } catch (Exception $e) {
+            error_log('guardar_texto_tarjeta: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo guardar el texto de la tarjeta']);
+            exit;
+        }
+    }
+
+    if ($action === 'guardar_orden_tarjetas') {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $fecha_columna = trim($_POST['fecha_columna'] ?? '');
+        $orden_json = trim($_POST['orden'] ?? '[]');
+
+        if (!valor_fecha_valido($fecha_columna)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Fecha de columna inválida']);
+            exit;
+        }
+
+        $orden = json_decode($orden_json, true);
+        if (!is_array($orden)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Orden inválido']);
+            exit;
+        }
+
+        $fecha_sql = $fecha_columna !== '' ? $fecha_columna : null;
+
+        try {
+            $pdo->beginTransaction();
+
+            $pos = 10;
+            foreach ($orden as $token) {
+                if (!is_string($token) || strpos($token, ':') === false) {
+                    continue;
+                }
+
+                [$tipo, $idTxt] = explode(':', $token, 2);
+                $item_id = (int)$idTxt;
+                if ($item_id <= 0 || !in_array($tipo, ['orden', 'manual', 'visita'], true)) {
+                    continue;
+                }
+
+                if ($tipo === 'orden') {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                } elseif ($tipo === 'manual') {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                } else {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                }
+
+                $stmt->execute([$fecha_sql, $pos, $item_id]);
+                $pos += 10;
+            }
+
+            $pdo->commit();
+            echo json_encode(['ok' => true]);
+            exit;
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('guardar_orden_tarjetas: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo guardar el orden de tarjetas']);
+            exit;
+        }
+    }
 }
 
 $ok_msg = trim($_GET['msg'] ?? $ok_msg);
@@ -386,6 +685,7 @@ foreach ($dias_tablero as $d) {
 
 $total_ordenes = 0;
 $total_manuales = 0;
+$total_visitas = 0;
 
 try {
     if (!$tablas_base_ok) {
@@ -401,6 +701,8 @@ try {
             op.pedido_id,
             op.estado AS estado_produccion,
             op.fecha_instalacion,
+            op.notas_instalacion,
+            op.orden_visual,
             p.numero_pedido,
             p.envio_nombre,
             p.envio_telefono,
@@ -434,7 +736,7 @@ try {
         $params_ordenes[] = $instalacion_hasta;
     }
 
-    $sql_ordenes .= " ORDER BY op.fecha_instalacion IS NULL, op.fecha_instalacion ASC, p.fecha_pedido DESC, op.id DESC";
+    $sql_ordenes .= " ORDER BY op.fecha_instalacion IS NULL, op.fecha_instalacion ASC, op.orden_visual ASC, p.fecha_pedido DESC, op.id DESC";
 
     $stmt = $pdo->prepare($sql_ordenes);
     $stmt->execute($params_ordenes);
@@ -459,6 +761,8 @@ try {
             'fecha_instalacion' => $row['fecha_instalacion'] ?: '',
             'fecha_creacion' => $row['fecha_creacion'] ?: '',
             'detalle_url' => 'orden_produccion_detalle.php?pedido_id=' . (int)$row['pedido_id'],
+            'texto_tarjeta' => trim($row['notas_instalacion'] ?? ''),
+            'orden_visual' => (int)($row['orden_visual'] ?? 0),
         ];
 
         $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -482,6 +786,7 @@ try {
                 im.provincia,
                 im.codigo_postal,
                 im.fecha_instalacion,
+                im.orden_visual,
                 im.fecha_creacion,
                 im.notas
             FROM ecommerce_instalaciones_manuales im
@@ -499,7 +804,7 @@ try {
             $params_manuales[] = $instalacion_hasta;
         }
 
-        $sql_manuales .= " ORDER BY im.fecha_instalacion IS NULL, im.fecha_instalacion ASC, im.fecha_creacion DESC, im.id DESC";
+        $sql_manuales .= " ORDER BY im.fecha_instalacion IS NULL, im.fecha_instalacion ASC, im.orden_visual ASC, im.fecha_creacion DESC, im.id DESC";
 
         $stmtm = $pdo->prepare($sql_manuales);
         $stmtm->execute($params_manuales);
@@ -526,6 +831,8 @@ try {
                 'fecha_creacion' => $row['fecha_creacion'] ?: '',
                 'detalle_url' => '',
                 'notas' => trim($row['notas'] ?? ''),
+                'texto_tarjeta' => trim($row['notas'] ?? ''),
+                'orden_visual' => (int)($row['orden_visual'] ?? 0),
             ];
 
             $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -536,6 +843,85 @@ try {
             $items_instalacion[] = $item;
             $total_manuales++;
         }
+    }
+
+    if ($tiene_visitas) {
+        $sql_visitas = "
+            SELECT
+                v.id,
+                v.titulo,
+                v.descripcion,
+                v.cliente_nombre,
+                v.telefono,
+                v.direccion,
+                v.fecha_visita,
+                v.hora_visita,
+                v.estado,
+                v.orden_visual,
+                v.fecha_creacion
+            FROM ecommerce_visitas v
+            WHERE 1=1
+        ";
+
+        $params_visitas = [];
+
+        if ($instalacion_desde !== '') {
+            $sql_visitas .= " AND v.fecha_visita >= ?";
+            $params_visitas[] = $instalacion_desde;
+        }
+        if ($instalacion_hasta !== '') {
+            $sql_visitas .= " AND v.fecha_visita <= ?";
+            $params_visitas[] = $instalacion_hasta;
+        }
+
+        $sql_visitas .= " ORDER BY v.fecha_visita ASC, v.orden_visual ASC, COALESCE(v.hora_visita, '23:59:59') ASC, v.id DESC";
+
+        $stmtv = $pdo->prepare($sql_visitas);
+        $stmtv->execute($params_visitas);
+        $visitas = $stmtv->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($visitas as $row) {
+            $item = [
+                'tipo' => 'visita',
+                'item_id' => (int)$row['id'],
+                'pedido_id' => 0,
+                'titulo' => trim($row['titulo'] ?? 'Visita'),
+                'subtitulo' => trim($row['cliente_nombre'] ?? ''),
+                'telefono' => trim($row['telefono'] ?? ''),
+                'direccion' => trim($row['direccion'] ?? ''),
+                'localidad' => '',
+                'provincia' => '',
+                'codigo_postal' => '',
+                'fecha_instalacion' => $row['fecha_visita'] ?: '',
+                'fecha_creacion' => $row['fecha_creacion'] ?: '',
+                'detalle_url' => '',
+                'notas' => trim($row['descripcion'] ?? ''),
+                'texto_tarjeta' => trim($row['descripcion'] ?? ''),
+                'orden_visual' => (int)($row['orden_visual'] ?? 0),
+                'estado_visita' => trim($row['estado'] ?? 'pendiente'),
+                'hora_visita' => trim($row['hora_visita'] ?? ''),
+            ];
+
+            $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
+                ? $item['fecha_instalacion']
+                : 'sin_fecha';
+
+            $items_por_columna[$clave][] = $item;
+            $items_instalacion[] = $item;
+            $total_visitas++;
+        }
+    }
+
+    foreach ($items_por_columna as $claveCol => $itemsColumna) {
+        usort($itemsColumna, function ($a, $b) {
+            $oa = (int)($a['orden_visual'] ?? 0);
+            $ob = (int)($b['orden_visual'] ?? 0);
+            if ($oa === $ob) {
+                return ((int)$a['item_id']) <=> ((int)$b['item_id']);
+            }
+            return $oa <=> $ob;
+        });
+        $items_por_columna[$claveCol] = $itemsColumna;
     }
 } catch (Exception $e) {
     $error_pagina = $e->getMessage();
@@ -548,6 +934,83 @@ $qs = http_build_query(array_filter([
     'instalacion_hasta' => $instalacion_hasta,
     'incluir_entregados' => $incluir_entregados ? '1' : null,
 ]));
+
+function render_tarjeta_instalacion($item) {
+    $tipo = (string)($item['tipo'] ?? '');
+    $itemId = (int)($item['item_id'] ?? 0);
+    $titulo = (string)($item['titulo'] ?? '');
+    $subtitulo = (string)($item['subtitulo'] ?? '');
+    $direccion = (string)($item['direccion'] ?? '');
+    $localidad = (string)($item['localidad'] ?? '');
+    $detalleUrl = (string)($item['detalle_url'] ?? '');
+    $fechaCreacion = (string)($item['fecha_creacion'] ?? '');
+    $textoTarjeta = (string)($item['texto_tarjeta'] ?? '');
+
+    $badgeClass = 'bg-secondary';
+    $badgeText = 'Item';
+    if ($tipo === 'manual') {
+        $badgeClass = 'bg-dark';
+        $badgeText = 'Manual';
+    } elseif ($tipo === 'orden') {
+        $badgeClass = 'bg-primary';
+        $badgeText = 'OP';
+    } elseif ($tipo === 'visita') {
+        $badgeClass = 'bg-warning text-dark';
+        $badgeText = 'Visita';
+    }
+
+    ob_start();
+    ?>
+    <div class="inst-card" draggable="true" data-tipo="<?= htmlspecialchars($tipo) ?>" data-id="<?= $itemId ?>"
+        <?php if ($tipo === 'manual'): ?>
+            data-manual-titulo="<?= htmlspecialchars($item['titulo']) ?>"
+            data-manual-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
+            data-manual-telefono="<?= htmlspecialchars($item['telefono']) ?>"
+            data-manual-direccion="<?= htmlspecialchars($item['direccion']) ?>"
+            data-manual-localidad="<?= htmlspecialchars($item['localidad']) ?>"
+            data-manual-provincia="<?= htmlspecialchars($item['provincia'] ?? '') ?>"
+            data-manual-codigo-postal="<?= htmlspecialchars($item['codigo_postal'] ?? '') ?>"
+            data-manual-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
+            data-manual-notas="<?= htmlspecialchars($item['notas'] ?? '') ?>"
+        <?php endif; ?>
+    >
+        <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
+            <strong class="inst-card-title"><?= htmlspecialchars($titulo) ?></strong>
+            <span class="badge <?= $badgeClass ?>"><?= $badgeText ?></span>
+        </div>
+        <?php if ($tipo === 'visita' && !empty($item['estado_visita'])): ?>
+            <div class="small text-muted mb-1">Estado: <?= htmlspecialchars(str_replace('_', ' ', ucfirst($item['estado_visita']))) ?></div>
+        <?php endif; ?>
+        <?php if (!empty($item['hora_visita'])): ?>
+            <div class="small text-muted mb-1">Hora: <?= htmlspecialchars(date('H:i', strtotime($item['hora_visita']))) ?> hs</div>
+        <?php endif; ?>
+        <?php if ($subtitulo !== ''): ?><div class="small inst-card-subtitle"><?= htmlspecialchars($subtitulo) ?></div><?php endif; ?>
+        <?php if ($direccion !== ''): ?><div class="small text-muted inst-card-address"><?= htmlspecialchars($direccion) ?></div><?php endif; ?>
+        <?php if ($localidad !== ''): ?><div class="small text-muted inst-card-locality"><?= htmlspecialchars($localidad) ?></div><?php endif; ?>
+
+        <div class="mt-2">
+            <label class="form-label small mb-1">Texto tarjeta</label>
+            <textarea class="form-control form-control-sm inst-card-texto" rows="2" placeholder="Agregar texto..." data-original="<?= htmlspecialchars($textoTarjeta) ?>"><?= htmlspecialchars($textoTarjeta) ?></textarea>
+            <div class="d-flex gap-1 mt-1">
+                <button type="button" class="btn btn-sm btn-outline-primary inst-btn-guardar-texto">Guardar texto</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-subir" title="Subir">↑</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-bajar" title="Bajar">↓</button>
+                <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">Eliminar</button>
+            </div>
+        </div>
+
+        <div class="small mt-2 d-flex justify-content-between align-items-center">
+            <span><?= $fechaCreacion !== '' ? date('d/m', strtotime($fechaCreacion)) : '-' ?></span>
+            <div class="d-flex gap-1">
+                <?php if ($detalleUrl !== ''): ?>
+                    <a href="<?= htmlspecialchars($detalleUrl) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">Ver</a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php
+    return (string)ob_get_clean();
+}
 ?>
 
 <style>
@@ -600,8 +1063,8 @@ $qs = http_build_query(array_filter([
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="mb-1">Instalaciones</h1>
-        <p class="text-muted mb-0">Dashboard semanal para programar y mover instalaciones por día</p>
+        <h1 class="mb-1">Instalaciones y visitas</h1>
+        <p class="text-muted mb-0">Tablero único para programar, ordenar y documentar tarjetas por día</p>
     </div>
     <a href="ordenes_produccion.php" class="btn btn-outline-secondary">Órdenes de Producción</a>
 </div>
@@ -625,7 +1088,7 @@ $qs = http_build_query(array_filter([
 <?php endif; ?>
 
 <div class="row g-3 mb-4">
-    <div class="col-lg-4">
+    <div class="col-xl-4">
         <div class="card h-100">
             <div class="card-header"><h5 class="mb-0">Nueva instalación manual</h5></div>
             <div class="card-body">
@@ -675,7 +1138,58 @@ $qs = http_build_query(array_filter([
         </div>
     </div>
 
-    <div class="col-lg-8">
+    <div class="col-xl-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Nueva visita</h5></div>
+            <div class="card-body">
+                <form method="POST" class="row g-2">
+                    <input type="hidden" name="action" value="crear_visita">
+                    <div class="col-12">
+                        <label class="form-label mb-1">Título *</label>
+                        <input type="text" name="titulo" class="form-control" required maxlength="180" placeholder="Ej: Relevamiento en cliente">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label mb-1">Fecha visita *</label>
+                        <input type="date" name="fecha_visita" class="form-control" value="<?= htmlspecialchars($hoy) ?>" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label mb-1">Hora</label>
+                        <input type="time" name="hora_visita" class="form-control">
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label mb-1">Cliente</label>
+                        <input type="text" name="cliente_nombre" class="form-control" maxlength="150">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label mb-1">Teléfono</label>
+                        <input type="text" name="telefono" class="form-control" maxlength="60">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label mb-1">Dirección</label>
+                        <input type="text" name="direccion" class="form-control" maxlength="255">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label mb-1">Estado</label>
+                        <select name="estado" class="form-select">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="en_proceso">En proceso</option>
+                            <option value="completada">Completada</option>
+                            <option value="cancelada">Cancelada</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label mb-1">Texto / descripción</label>
+                        <textarea name="descripcion" rows="2" class="form-control"></textarea>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <button type="submit" class="btn btn-warning w-100">Agregar visita</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
         <div class="card h-100">
             <div class="card-header"><h5 class="mb-0">Filtros y resumen</h5></div>
             <div class="card-body">
@@ -711,26 +1225,32 @@ $qs = http_build_query(array_filter([
                 </form>
 
                 <div class="row g-2">
-                    <div class="col-sm-4">
+                    <div class="col-6">
                         <div class="border rounded p-2 text-center">
                             <div class="text-muted small">Total instalaciones</div>
                             <div class="h4 mb-0"><?= count($items_instalacion) ?></div>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-6">
                         <div class="border rounded p-2 text-center">
                             <div class="text-muted small">Órdenes de producción</div>
                             <div class="h4 mb-0"><?= (int)$total_ordenes ?></div>
                         </div>
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-6">
                         <div class="border rounded p-2 text-center">
                             <div class="text-muted small">Instalaciones manuales</div>
                             <div class="h4 mb-0"><?= (int)$total_manuales ?></div>
                         </div>
                     </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 text-center">
+                            <div class="text-muted small">Visitas</div>
+                            <div class="h4 mb-0"><?= (int)$total_visitas ?></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="small text-muted mt-2">Arrastrá una tarjeta entre columnas para reprogramar su fecha.</div>
+                <div class="small text-muted mt-2">Arrastrá o usá ↑/↓ para reordenar. Cada tarjeta permite guardar texto propio.</div>
             </div>
         </div>
     </div>
@@ -749,32 +1269,7 @@ $qs = http_build_query(array_filter([
                 </div>
                 <div class="inst-dropzone" data-fecha="" id="drop-sin-fecha">
                     <?php foreach ($items_por_columna['sin_fecha'] as $item): ?>
-                        <div class="inst-card" draggable="true" data-tipo="<?= htmlspecialchars($item['tipo']) ?>" data-id="<?= (int)$item['item_id'] ?>"
-                            <?php if ($item['tipo'] === 'manual'): ?>
-                                data-manual-titulo="<?= htmlspecialchars($item['titulo']) ?>"
-                                data-manual-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
-                                data-manual-telefono="<?= htmlspecialchars($item['telefono']) ?>"
-                                data-manual-direccion="<?= htmlspecialchars($item['direccion']) ?>"
-                                data-manual-localidad="<?= htmlspecialchars($item['localidad']) ?>"
-                                data-manual-provincia="<?= htmlspecialchars($item['provincia'] ?? '') ?>"
-                                data-manual-codigo-postal="<?= htmlspecialchars($item['codigo_postal'] ?? '') ?>"
-                                data-manual-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
-                                data-manual-notas="<?= htmlspecialchars($item['notas'] ?? '') ?>"
-                            <?php endif; ?>>
-                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                <strong class="inst-card-title"><?= htmlspecialchars($item['titulo']) ?></strong>
-                                <span class="badge <?= $item['tipo'] === 'manual' ? 'bg-dark' : 'bg-primary' ?>"><?= $item['tipo'] === 'manual' ? 'Manual' : 'OP' ?></span>
-                            </div>
-                            <?php if (!empty($item['subtitulo'])): ?><div class="small inst-card-subtitle"><?= htmlspecialchars($item['subtitulo']) ?></div><?php endif; ?>
-                            <?php if (!empty($item['direccion'])): ?><div class="small text-muted inst-card-address"><?= htmlspecialchars($item['direccion']) ?></div><?php endif; ?>
-                            <?php if (!empty($item['localidad'])): ?><div class="small text-muted inst-card-locality"><?= htmlspecialchars($item['localidad']) ?></div><?php endif; ?>
-                            <div class="small mt-1 d-flex justify-content-between align-items-center">
-                                <span><?= !empty($item['fecha_creacion']) ? date('d/m', strtotime($item['fecha_creacion'])) : '-' ?></span>
-                                <?php if (!empty($item['detalle_url'])): ?>
-                                    <a href="<?= htmlspecialchars($item['detalle_url']) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">Ver</a>
-                                <?php endif; ?>
-                            </div>
-                        </div>
+                        <?= render_tarjeta_instalacion($item) ?>
                     <?php endforeach; ?>
                 </div>
             </div>
@@ -790,32 +1285,7 @@ $qs = http_build_query(array_filter([
                     </div>
                     <div class="inst-dropzone" data-fecha="<?= htmlspecialchars($fecha_col) ?>" id="drop-<?= htmlspecialchars($fecha_col) ?>">
                         <?php foreach ($items_por_columna[$fecha_col] as $item): ?>
-                            <div class="inst-card" draggable="true" data-tipo="<?= htmlspecialchars($item['tipo']) ?>" data-id="<?= (int)$item['item_id'] ?>"
-                                <?php if ($item['tipo'] === 'manual'): ?>
-                                    data-manual-titulo="<?= htmlspecialchars($item['titulo']) ?>"
-                                    data-manual-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
-                                    data-manual-telefono="<?= htmlspecialchars($item['telefono']) ?>"
-                                    data-manual-direccion="<?= htmlspecialchars($item['direccion']) ?>"
-                                    data-manual-localidad="<?= htmlspecialchars($item['localidad']) ?>"
-                                    data-manual-provincia="<?= htmlspecialchars($item['provincia'] ?? '') ?>"
-                                    data-manual-codigo-postal="<?= htmlspecialchars($item['codigo_postal'] ?? '') ?>"
-                                    data-manual-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
-                                    data-manual-notas="<?= htmlspecialchars($item['notas'] ?? '') ?>"
-                                <?php endif; ?>>
-                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                    <strong class="inst-card-title"><?= htmlspecialchars($item['titulo']) ?></strong>
-                                    <span class="badge <?= $item['tipo'] === 'manual' ? 'bg-dark' : 'bg-primary' ?>"><?= $item['tipo'] === 'manual' ? 'Manual' : 'OP' ?></span>
-                                </div>
-                                <?php if (!empty($item['subtitulo'])): ?><div class="small inst-card-subtitle"><?= htmlspecialchars($item['subtitulo']) ?></div><?php endif; ?>
-                                <?php if (!empty($item['direccion'])): ?><div class="small text-muted inst-card-address"><?= htmlspecialchars($item['direccion']) ?></div><?php endif; ?>
-                                <?php if (!empty($item['localidad'])): ?><div class="small text-muted inst-card-locality"><?= htmlspecialchars($item['localidad']) ?></div><?php endif; ?>
-                                <div class="small mt-1 d-flex justify-content-between align-items-center">
-                                    <span><?= !empty($item['fecha_creacion']) ? date('d/m', strtotime($item['fecha_creacion'])) : '-' ?></span>
-                                    <?php if (!empty($item['detalle_url'])): ?>
-                                        <a href="<?= htmlspecialchars($item['detalle_url']) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">Ver</a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
+                            <?= render_tarjeta_instalacion($item) ?>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -825,7 +1295,7 @@ $qs = http_build_query(array_filter([
 </div>
 
 <div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0">Listado de instalaciones</h5></div>
+    <div class="card-header"><h5 class="mb-0">Listado unificado</h5></div>
     <div class="table-responsive">
         <table class="table table-striped table-hover mb-0">
             <thead>
@@ -845,7 +1315,15 @@ $qs = http_build_query(array_filter([
                 <?php else: ?>
                     <?php foreach ($items_instalacion as $item): ?>
                         <tr <?= $item['tipo'] === 'manual' ? 'data-manual-row-id="' . (int)$item['item_id'] . '"' : '' ?>>
-                            <td><span class="badge <?= $item['tipo'] === 'manual' ? 'bg-dark' : 'bg-primary' ?>"><?= $item['tipo'] === 'manual' ? 'Manual' : 'Orden' ?></span></td>
+                            <td>
+                                <?php if ($item['tipo'] === 'manual'): ?>
+                                    <span class="badge bg-dark">Manual</span>
+                                <?php elseif ($item['tipo'] === 'visita'): ?>
+                                    <span class="badge bg-warning text-dark">Visita</span>
+                                <?php else: ?>
+                                    <span class="badge bg-primary">Orden</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="cell-title"><?= htmlspecialchars($item['titulo']) ?></td>
                             <td class="cell-cliente"><?= htmlspecialchars($item['subtitulo'] ?: '-') ?></td>
                             <td class="cell-direccion"><?= htmlspecialchars($item['direccion'] ?: '-') ?></td>
@@ -953,13 +1431,53 @@ document.addEventListener('DOMContentLoaded', function () {
         var total = document.querySelectorAll('.inst-card').length;
         var totalManuales = document.querySelectorAll('.inst-card[data-tipo="manual"]').length;
         var totalOrdenes = document.querySelectorAll('.inst-card[data-tipo="orden"]').length;
+        var totalVisitas = document.querySelectorAll('.inst-card[data-tipo="visita"]').length;
 
         var h4s = document.querySelectorAll('.card-body .row.g-2 .h4.mb-0');
-        if (h4s.length >= 3) {
+        if (h4s.length >= 4) {
             h4s[0].textContent = total;
             h4s[1].textContent = totalOrdenes;
             h4s[2].textContent = totalManuales;
+            h4s[3].textContent = totalVisitas;
         }
+    }
+
+    function serializarColumna(dropzone) {
+        return Array.prototype.slice.call(dropzone.querySelectorAll('.inst-card')).map(function (card) {
+            return card.getAttribute('data-tipo') + ':' + card.getAttribute('data-id');
+        });
+    }
+
+    function guardarOrdenColumna(dropzone, onRollback) {
+        if (!dropzone) {
+            return;
+        }
+
+        var fd = new FormData();
+        fd.append('action', 'guardar_orden_tarjetas');
+        fd.append('fecha_columna', dropzone.getAttribute('data-fecha') || '');
+        fd.append('orden', JSON.stringify(serializarColumna(dropzone)));
+
+        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+            method: 'POST',
+            body: fd,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res || !res.ok) {
+                throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar el orden');
+            }
+        })
+        .catch(function (err) {
+            if (typeof onRollback === 'function') {
+                onRollback();
+            }
+            alert(err.message || 'No se pudo guardar el orden');
+        });
     }
 
     function moverEnServidor(card, fechaDestino, onRollback) {
@@ -972,10 +1490,42 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
             method: 'POST',
             body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
         })
         .then(function (r) { return r.json(); })
         .then(function (res) {
+                // AJAX para agregar visita
+                var formVisita = document.querySelector('form[action="crear_visita"]') || document.querySelector('form input[name="action"][value="crear_visita"]').closest('form');
+                if (formVisita) {
+                    formVisita.addEventListener('submit', function (e) {
+                        e.preventDefault();
+                        var fd = new FormData(formVisita);
+                        fd.append('action', 'crear_visita');
+                        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                            method: 'POST',
+                            body: fd,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            }
+                        })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (res && res.ok) {
+                                alert(res.msg || 'Visita agregada correctamente');
+                                formVisita.reset();
+                            } else {
+                                throw new Error(res && res.msg ? res.msg : 'No se pudo agregar la visita');
+                            }
+                        })
+                        .catch(function (err) {
+                            alert(err.message || 'No se pudo agregar la visita');
+                        });
+                    });
+                }
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'Error moviendo instalación');
             }
@@ -998,6 +1548,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
             }
+
+            var zona = card.closest('.inst-dropzone');
+            guardarOrdenColumna(zona);
         })
         .catch(function (err) {
             if (typeof onRollback === 'function') {
@@ -1066,6 +1619,11 @@ document.addEventListener('DOMContentLoaded', function () {
             setOrCreateText(card, '.inst-card-subtitle', data.cliente || '', false);
             setOrCreateText(card, '.inst-card-address', data.direccion || '', true);
             setOrCreateText(card, '.inst-card-locality', localCompuesta, true);
+            var ta = card.querySelector('.inst-card-texto');
+            if (ta) {
+                ta.value = data.notas || '';
+                ta.setAttribute('data-original', data.notas || '');
+            }
         });
 
         var row = document.querySelector('tr[data-manual-row-id="' + data.item_id + '"]');
@@ -1133,13 +1691,134 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         card.addEventListener('click', function (e) {
-            if (e.target.closest('a')) {
+            if (e.target.closest('a') || e.target.closest('button') || e.target.closest('textarea') || e.target.closest('input') || e.target.closest('select') || e.target.closest('label')) {
                 return;
             }
             if (card.getAttribute('data-tipo') === 'manual') {
                 abrirModalManualDesdeCard(card);
             }
         });
+
+        var btnGuardarTexto = card.querySelector('.inst-btn-guardar-texto');
+        if (btnGuardarTexto) {
+            btnGuardarTexto.addEventListener('click', function () {
+                var textarea = card.querySelector('.inst-card-texto');
+                if (!textarea) {
+                    return;
+                }
+
+                var texto = textarea.value || '';
+                var fd = new FormData();
+                fd.append('action', 'guardar_texto_tarjeta');
+                fd.append('tipo', card.getAttribute('data-tipo'));
+                fd.append('item_id', card.getAttribute('data-id'));
+                fd.append('texto', texto);
+
+                fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res || !res.ok) {
+                        throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar el texto');
+                    }
+                    textarea.setAttribute('data-original', texto);
+                    if (card.getAttribute('data-tipo') === 'manual') {
+                        card.setAttribute('data-manual-notas', texto);
+                    }
+                })
+                .catch(function (err) {
+                    alert(err.message || 'No se pudo guardar el texto');
+                });
+            });
+        }
+
+        var btnEliminar = card.querySelector('.inst-btn-eliminar');
+        if (btnEliminar) {
+            btnEliminar.addEventListener('click', function () {
+                var tipo = card.getAttribute('data-tipo');
+                var itemId = card.getAttribute('data-id');
+                if (!itemId) {
+                    alert('No hay item seleccionado para eliminar.');
+                    return;
+                }
+                if (!confirm('¿Seguro que querés eliminar este item? Esta acción no se puede deshacer.')) {
+                    return;
+                }
+                var fd = new FormData();
+                if (tipo === 'manual') {
+                    fd.append('action', 'eliminar_instalacion_manual');
+                } else if (tipo === 'visita') {
+                    fd.append('action', 'eliminar_visita');
+                } else {
+                    fd.append('action', 'eliminar_orden');
+                }
+                fd.append('item_id', itemId);
+                fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(function (r) {
+                    try { return r.json(); } catch (e) { throw new Error('Respuesta inválida del servidor'); }
+                })
+                .then(function (res) {
+                    if (!res || !res.ok) {
+                        throw new Error((res && res.msg) ? res.msg : 'No se pudo eliminar');
+                    }
+                    card.remove();
+                    actualizarBadgeColumna(card.parentNode);
+                    actualizarResumenInstalaciones();
+                })
+                .catch(function (err) {
+                    alert(err.message || 'Error al eliminar');
+                });
+            });
+        }
+
+        function moverDentroColumna(cardMover, direccion) {
+            var parent = cardMover.parentNode;
+            if (!parent || !parent.classList.contains('inst-dropzone')) {
+                return;
+            }
+
+            var sibling = direccion === 'up' ? cardMover.previousElementSibling : cardMover.nextElementSibling;
+            if (!sibling || !sibling.classList.contains('inst-card')) {
+                return;
+            }
+
+            if (direccion === 'up') {
+                parent.insertBefore(cardMover, sibling);
+            } else {
+                parent.insertBefore(sibling, cardMover);
+            }
+
+            guardarOrdenColumna(parent, function () {
+                alert('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida.');
+            });
+        }
+
+        var btnSubir = card.querySelector('.inst-btn-subir');
+        if (btnSubir) {
+            btnSubir.addEventListener('click', function () {
+                moverDentroColumna(card, 'up');
+            });
+        }
+
+        var btnBajar = card.querySelector('.inst-btn-bajar');
+        if (btnBajar) {
+            btnBajar.addEventListener('click', function () {
+                moverDentroColumna(card, 'down');
+            });
+        }
     });
 
     document.querySelectorAll('.btn-editar-manual-listado').forEach(function (btn) {
@@ -1269,6 +1948,7 @@ document.addEventListener('DOMContentLoaded', function () {
             moverEnServidor(draggedCard, fechaDestino, function () {
                 origen.appendChild(draggedCard);
                 actualizarBadgesTodas();
+                guardarOrdenColumna(origen);
             });
         });
     });
