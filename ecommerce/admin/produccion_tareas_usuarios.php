@@ -389,6 +389,7 @@ $sql_actividad = "SELECT
     pib.numero_item,
     pib.codigo_barcode,
     pr.nombre AS producto_nombre,
+    op.pedido_id AS pedido_id,
     p.numero_pedido,
     NULL AS numero_cotizacion,
     NULL AS cotizacion_estado,
@@ -456,6 +457,7 @@ $sql_tarea_actividad = "SELECT
     NULL AS numero_item,
     NULL AS codigo_barcode,
     t.titulo AS producto_nombre,
+    NULL AS pedido_id,
     NULL AS numero_pedido,
     NULL AS numero_cotizacion,
     NULL AS cotizacion_estado,
@@ -541,6 +543,7 @@ if ($etapa_filtro === '' && $tabla_cotizaciones !== null && $col_fecha_cotizacio
         NULL AS numero_item,
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
+        NULL AS pedido_id,
         NULL AS numero_pedido,
         {$expr_numero_cotizacion} AS numero_cotizacion,
         {$expr_estado_cotizacion} AS cotizacion_estado,
@@ -611,6 +614,7 @@ if ($etapa_filtro === '' && $tabla_cotizaciones !== null && $col_fecha_cotizacio
         NULL AS numero_item,
         NULL AS codigo_barcode,
         NULL AS producto_nombre,
+        NULL AS pedido_id,
         NULL AS numero_pedido,
         {$expr_numero_cotizacion} AS numero_cotizacion,
         {$expr_estado_cotizacion} AS cotizacion_estado,
@@ -1874,7 +1878,14 @@ function format_minutos(?float $minutos): string {
                                     <?php elseif (($row['origen_tarea'] ?? '') === 'tarea_manual'): ?>
                                         <?= htmlspecialchars($row['tarea_descripcion'] ?? '-') ?>
                                     <?php else: ?>
-                                        <?= htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                        <?php $pedido_id = (int)($row['pedido_id'] ?? 0); ?>
+                                        <?php if ($pedido_id > 0): ?>
+                                            <a href="orden_produccion_detalle.php?pedido_id=<?= $pedido_id ?>" class="fw-semibold text-decoration-none">
+                                                <?= htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($row['numero_pedido'] ?? '-') ?>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= htmlspecialchars($row['numero_item'] ?? '-') ?></td>
