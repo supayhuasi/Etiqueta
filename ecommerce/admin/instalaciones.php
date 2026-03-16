@@ -249,6 +249,8 @@ $tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
 $estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim((string)($_POST['action'] ?? ''));
+
         if ($action === 'eliminar_visita') {
             header('Content-Type: application/json; charset=utf-8');
             $item_id = (int)($_POST['item_id'] ?? 0);
@@ -300,7 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         }
-    $action = $_POST['action'] ?? '';
 
     if ($action === 'crear_instalacion_manual') {
         $titulo = trim($_POST['titulo'] ?? '');
@@ -671,8 +672,21 @@ if (!valor_fecha_valido($instalacion_desde) || !valor_fecha_valido($instalacion_
     $instalacion_hasta = $en_7_dias;
 }
 
-$cursor = new DateTime($instalacion_desde);
-$hasta_dt = new DateTime($instalacion_hasta);
+$tablero_desde = $hoy;
+$tablero_hasta = $en_7_dias;
+
+if ($instalacion_desde < $tablero_desde) {
+    $tablero_desde = $instalacion_desde;
+}
+if ($instalacion_hasta > $tablero_hasta) {
+    $tablero_hasta = $instalacion_hasta;
+}
+
+$filtro_instalacion_desde = $tablero_desde;
+$filtro_instalacion_hasta = $tablero_hasta;
+
+$cursor = new DateTime($tablero_desde);
+$hasta_dt = new DateTime($tablero_hasta);
 while ($cursor <= $hasta_dt) {
     $dias_tablero[] = $cursor->format('Y-m-d');
     $cursor->modify('+1 day');
@@ -727,13 +741,13 @@ try {
         $params_ordenes[] = $fecha_hasta;
     }
 
-    if ($instalacion_desde !== '') {
+    if ($filtro_instalacion_desde !== '') {
         $sql_ordenes .= " AND (op.fecha_instalacion IS NULL OR op.fecha_instalacion >= ?)";
-        $params_ordenes[] = $instalacion_desde;
+        $params_ordenes[] = $filtro_instalacion_desde;
     }
-    if ($instalacion_hasta !== '') {
+    if ($filtro_instalacion_hasta !== '') {
         $sql_ordenes .= " AND (op.fecha_instalacion IS NULL OR op.fecha_instalacion <= ?)";
-        $params_ordenes[] = $instalacion_hasta;
+        $params_ordenes[] = $filtro_instalacion_hasta;
     }
 
     $sql_ordenes .= " ORDER BY op.fecha_instalacion IS NULL, op.fecha_instalacion ASC, op.orden_visual ASC, p.fecha_pedido DESC, op.id DESC";
@@ -795,13 +809,13 @@ try {
 
         $params_manuales = [];
 
-        if ($instalacion_desde !== '') {
+        if ($filtro_instalacion_desde !== '') {
             $sql_manuales .= " AND (im.fecha_instalacion IS NULL OR im.fecha_instalacion >= ?)";
-            $params_manuales[] = $instalacion_desde;
+            $params_manuales[] = $filtro_instalacion_desde;
         }
-        if ($instalacion_hasta !== '') {
+        if ($filtro_instalacion_hasta !== '') {
             $sql_manuales .= " AND (im.fecha_instalacion IS NULL OR im.fecha_instalacion <= ?)";
-            $params_manuales[] = $instalacion_hasta;
+            $params_manuales[] = $filtro_instalacion_hasta;
         }
 
         $sql_manuales .= " ORDER BY im.fecha_instalacion IS NULL, im.fecha_instalacion ASC, im.orden_visual ASC, im.fecha_creacion DESC, im.id DESC";
@@ -865,13 +879,13 @@ try {
 
         $params_visitas = [];
 
-        if ($instalacion_desde !== '') {
+        if ($filtro_instalacion_desde !== '') {
             $sql_visitas .= " AND v.fecha_visita >= ?";
-            $params_visitas[] = $instalacion_desde;
+            $params_visitas[] = $filtro_instalacion_desde;
         }
-        if ($instalacion_hasta !== '') {
+        if ($filtro_instalacion_hasta !== '') {
             $sql_visitas .= " AND v.fecha_visita <= ?";
-            $params_visitas[] = $instalacion_hasta;
+            $params_visitas[] = $filtro_instalacion_hasta;
         }
 
         $sql_visitas .= " ORDER BY v.fecha_visita ASC, v.orden_visual ASC, COALESCE(v.hora_visita, '23:59:59') ASC, v.id DESC";
@@ -1497,35 +1511,6 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-                // AJAX para agregar visita
-                var formVisita = document.querySelector('form[action="crear_visita"]') || document.querySelector('form input[name="action"][value="crear_visita"]').closest('form');
-                if (formVisita) {
-                    formVisita.addEventListener('submit', function (e) {
-                        e.preventDefault();
-                        var fd = new FormData(formVisita);
-                        fd.append('action', 'crear_visita');
-                        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
-                            method: 'POST',
-                            body: fd,
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Accept': 'application/json'
-                            }
-                        })
-                        .then(function (r) { return r.json(); })
-                        .then(function (res) {
-                            if (res && res.ok) {
-                                alert(res.msg || 'Visita agregada correctamente');
-                                formVisita.reset();
-                            } else {
-                                throw new Error(res && res.msg ? res.msg : 'No se pudo agregar la visita');
-                            }
-                        })
-                        .catch(function (err) {
-                            alert(err.message || 'No se pudo agregar la visita');
-                        });
-                    });
-                }
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'Error moviendo instalación');
             }
