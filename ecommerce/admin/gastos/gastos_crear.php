@@ -76,11 +76,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errores)) {
         try {
-            // Generar número de gasto
-            $stmt = $pdo->query("SELECT COUNT(*) as total FROM gastos");
-            $resultado = $stmt->fetch();
-            $numero_gasto = "G-" . str_pad($resultado['total'] + 1, 6, '0', STR_PAD_LEFT);
-            
+            // Generar número de gasto evitando duplicados
+            $stmt = $pdo->query("SELECT numero_gasto FROM gastos ORDER BY id DESC LIMIT 1");
+            $ultimo = $stmt->fetch();
+            $next_num = 1;
+            if ($ultimo && preg_match('/G-(\d{6})/', $ultimo['numero_gasto'], $matches)) {
+                $next_num = (int)$matches[1] + 1;
+            }
+            // Buscar el siguiente número disponible
+            do {
+                $numero_gasto = "G-" . str_pad($next_num, 6, '0', STR_PAD_LEFT);
+                $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM gastos WHERE numero_gasto = ?");
+                $stmt_check->execute([$numero_gasto]);
+                $exists = $stmt_check->fetchColumn();
+                $next_num++;
+            } while ($exists);
+
             $stmt = $pdo->prepare("
                 INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto, 
                                    observaciones, archivo, usuario_registra)
@@ -88,7 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
                            $observaciones, $archivo, $_SESSION['user']['id']]);
-            
             $gasto_id = $pdo->lastInsertId();
             
             // Registrar en historial

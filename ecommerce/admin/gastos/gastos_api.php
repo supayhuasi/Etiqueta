@@ -138,10 +138,21 @@ try {
         throw new Exception(implode(', ', $errores));
     }
 
-    // generar número de gasto
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM gastos");
-    $res = $stmt->fetch();
-    $numero = "G-" . str_pad($res['total'] + 1, 6, '0', STR_PAD_LEFT);
+    // generar número de gasto evitando duplicados
+    $stmt = $pdo->query("SELECT numero_gasto FROM gastos ORDER BY id DESC LIMIT 1");
+    $ultimo = $stmt->fetch();
+    $next_num = 1;
+    if ($ultimo && preg_match('/G-(\d{6})/', $ultimo['numero_gasto'], $matches)) {
+        $next_num = (int)$matches[1] + 1;
+    }
+    // Buscar el siguiente número disponible
+    do {
+        $numero = "G-" . str_pad($next_num, 6, '0', STR_PAD_LEFT);
+        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM gastos WHERE numero_gasto = ?");
+        $stmt_check->execute([$numero]);
+        $exists = $stmt_check->fetchColumn();
+        $next_num++;
+    } while ($exists);
 
     $usuario_id = $_SESSION['user']['id'] ?? null;
     // Cuando se autentica vía API key (sin sesión), resolver el usuario que registra.
