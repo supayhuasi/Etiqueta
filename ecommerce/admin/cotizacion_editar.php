@@ -37,8 +37,11 @@ if (!in_array('cupon_descuento', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
 }
 
-$direccion_col = in_array('direccion', $cols_cot, true) ? 'direccion' : (in_array('empresa', $cols_cot, true) ? 'empresa' : null);
-$dni_col = in_array('dni', $cols_cot, true) ? 'dni' : null;
+$cols_cot_actuales = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+
+$direccion_col = in_array('direccion', $cols_cot_actuales, true) ? 'direccion' : (in_array('empresa', $cols_cot_actuales, true) ? 'empresa' : null);
+$dni_col = in_array('dni', $cols_cot_actuales, true) ? 'dni' : null;
+$tiene_lista_precio = in_array('lista_precio_id', $cols_cot_actuales, true);
 
 $direccion_actual = '';
 if ($direccion_col !== null) {
@@ -48,6 +51,7 @@ $dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $items_nuevos = $items;
     try {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
         $email = $_POST['email'] ?? '';
@@ -153,7 +157,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'nombre_cliente = ?',
                 'email = ?',
                 'telefono = ?',
-                'lista_precio_id = ?',
                 'items = ?',
                 'subtotal = ?',
                 'descuento = ?',
@@ -168,7 +171,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $nombre_cliente,
                 $email,
                 $telefono,
-                $lista_precio_id,
                 json_encode($items_nuevos, JSON_UNESCAPED_UNICODE),
                 $subtotal,
                 $descuento,
@@ -178,6 +180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $observaciones,
                 $validez_dias
             ];
+
+            if ($tiene_lista_precio) {
+                array_splice($set_parts, 3, 0, ['lista_precio_id = ?']);
+                array_splice($params, 3, 0, [$lista_precio_id]);
+            }
 
             if ($direccion_col !== null) {
                 $set_parts[] = $direccion_col . ' = ?';
@@ -199,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } catch (Exception $e) {
+        $items = $items_nuevos;
         $error = $e->getMessage();
     }
 }
