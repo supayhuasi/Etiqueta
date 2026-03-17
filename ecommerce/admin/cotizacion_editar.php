@@ -814,21 +814,44 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                 });
 
                 if (Array.isArray(valoresExistentes) && valoresExistentes.length > 0) {
+                    const normalizarTxt = (txt) => String(txt || '').trim().toLowerCase();
+
                     valoresExistentes.forEach(v => {
-                        const wrapper = document.querySelector(`.modal-attr-item[data-attr-id="${v.id}"]`);
+                        let wrapper = null;
+
+                        if (v && v.id !== undefined && v.id !== null && String(v.id).trim() !== '') {
+                            wrapper = document.querySelector(`.modal-attr-item[data-attr-id="${String(v.id).trim()}"]`);
+                        }
+
+                        if (!wrapper && v && v.nombre) {
+                            const nombreBuscado = normalizarTxt(v.nombre);
+                            const wrappers = Array.from(document.querySelectorAll('.modal-attr-item'));
+                            wrapper = wrappers.find(w => normalizarTxt(w.dataset.attrNombre) === nombreBuscado) || null;
+                        }
+
                         if (!wrapper) return;
-                        const radio = wrapper.querySelector(`input[type="radio"][value="${v.valor}"]`);
-                        if (radio) {
-                            radio.checked = true;
-                            marcarOpcionAtributo(radio);
+
+                        const attrId = wrapper.dataset.attrId;
+                        const valorExistente = String(v.valor ?? '').trim();
+
+                        const radios = Array.from(wrapper.querySelectorAll('input[type="radio"]'));
+                        if (radios.length > 0) {
+                            const radio = radios.find(r => String(r.value).trim() === valorExistente);
+                            if (radio) {
+                                radio.checked = true;
+                                marcarOpcionAtributo(radio);
+                            }
                         }
-                        const input = wrapper.querySelector(`[data-attr-valor="${v.id}"]`);
+
+                        const input = wrapper.querySelector(`[data-attr-valor="${attrId}"]`);
                         if (input) {
-                            input.value = v.valor || '';
+                            input.value = valorExistente;
                         }
-                        const baseInput = document.getElementById(`modal_attr_costo_${v.id}`);
-                        const baseCosto = baseInput ? baseInput.dataset.base : 0;
-                        actualizarCostoAtributoModal(v.id, baseCosto || 0, v.costo || 0, v.valor);
+
+                        const baseInput = document.getElementById(`modal_attr_costo_${attrId}`);
+                        const baseCosto = baseInput ? parseFloat(baseInput.dataset.base || 0) : 0;
+                        const costoExistente = parseFloat(v.costo ?? v.costo_adicional ?? 0) || 0;
+                        actualizarCostoAtributoModal(attrId, baseCosto || 0, costoExistente, valorExistente);
                     });
                 }
             } else {
