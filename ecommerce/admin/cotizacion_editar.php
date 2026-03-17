@@ -51,6 +51,7 @@ $dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $items_originales = $items;
     $items_nuevos = $items;
     try {
         $nombre_cliente = $_POST['nombre_cliente'] ?? '';
@@ -75,20 +76,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Aceptar items como JSON (más fiable) o como array POST
         $items_post = $_POST['items'] ?? [];
-        if (!empty($_POST['items_json'])) {
-            $decoded = json_decode($_POST['items_json'], true);
+        $items_json_raw = trim((string)($_POST['items_json'] ?? ''));
+        if ($items_json_raw !== '') {
+            $decoded = json_decode($items_json_raw, true);
             if (is_array($decoded)) {
                 $items_post = $decoded;
-            } else {
-                throw new Exception('Formato inválido de items. Guardá nuevamente la cotización.');
             }
+        }
+
+        if ((!is_array($items_post) || empty($items_post)) && !empty($items_originales) && is_array($items_originales)) {
+            $items_post = $items_originales;
         }
 
         if (!empty($items_post) && is_array($items_post)) {
             foreach ($items_post as $item) {
                 $nombre = trim((string)($item['nombre'] ?? ''));
                 $cantidad = (int)($item['cantidad'] ?? 0);
-                $precio = floatval($item['precio'] ?? 0);
+                $precio = floatval($item['precio'] ?? ($item['precio_base'] ?? ($item['precio_unitario'] ?? 0)));
                 if ($nombre === '' || $cantidad < 1 || $precio < 0) {
                     continue;
                 }
@@ -153,38 +157,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $total = $subtotal - $descuento - $cupon_descuento;
-            $set_parts = [
-                'nombre_cliente = ?',
-                'email = ?',
-                'telefono = ?',
-                'items = ?',
-                'subtotal = ?',
-                'descuento = ?',
-                'cupon_codigo = ?',
-                'cupon_descuento = ?',
-                'total = ?',
-                'observaciones = ?',
-                'validez_dias = ?'
-            ];
+            $set_parts = [];
+            $params = [];
 
-            $params = [
-                $nombre_cliente,
-                $email,
-                $telefono,
-                json_encode($items_nuevos, JSON_UNESCAPED_UNICODE),
-                $subtotal,
-                $descuento,
-                $cupon_codigo ?: null,
-                $cupon_descuento,
-                $total,
-                $observaciones,
-                $validez_dias
-            ];
+            $pushIfColumnExists = static function (string $column, $value) use (&$set_parts, &$params, $cols_cot_actuales): void {
+                if (in_array($column, $cols_cot_actuales, true)) {
+                    $set_parts[] = $column . ' = ?';
+                    $params[] = $value;
+                }
+            };
 
-            if ($tiene_lista_precio) {
-                array_splice($set_parts, 3, 0, ['lista_precio_id = ?']);
-                array_splice($params, 3, 0, [$lista_precio_id]);
-            }
+            $pushIfColumnExists('nombre_cliente', $nombre_cliente);
+            $pushIfColumnExists('email', $email);
+            $pushIfColumnExists('telefono', $telefono);
+            $pushIfColumnExists('lista_precio_id', $lista_precio_id);
+            $pushIfColumnExists('items', json_encode($items_nuevos, JSON_UNESCAPED_UNICODE));
+            $pushIfColumnExists('subtotal', $subtotal);
+            $pushIfColumnExists('descuento', $descuento);
+            $pushIfColumnExists('cupon_codigo', $cupon_codigo ?: null);
+            $pushIfColumnExists('cupon_descuento', $cupon_descuento);
+            $pushIfColumnExists('total', $total);
+            $pushIfColumnExists('observaciones', $observaciones);
+            $pushIfColumnExists('validez_dias', $validez_dias);
 
             if ($direccion_col !== null) {
                 $set_parts[] = $direccion_col . ' = ?';
@@ -194,6 +188,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dni_col !== null) {
                 $set_parts[] = $dni_col . ' = ?';
                 $params[] = ($dni !== '' ? $dni : null);
+            }
+
+            if (empty($set_parts)) {
+                throw new Exception('No se pudo guardar: no hay columnas editables disponibles en ecommerce_cotizaciones.');
             }
 
             $sql_update = "UPDATE ecommerce_cotizaciones SET " . implode(', ', $set_parts) . " WHERE id = ?";
@@ -206,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } catch (Exception $e) {
-        $items = $items_nuevos;
+        $items = !empty($items_nuevos) ? $items_nuevos : $items_originales;
         $error = $e->getMessage();
     }
 }
