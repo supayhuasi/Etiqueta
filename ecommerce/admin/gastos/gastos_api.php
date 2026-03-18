@@ -138,22 +138,6 @@ try {
         throw new Exception(implode(', ', $errores));
     }
 
-    // generar número de gasto evitando duplicados
-    $stmt = $pdo->query("SELECT numero_gasto FROM gastos ORDER BY id DESC LIMIT 1");
-    $ultimo = $stmt->fetch();
-    $next_num = 1;
-    if ($ultimo && preg_match('/G-(\d{6})/', $ultimo['numero_gasto'], $matches)) {
-        $next_num = (int)$matches[1] + 1;
-    }
-    // Buscar el siguiente número disponible
-    do {
-        $numero = "G-" . str_pad($next_num, 6, '0', STR_PAD_LEFT);
-        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM gastos WHERE numero_gasto = ?");
-        $stmt_check->execute([$numero]);
-        $exists = $stmt_check->fetchColumn();
-        $next_num++;
-    } while ($exists);
-
     $usuario_id = $_SESSION['user']['id'] ?? null;
     // Cuando se autentica vía API key (sin sesión), resolver el usuario que registra.
     // Estrategia 1: primer usuario con rol 'admin' activo.
@@ -201,18 +185,44 @@ try {
         $usuario_id = $admin_row['id'];
     }
 
-    $stmt = $pdo->prepare("INSERT INTO gastos
-        (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion,
-         monto, observaciones, archivo, usuario_registra)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$numero, $fecha, $tipo_id, $empleado_id, $estado_id,
-                    $descripcion, $monto, $observaciones, $archivoNombre, $usuario_id]);
-    $gasto_id = $pdo->lastInsertId();
+    $lockKey = 'gastos_numero_gasto_lock';
+    $stmtLock = $pdo->prepare("SELECT GET_LOCK(?, 10)");
+    $stmtLock->execute([$lockKey]);
+    $gotLock = (int)$stmtLock->fetchColumn() === 1;
+    if (!$gotLock) {
+        throw new Exception('No se pudo obtener bloqueo para numerar el gasto. Intente nuevamente.');
+    }
 
-    // historial
-    $stmt = $pdo->prepare("INSERT INTO historial_gastos (gasto_id, estado_nuevo_id, usuario_id, observaciones)
-        VALUES (?, ?, ?, ?)");
-    $stmt->execute([$gasto_id, $estado_id, $usuario_id, 'Creado via API']);
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->query("SELECT MAX(CAST(SUBSTRING(numero_gasto, 3) AS UNSIGNED)) AS ultimo_numero FROM gastos WHERE numero_gasto LIKE 'G-%'");
+        $ultimoNumero = (int)$stmt->fetchColumn();
+        $numero = "G-" . str_pad($ultimoNumero + 1, 6, '0', STR_PAD_LEFT);
+
+        $stmt = $pdo->prepare("INSERT INTO gastos
+            (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion,
+             monto, observaciones, archivo, usuario_registra)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$numero, $fecha, $tipo_id, $empleado_id, $estado_id,
+                        $descripcion, $monto, $observaciones, $archivoNombre, $usuario_id]);
+        $gasto_id = $pdo->lastInsertId();
+
+        // historial
+        $stmt = $pdo->prepare("INSERT INTO historial_gastos (gasto_id, estado_nuevo_id, usuario_id, observaciones)
+            VALUES (?, ?, ?, ?)");
+        $stmt->execute([$gasto_id, $estado_id, $usuario_id, 'Creado via API']);
+
+        $pdo->commit();
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    } finally {
+        $stmtUnlock = $pdo->prepare("SELECT RELEASE_LOCK(?)");
+        $stmtUnlock->execute([$lockKey]);
+    }
 
     // flujo de caja si pagado
     $stmt_pag = $pdo->prepare("SELECT id FROM estados_gastos WHERE LOWER(nombre) = 'pagado' LIMIT 1");

@@ -474,6 +474,7 @@ foreach ($lista_cat_rows as $row) {
 <script>
 let itemIndex = 0;
 let modalEditIndex = null;
+let recalculandoPrecioModal = false;
 const itemsExistentes = <?= json_encode($items) ?>;
 const productos = <?= json_encode($productos) ?>;
 const listaItems = <?= json_encode($lista_items_map) ?>;
@@ -883,37 +884,58 @@ function actualizarCostoAtributoModal(attrId, costoBase, costoOpcion, valorSelec
     }
 }
 
-function actualizarPrecioItemModal() {
+async function actualizarPrecioItemModal(opciones = {}) {
+    const forzarValidacion = !!opciones.forzarValidacion;
     const productoId = document.getElementById('producto_id_modal')?.value;
-    if (!productoId) return;
+    if (!productoId) return true;
 
     const producto = productos.find(p => String(p.id) === String(productoId));
-    if (producto?.tipo_precio === 'variable') {
-        const ancho = parseFloat(document.getElementById('ancho_modal').value || 0);
-        const alto = parseFloat(document.getElementById('alto_modal').value || 0);
+    if (producto?.tipo_precio !== 'variable') {
+        return true;
+    }
 
-        if (ancho > 0 && alto > 0) {
-            fetch(`cotizacion_producto_precio.php?producto_id=${productoId}&ancho=${ancho}&alto=${alto}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                        return;
-                    }
-                    const precioBase = parseFloat(data.precio || 0);
-                    const precioInput = document.getElementById('precio_modal');
-                    precioInput.dataset.base = precioBase.toFixed(2);
-                    precioInput.value = precioBase.toFixed(2);
-                    const info = document.getElementById('precio-info-modal');
-                    if (info) {
-                        info.innerHTML = '✓ ' + data.precio_info;
-                        info.style.display = 'block';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
+    const ancho = parseFloat(document.getElementById('ancho_modal').value || 0);
+    const alto = parseFloat(document.getElementById('alto_modal').value || 0);
+
+    if (!(ancho > 0 && alto > 0)) {
+        if (forzarValidacion) {
+            throw new Error('Para este producto debés ingresar ancho y alto válidos para calcular el precio.');
         }
+        return false;
+    }
+
+    recalculandoPrecioModal = true;
+    try {
+        const response = await fetch(`cotizacion_producto_precio.php?producto_id=${productoId}&ancho=${ancho}&alto=${alto}`);
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        const precioBase = parseFloat(data.precio || 0);
+        if (!isFinite(precioBase) || precioBase <= 0) {
+            throw new Error('No se pudo calcular un precio válido para esas medidas.');
+        }
+
+        const precioInput = document.getElementById('precio_modal');
+        precioInput.dataset.base = precioBase.toFixed(2);
+        precioInput.value = precioBase.toFixed(2);
+        const info = document.getElementById('precio-info-modal');
+        if (info) {
+            info.innerHTML = '✓ ' + (data.precio_info || 'Precio actualizado por medidas');
+            info.style.display = 'block';
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error recalculando precio por medidas:', error);
+        if (forzarValidacion) {
+            throw error;
+        }
+        return false;
+    } finally {
+        recalculandoPrecioModal = false;
     }
 }
 
@@ -1046,7 +1068,21 @@ function renderItemResumen(index, itemData) {
     return html;
 }
 
-function guardarItemDesdeModal() {
+async function guardarItemDesdeModal() {
+    const guardarBtn = document.getElementById('guardarItemBtn');
+    if (recalculandoPrecioModal) {
+        alert('Esperá un momento, se está recalculando el precio por medidas.');
+        return;
+    }
+
+    if (guardarBtn) guardarBtn.disabled = true;
+    try {
+    const productoIdActual = document.getElementById('producto_id_modal')?.value || '';
+    const productoActual = productos.find(p => String(p.id) === String(productoIdActual));
+    if (productoActual?.tipo_precio === 'variable') {
+        await actualizarPrecioItemModal({ forzarValidacion: true });
+    }
+
     const form = document.getElementById('itemModalForm') || document.querySelector('#itemModal form');
     if (form && !form.checkValidity()) {
         form.reportValidity();
@@ -1161,6 +1197,11 @@ function guardarItemDesdeModal() {
     }, 0);
     document.body.classList.remove('modal-open');
     document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    } catch (err) {
+        alert(err.message || 'No se pudo guardar el item.');
+    } finally {
+        if (guardarBtn) guardarBtn.disabled = false;
+    }
 }
 
 function eliminarItem(index) {
