@@ -1486,7 +1486,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('No se pudieron leer los items. Revisa que cada item tenga nombre, cantidad y precio.');
                 return false;
             }
-            var jsonStr = JSON.stringify(itemsArray);
+            // Validar que cada item tenga nombre, cantidad y precio válidos
+            for (let i = 0; i < itemsArray.length; i++) {
+                const it = itemsArray[i];
+                if (!it.nombre || !it.cantidad || !it.precio || isNaN(it.cantidad) || isNaN(it.precio) || it.cantidad <= 0 || it.precio < 0) {
+                    alert('Todos los items deben tener nombre, cantidad mayor a 0 y precio válido.');
+                    return false;
+                }
+            }
+            let jsonStr = '';
+            try {
+                jsonStr = JSON.stringify(itemsArray);
+            } catch (err) {
+                alert('Error serializando los items. Intenta recargar la página.');
+                return false;
+            }
+            if (!jsonStr || jsonStr === '[]') {
+                alert('No se detectaron items para guardar.');
+                return false;
+            }
             var input = formCot.querySelector('input[name="items_json"]');
             if (!input) {
                 input = document.createElement('input');
@@ -1500,6 +1518,12 @@ document.addEventListener('DOMContentLoaded', function() {
             formCot.querySelectorAll('.item-row [name^="items["]').forEach(function(el) {
                 el.removeAttribute('name');
             });
+
+            // Validación final antes de submit
+            if (!input.value || input.value === '[]') {
+                alert('Error: los items no se enviaron correctamente.');
+                return false;
+            }
 
             formCot.submit();
         });
