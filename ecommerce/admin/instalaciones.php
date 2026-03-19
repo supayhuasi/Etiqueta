@@ -1479,7 +1479,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Accept': 'application/json'
             }
         })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+            return r.text().then(function (text) {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida');
+                }
+            });
+        })
         .then(function (res) {
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar el orden');
