@@ -1148,7 +1148,11 @@ async function guardarItemDesdeModal() {
             const html = renderItemResumen(index, itemData);
             const row = document.getElementById(`item_${index}`);
             if (row) {
-                row.outerHTML = html;
+                // Reemplazar el nodo por uno nuevo para evitar problemas de referencias
+                const newNode = document.createElement('div');
+                newNode.innerHTML = html;
+                const newItem = newNode.firstElementChild;
+                itemsContainer.replaceChild(newItem, row);
             }
         }
     } catch (err) {
