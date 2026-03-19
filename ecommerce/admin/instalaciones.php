@@ -1,6 +1,15 @@
 <?php
 require 'includes/header.php';
 
+function verificar_sesion_json() {
+    if (empty($_SESSION['user'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
+        exit;
+    }
+}
+
 function tabla_existe($pdo, $tabla) {
     try {
         $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
@@ -252,6 +261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
 
         if ($action === 'eliminar_visita') {
+            verificar_sesion_json();
             header('Content-Type: application/json; charset=utf-8');
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tiene_visitas || $item_id <= 0) {
@@ -278,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'eliminar_orden') {
+            verificar_sesion_json();
             header('Content-Type: application/json; charset=utf-8');
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tablas_base_ok || $item_id <= 0) {
@@ -412,12 +423,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'mover_instalacion') {
+        verificar_sesion_json();
         header('Content-Type: application/json; charset=utf-8');
-        if (empty($_SESSION['user'])) {
-            http_response_code(401);
-            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
-            exit;
-        }
 
         $tipo = $_POST['tipo'] ?? '';
         $item_id = (int)($_POST['item_id'] ?? 0);
@@ -466,12 +473,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'editar_instalacion_manual') {
+        verificar_sesion_json();
         header('Content-Type: application/json; charset=utf-8');
-        if (empty($_SESSION['user'])) {
-            http_response_code(401);
-            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
-            exit;
-        }
 
         $item_id = (int)($_POST['item_id'] ?? 0);
         $titulo = trim($_POST['titulo'] ?? '');
@@ -533,12 +536,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'eliminar_instalacion_manual') {
+        verificar_sesion_json();
         header('Content-Type: application/json; charset=utf-8');
-        if (empty($_SESSION['user'])) {
-            http_response_code(401);
-            echo json_encode(['ok' => false, 'msg' => 'Sesión expirada. Por favor, vuelve a iniciar sesión.']);
-            exit;
-        }
 
         $item_id = (int)($_POST['item_id'] ?? 0);
 
