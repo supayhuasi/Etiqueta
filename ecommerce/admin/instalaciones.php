@@ -1,5 +1,15 @@
 <?php
-require 'includes/header.php';
+// Detectar si es una solicitud JSON antes de incluir el header
+$es_json_request = (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false ||
+     strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/x-www-form-urlencoded') !== false ||
+     isset($_POST['action']))
+);
+
+if (!$es_json_request) {
+    require 'includes/header.php';
+}
 
 function verificar_sesion_json() {
     if (empty($_SESSION['user'])) {
@@ -266,11 +276,13 @@ $tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
 $estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    ob_start(); // Capturar cualquier output no deseado
     $action = trim((string)($_POST['action'] ?? ''));
 
         if ($action === 'eliminar_visita') {
-            verificar_sesion_json();
             header('Content-Type: application/json; charset=utf-8');
+            ob_clean();
+            verificar_sesion_json();
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tiene_visitas || $item_id <= 0) {
                 http_response_code(400);
@@ -296,8 +308,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'eliminar_orden') {
-            verificar_sesion_json();
+            ob_clean();
             header('Content-Type: application/json; charset=utf-8');
+            verificar_sesion_json();
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tablas_base_ok || $item_id <= 0) {
                 http_response_code(400);
@@ -323,6 +336,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     if ($action === 'crear_instalacion_manual') {
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
         $titulo = trim($_POST['titulo'] ?? '');
         $cliente = trim($_POST['cliente'] ?? '');
         $telefono = trim($_POST['telefono'] ?? '');
@@ -364,6 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
         if ($ok_msg === 'Instalación manual creada correctamente.') {
             echo json_encode(['ok' => true, 'msg' => $ok_msg]);
@@ -420,6 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
         if ($ok_msg === 'Visita cargada correctamente.') {
             echo json_encode(['ok' => true, 'msg' => $ok_msg]);
@@ -432,6 +449,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'mover_instalacion') {
         verificar_sesion_json();
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $tipo = $_POST['tipo'] ?? '';
@@ -482,6 +500,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'editar_instalacion_manual') {
         verificar_sesion_json();
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $item_id = (int)($_POST['item_id'] ?? 0);
@@ -576,6 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'guardar_texto_tarjeta') {
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $tipo = trim($_POST['tipo'] ?? '');
@@ -609,6 +629,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'guardar_orden_tarjetas') {
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $fecha_columna = trim($_POST['fecha_columna'] ?? '');
