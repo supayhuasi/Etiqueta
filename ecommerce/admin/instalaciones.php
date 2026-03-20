@@ -240,6 +240,14 @@ $instalacion_desde = $_GET['instalacion_desde'] ?? $hoy;
 $instalacion_hasta = $_GET['instalacion_hasta'] ?? $en_7_dias;
 $incluir_entregados = !empty($_GET['incluir_entregados']);
 
+// Validar fechas de tablero antes de usarlas
+if (!valor_fecha_valido($instalacion_desde)) {
+    $instalacion_desde = $hoy;
+}
+if (!valor_fecha_valido($instalacion_hasta)) {
+    $instalacion_hasta = $en_7_dias;
+}
+
 $items_instalacion = [];
 $error_pagina = '';
 $auto_setup_msg = '';
@@ -665,10 +673,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $ok_msg = trim($_GET['msg'] ?? $ok_msg);
 
+// Invertir fechas si es necesario
 $dias_tablero = [];
-if (!valor_fecha_valido($instalacion_desde) || !valor_fecha_valido($instalacion_hasta) || $instalacion_desde > $instalacion_hasta) {
-    $instalacion_desde = $hoy;
-    $instalacion_hasta = $en_7_dias;
+if ($instalacion_desde > $instalacion_hasta) {
+    $temp = $instalacion_desde;
+    $instalacion_desde = $instalacion_hasta;
+    $instalacion_hasta = $temp;
 }
 
 $tablero_desde = $hoy;
@@ -1480,11 +1490,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         })
         .then(function (r) {
+            if (r.status === 401) {
+                throw new Error('Sesión expirada. Por favor recarga la página.');
+            }
             return r.text().then(function (text) {
                 try {
                     return JSON.parse(text);
                 } catch (e) {
-                    throw new Error('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida');
+                    console.error('Respuesta inválida:', text);
+                    throw new Error('El servidor devolvió una respuesta inválida');
                 }
             });
         })
@@ -1494,10 +1508,18 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         })
         .catch(function (err) {
+            console.error('Error en guardarOrdenColumna:', err);
             if (typeof onRollback === 'function') {
                 onRollback();
             }
-            alert(err.message || 'No se pudo guardar el orden');
+            if (err && err.message && err.message.indexOf('Sesión') > -1) {
+                alert(err.message + ' Se recargará la página.');
+                setTimeout(function () {
+                    location.reload();
+                }, 1000);
+            } else {
+                alert(err.message || 'No se pudo guardar el orden. Intentá nuevamente.');
+            }
         });
     }
 
@@ -1787,28 +1809,57 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            // Guardar el orden actual por si hay que revertir
+            var originalParent = parent.cloneNode(true);
+
             if (direccion === 'up') {
                 parent.insertBefore(cardMover, sibling);
             } else {
-                parent.insertBefore(sibling, cardMover);
+                if (sibling.nextElementSibling) {
+                    parent.insertBefore(cardMover, sibling.nextElementSibling);
+                } else {
+                    parent.appendChild(cardMover);
+                }
             }
 
             guardarOrdenColumna(parent, function () {
-                alert('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida.');
+                // Revertir al estado anterior si hay error
+                parent.innerHTML = '';
+                Array.prototype.slice.call(originalParent.childNodes).forEach(function (node) {
+                    if (node.nodeType === 1) { // Solo elementos
+                        parent.appendChild(node.cloneNode(true));
+                    }
+                });
+                // Re-asignar eventos a los nuevos elementos
+                location.reload();
             });
         }
 
         var btnSubir = card.querySelector('.inst-btn-subir');
         if (btnSubir) {
-            btnSubir.addEventListener('click', function () {
-                moverDentroColumna(card, 'up');
+            btnSubir.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    moverDentroColumna(card, 'up');
+                } catch (err) {
+                    console.error('Error al subir tarjeta:', err);
+                    alert('Error al mover la tarjeta hacia arriba');
+                }
             });
         }
 
         var btnBajar = card.querySelector('.inst-btn-bajar');
         if (btnBajar) {
-            btnBajar.addEventListener('click', function () {
-                moverDentroColumna(card, 'down');
+            btnBajar.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    moverDentroColumna(card, 'down');
+                } catch (err) {
+                    console.error('Error al bajar tarjeta:', err);
+                    alert('Error al mover la tarjeta hacia abajo');
+                }
             });
         }
     });
@@ -1845,6 +1896,12 @@ document.addEventListener('DOMContentLoaded', function () {
         editForm.addEventListener('submit', function (e) {
             e.preventDefault();
 
+            var titulo = document.getElementById('edit-titulo').value || '';
+            if (!titulo.trim()) {
+                alert('El título es obligatorio');
+                return;
+            }
+
             var fd = new FormData(editForm);
             fd.append('action', 'editar_instalacion_manual');
 
@@ -1853,7 +1910,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 body: fd,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                if (r.status === 401) {
+                    throw new Error('Tu sesión ha expirado. Por favor, recarga la página.');
+                }
+                return r.json();
+            })
             .then(function (res) {
                 if (!res || !res.ok) {
                     throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar');
@@ -1863,9 +1925,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (editModal) {
                     editModal.hide();
                 }
+                alert('Instalación actualizada correctamente');
             })
             .catch(function (err) {
-                alert(err.message || 'Error al guardar');
+                console.error('Error en editar_instalacion_manual:', err);
+                if (err && err.message && err.message.indexOf('Sesión') > -1) {
+                    alert(err.message + ' Se recargará la página.');
+                    setTimeout(function () {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert(err.message || 'Error al guardar. Intentá nuevamente.');
+                }
             });
         });
     }
