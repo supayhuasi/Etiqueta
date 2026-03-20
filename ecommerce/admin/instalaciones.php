@@ -614,16 +614,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha_columna = trim($_POST['fecha_columna'] ?? '');
         $orden_json = trim($_POST['orden'] ?? '[]');
 
-        if (!valor_fecha_valido($fecha_columna)) {
+        // Validar fecha si no está vacía, permitir vacío para "sin fecha"
+        if ($fecha_columna !== '' && !valor_fecha_valido($fecha_columna)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'msg' => 'Fecha de columna inválida']);
             exit;
         }
 
-        $orden = json_decode($orden_json, true);
+        $orden = @json_decode($orden_json, true);
         if (!is_array($orden)) {
             http_response_code(400);
-            echo json_encode(['ok' => false, 'msg' => 'Orden inválido']);
+            echo json_encode(['ok' => false, 'msg' => 'Orden inválido: ' . json_last_error_msg()]);
             exit;
         }
 
@@ -1473,13 +1474,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function guardarOrdenColumna(dropzone, onRollback) {
         if (!dropzone) {
+            console.warn('guardarOrdenColumna: dropzone no válida');
             return;
         }
 
+        var fechaColumna = dropzone.getAttribute('data-fecha') || '';
+        var orden = serializarColumna(dropzone);
+        
+        console.log('Guardando orden columna:', {
+            fecha: fechaColumna,
+            cantidad_items: orden.length,
+            items: orden
+        });
+
         var fd = new FormData();
         fd.append('action', 'guardar_orden_tarjetas');
-        fd.append('fecha_columna', dropzone.getAttribute('data-fecha') || '');
-        fd.append('orden', JSON.stringify(serializarColumna(dropzone)));
+        fd.append('fecha_columna', fechaColumna);
+        fd.append('orden', JSON.stringify(orden));
 
         fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
             method: 'POST',
@@ -1490,26 +1501,35 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         })
         .then(function (r) {
+            console.log('Respuesta del servidor:', r.status, r.statusText);
             if (r.status === 401) {
                 throw new Error('Sesión expirada. Por favor recarga la página.');
             }
-            return r.text().then(function (text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    console.error('Respuesta inválida:', text);
-                    throw new Error('El servidor devolvió una respuesta inválida');
-                }
-            });
+            if (r.status >= 500) {
+                throw new Error('Error del servidor (HTTP ' + r.status + ')');
+            }
+            return r.text();
+        })
+        .then(function (text) {
+            console.log('Texto de respuesta:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('No se pudo parsear JSON:', e, 'Texto:', text);
+                throw new Error('El servidor devolvió una respuesta inválida');
+            }
         })
         .then(function (res) {
+            console.log('JSON parseado:', res);
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar el orden');
             }
+            console.log('Orden guardado exitosamente');
         })
         .catch(function (err) {
             console.error('Error en guardarOrdenColumna:', err);
             if (typeof onRollback === 'function') {
+                console.log('Ejecutando rollback...');
                 onRollback();
             }
             if (err && err.message && err.message.indexOf('Sesión') > -1) {
@@ -1518,7 +1538,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     location.reload();
                 }, 1000);
             } else {
-                alert(err.message || 'No se pudo guardar el orden. Intentá nuevamente.');
+                alert('Error: ' + (err.message || 'No se pudo guardar el orden'));
             }
         });
     }
