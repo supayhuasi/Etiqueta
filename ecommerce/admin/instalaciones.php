@@ -241,6 +241,10 @@ function proximo_orden_visual($pdo, $tipo, $fecha) {
     return $prox > 0 ? $prox : 10;
 }
 
+function fragmento_update_fecha_actualizacion($pdo, $tabla) {
+    return columna_existe($pdo, $tabla, 'fecha_actualizacion') ? ', fecha_actualizacion = NOW()' : '';
+}
+
 $hoy = date('Y-m-d');
 $en_7_dias = date('Y-m-d', strtotime('+6 days'));
 
@@ -470,21 +474,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('No se puede mover: falta columna fecha_instalacion.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'orden', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             } elseif ($tipo === 'manual') {
                 if (!$tiene_instalaciones_manuales) {
                     throw new RuntimeException('No existe la tabla de instalaciones manuales.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'manual', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             } else {
                 if (!$tiene_visitas) {
                     throw new RuntimeException('No existe la tabla de visitas.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'visita', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             }
 
@@ -523,7 +527,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales
                 SET titulo = ?, cliente = ?, telefono = ?, direccion = ?, localidad = ?, provincia = ?, codigo_postal = ?,
-                    fecha_instalacion = ?, notas = ?, fecha_actualizacion = NOW()
+                    fecha_instalacion = ?, notas = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . "
                 WHERE id = ?");
             $stmt->execute([
                 $titulo,
@@ -610,11 +614,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             if ($tipo === 'orden') {
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET notas_instalacion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET notas_instalacion = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
             } elseif ($tipo === 'manual') {
-                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET notas = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET notas = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
             } else {
-                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET descripcion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET descripcion = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
             }
 
             $stmt->execute([$texto !== '' ? $texto : null, $item_id]);
@@ -667,11 +671,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($tipo === 'orden') {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
                 } elseif ($tipo === 'manual') {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
                 } else {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
                 }
 
                 $stmt->execute([$fecha_sql, $pos, $item_id]);
