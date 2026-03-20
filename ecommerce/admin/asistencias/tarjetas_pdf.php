@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/../../../config.php';
 require_once __DIR__ . '/../../../code128.php';
+require_once __DIR__ . '/../../../includes/asistencia_codigo.php';
 
 // Obtener parámetros
 $empleado_id = $_GET['empleado_id'] ?? null;
@@ -51,7 +52,7 @@ function generarTarjeta($pdf, $empleado, $x, $y) {
     }
     
     // Código de barras (centrado en la parte inferior)
-    $codigo = 'EMP' . str_pad($empleado['id'], 6, '0', STR_PAD_LEFT);
+    $codigo = generar_codigo_asistencia((int)$empleado['id']);
     
     // Posición del código de barras
     $barcode_y = $y + $alto_tarjeta - 18;
@@ -59,10 +60,10 @@ function generarTarjeta($pdf, $empleado, $x, $y) {
     
     $pdf->Code128($barcode_x, $barcode_y, $codigo, 60, 12);
     
-    // Texto del código debajo del código de barras
+    // Texto genérico debajo del código de barras (sin exponer ID/código)
     $pdf->SetFont('Arial', '', 8);
     $pdf->SetXY($x + 5, $y + $alto_tarjeta - 5);
-    $pdf->Cell($ancho_tarjeta - 10, 4, 'ID: ' . $codigo, 0, 0, 'C');
+    $pdf->Cell($ancho_tarjeta - 10, 4, utf8_decode('Código de asistencia'), 0, 0, 'C');
     
     // Instrucciones pequeñas
     $pdf->SetFont('Arial', 'I', 6);
