@@ -118,6 +118,11 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
 
 $pedido_id = $_GET['id'] ?? 0;
 
+// DEBUG: Mostrar el valor de $pedido_id recibido
+if (!isset($_GET['pedido_id'])) {
+    die('Falta el parámetro pedido_id en la URL');
+}
+var_dump('DEBUG pedido_id:', $pedido_id);
 // Obtener pedido
 $stmt = $pdo->prepare("
     SELECT p.*, c.nombre, c.email, c.telefono, c.direccion as dir_cliente, c.ciudad, c.provincia, c.codigo_postal
@@ -129,7 +134,7 @@ $stmt->execute([$pedido_id]);
 $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$pedido) {
-    die("Pedido no encontrado");
+    die("Pedido no encontrado (ID: " . htmlspecialchars($pedido_id) . ")");
 }
 
 if (empty($pedido['public_token'])) {
