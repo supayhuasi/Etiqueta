@@ -275,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $pdo->commit();
             
-            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
         } elseif ($accion === 'actualizar_orden' && $orden_produccion) {
             $estado = $_POST['estado'] ?? 'pendiente';
@@ -287,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET estado = ?, notas = ?, fecha_entrega = ? WHERE id = ?");
             $stmt->execute([$estado, $notas, $fecha_entrega, $orden_produccion['id']]);
-            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
         } elseif ($accion === 'registrar_pago') {
             $monto = round((float)($_POST['monto'] ?? 0), 2);
@@ -356,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flujo_error_pago'] = $e->getMessage();
             }
 
-            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
         } elseif ($accion === 'cancelar_pedido') {
             if ($pedido['estado'] === 'cancelado') {
@@ -364,7 +364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'cancelado' WHERE id = ?");
             $stmt->execute([$pedido_id]);
-            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
         } elseif ($accion === 'eliminar_pago') {
             $pago_id = (int)($_POST['pago_id'] ?? 0);
@@ -393,7 +393,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Si falla, no afecta la eliminación del pago
             }
 
-            header("Location: pedidos_detalle.php?id=" . $pedido_id);
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
         }
     } catch (Exception $e) {

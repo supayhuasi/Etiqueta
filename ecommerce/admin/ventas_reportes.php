@@ -97,10 +97,10 @@ $porcentaje_cobrado = $total_vendido > 0 ? ($total_cobrado / $total_vendido) * 1
 
 // Pendiente de entrega (monto)
 try {
-    $estados_entregados = ['entregado'];
-    $placeholders = implode(',', array_fill(0, count($estados_entregados), '?'));
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado NOT IN ($placeholders)");
-    $params = array_merge([$startStr, $endStr], $estados_entregados);
+    $estados_pendientes = ['pendiente', 'en_produccion', 'terminado'];
+    $placeholders = implode(',', array_fill(0, count($estados_pendientes), '?'));
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado IN ($placeholders)");
+    $params = array_merge([$startStr, $endStr], $estados_pendientes);
     $stmt->execute($params);
     $pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
 } catch (Exception $e) {

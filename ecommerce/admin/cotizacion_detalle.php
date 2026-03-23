@@ -229,7 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $pdo->commit();
 
-                header("Location: pedidos_detalle.php?id=" . $pedido_id . "&mensaje=convertida");
+                header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id . "&mensaje=convertida");
                 exit;
     } elseif ($accion === 'cambiar_estado') {
             $nuevo_estado = $_POST['estado'];

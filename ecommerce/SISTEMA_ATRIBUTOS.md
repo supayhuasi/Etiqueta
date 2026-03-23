@@ -257,7 +257,7 @@ WHERE id IN (
 - Admin Dashboard: `/ecommerce/admin/index.php`
 - Admin Atributos: `/ecommerce/admin/productos_atributos.php?producto_id=X`
 - Admin Pedidos: `/ecommerce/admin/pedidos.php`
-- Admin Detalle Pedido: `/ecommerce/admin/pedidos_detalle.php?id=X`
+- Admin Detalle Pedido: `/ecommerce/admin/pedidos_detalle.php?pedido_id=X`
 - Tienda: `/ecommerce/index.php`
 - Producto: `/ecommerce/producto.php?id=X`
 - Carrito: `/ecommerce/carrito.php`
