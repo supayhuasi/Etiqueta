@@ -157,6 +157,47 @@ function orden_esta_vencida(array $orden): bool {
     </div>
 </div>
 
+<?php
+// Mini dashboard: contar entregadas y no entregadas
+$total_ordenes = count($ordenes);
+$entregadas = 0;
+$no_entregadas = 0;
+foreach ($ordenes as $op) {
+    if ($op['estado'] === 'entregado') {
+        $entregadas++;
+    } else if ($op['estado'] !== 'cancelado') {
+        $no_entregadas++;
+    }
+}
+?>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <div class="card bg-light border-success mb-2">
+            <div class="card-body text-success">
+                <h6 class="card-title mb-1">Órdenes Entregadas</h6>
+                <h3 class="fw-bold mb-0"><?= $entregadas ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light border-warning mb-2">
+            <div class="card-body text-warning">
+                <h6 class="card-title mb-1">Órdenes No Entregadas</h6>
+                <h3 class="fw-bold mb-0"><?= $no_entregadas ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light border-secondary mb-2">
+            <div class="card-body text-secondary">
+                <h6 class="card-title mb-1">Total Órdenes</h6>
+                <h3 class="fw-bold mb-0"><?= $total_ordenes ?></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-body">
         <?php if (empty($ordenes)): ?>

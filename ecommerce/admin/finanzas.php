@@ -77,12 +77,21 @@ if (fin_table_exists($pdo, 'cheques')) {
 }
 
 $cxc_pedidos = 0.0;
-if (fin_table_exists($pdo, 'ecommerce_pedidos')) {
-    $cxc_pedidos = (float) fin_scalar($pdo, "
+if (fin_table_exists($pdo, 'ecommerce_pedidos') && fin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
+    // Total de pedidos no cancelados
+    $total_pedidos = (float) fin_scalar($pdo, "
         SELECT SUM(total)
         FROM ecommerce_pedidos
-        WHERE estado IN ('pendiente_pago', 'esperando_transferencia', 'pago_pendiente', 'confirmado', 'preparando')
+        WHERE estado != 'cancelado'
     ", 0);
+    // Total pagado en pedidos no cancelados
+    $total_pagado = (float) fin_scalar($pdo, "
+        SELECT SUM(pp.monto)
+        FROM ecommerce_pedido_pagos pp
+        JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
+        WHERE p.estado != 'cancelado'
+    ", 0);
+    $cxc_pedidos = $total_pedidos - $total_pagado;
 }
 
 $valor_stock_productos = 0.0;
