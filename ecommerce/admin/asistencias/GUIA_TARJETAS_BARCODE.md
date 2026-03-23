@@ -87,14 +87,12 @@ http://tu-dominio.com/ecommerce/admin/asistencias/tarjetas_pdf.php?empleado_id=1
 
 ### Estructura
 ```
-EMP000001  → Empleado ID 1
-EMP000045  → Empleado ID 45
-EMP001234  → Empleado ID 1234
+EMP8F2A91C4D03B
+EMP1A7C3E9B55F0
 ```
 
-- **Prefijo:** `EMP` (identifica que es un código de empleado)
-- **ID:** 6 dígitos con ceros a la izquierda
-- **Tipo:** Code128 (compatible con la mayoría de lectores)
+
+ 
 
 ## ⚙️ Configuración del Sistema
 
@@ -224,7 +222,7 @@ Los registros de asistencias por escaneo se integran automáticamente con:
 
 ### Problema: Código no se reconoce
 **Solución:**
-- Verificar que el código tenga formato `EMP######`
+- Verificar que el código comience con `EMP`
 - Limpiar la superficie del código de barras
 - Acercar más el lector
 - Re-generar tarjeta si está dañada

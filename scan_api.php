@@ -11,6 +11,7 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/asistencia_codigo.php';
 
 header('Content-Type: application/json');
 
@@ -277,8 +278,12 @@ try {
     $codigo_limpio = trim($codigo, "*\"' ");
     $codigo_solo_alnum_guion = preg_replace('/[^A-Z0-9\-]/', '', $codigo_limpio);
 
-    // 1) Asistencias - formato EMP000001
-    if (preg_match('/^EMP(\d{1,6})$/', $codigo, $m)) {
+    if (preg_match('/^EMP\d{1,6}$/', $codigo)) {
+        throw new Exception('Tarjeta anterior detectada. Reimprima una tarjeta nueva desde Asistencias > Tarjetas PDF.');
+    }
+
+    // 1) Asistencias - formato ofuscado EMP + 12 caracteres hex
+    if (preg_match('/^EMP[0-9A-F]{12}$/', $codigo)) {
         if (!in_array($rol, ['ventas','operario','admin'])) {
             throw new Exception('Sin permiso para registrar asistencias');
         }
@@ -287,7 +292,11 @@ try {
             throw new Exception('El módulo de asistencias no está instalado correctamente');
         }
 
-        $empleado_id = (int)$m[1];
+        $empleado_id = resolver_empleado_id_desde_codigo_asistencia($pdo, $codigo);
+        if (!$empleado_id) {
+            throw new Exception('Código de asistencia inválido o no asociado a un empleado activo');
+        }
+
         $col_empleado_asist = first_existing_column($pdo, 'asistencias', ['empleado_id', 'id_empleado', 'empleado']);
         $col_pk_asist = first_existing_column($pdo, 'asistencias', ['id', 'asistencia_id', 'id_asistencia']);
         $col_fecha_asist = first_existing_column($pdo, 'asistencias', ['fecha', 'fecha_asistencia', 'dia']);

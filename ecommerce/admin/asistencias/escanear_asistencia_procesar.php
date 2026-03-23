@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../../../config.php';
+require_once __DIR__ . '/../../../includes/asistencia_codigo.php';
 
 // Permisos: ventas, operario y admin pueden usar esta API
 session_start();
@@ -26,14 +27,16 @@ try {
     }
     
     $codigo = $data['codigo'];
-    
-    // Extraer ID del empleado del código
-    // Formato esperado: EMP000001, EMP000002, etc.
-    if (!preg_match('/^EMP(\d{6})$/', $codigo, $matches)) {
-        throw new Exception('Formato de código inválido. Use el formato: EMP000001');
+
+    if (preg_match('/^EMP\d{1,6}$/', normalizar_codigo_asistencia((string)$codigo))) {
+        throw new Exception('Tarjeta anterior detectada. Reimprima una tarjeta nueva desde Asistencias > Tarjetas PDF.');
     }
     
-    $empleado_id = (int)$matches[1];
+    // Resolver ID del empleado desde código legacy o código ofuscado
+    $empleado_id = resolver_empleado_id_desde_codigo_asistencia($pdo, $codigo);
+    if (!$empleado_id) {
+        throw new Exception('Código de asistencia inválido o no asociado a un empleado activo');
+    }
     
     // Verificar que el empleado existe y está activo
     $stmt = $pdo->prepare("

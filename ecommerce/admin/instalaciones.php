@@ -1,5 +1,19 @@
 <?php
-require 'includes/header.php';
+// Detectar si es una solicitud JSON antes de incluir el header
+$es_json_request = (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false ||
+     strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/x-www-form-urlencoded') !== false ||
+     isset($_POST['action']))
+);
+
+if ($es_json_request) {
+    ob_start();
+    require 'includes/header.php';
+    ob_end_clean();
+} else {
+    require 'includes/header.php';
+}
 
 function verificar_sesion_json() {
     if (empty($_SESSION['user'])) {
@@ -231,6 +245,10 @@ function proximo_orden_visual($pdo, $tipo, $fecha) {
     return $prox > 0 ? $prox : 10;
 }
 
+function fragmento_update_fecha_actualizacion($pdo, $tabla) {
+    return columna_existe($pdo, $tabla, 'fecha_actualizacion') ? ', fecha_actualizacion = NOW()' : '';
+}
+
 $hoy = date('Y-m-d');
 $en_7_dias = date('Y-m-d', strtotime('+6 days'));
 
@@ -239,6 +257,14 @@ $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $instalacion_desde = $_GET['instalacion_desde'] ?? $hoy;
 $instalacion_hasta = $_GET['instalacion_hasta'] ?? $en_7_dias;
 $incluir_entregados = !empty($_GET['incluir_entregados']);
+
+// Validar fechas de tablero antes de usarlas
+if (!valor_fecha_valido($instalacion_desde)) {
+    $instalacion_desde = $hoy;
+}
+if (!valor_fecha_valido($instalacion_hasta)) {
+    $instalacion_hasta = $en_7_dias;
+}
 
 $items_instalacion = [];
 $error_pagina = '';
@@ -258,11 +284,13 @@ $tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
 $estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    ob_start(); // Capturar cualquier output no deseado
     $action = trim((string)($_POST['action'] ?? ''));
 
         if ($action === 'eliminar_visita') {
-            verificar_sesion_json();
             header('Content-Type: application/json; charset=utf-8');
+            ob_clean();
+            verificar_sesion_json();
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tiene_visitas || $item_id <= 0) {
                 http_response_code(400);
@@ -288,8 +316,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'eliminar_orden') {
-            verificar_sesion_json();
+            ob_clean();
             header('Content-Type: application/json; charset=utf-8');
+            verificar_sesion_json();
             $item_id = (int)($_POST['item_id'] ?? 0);
             if (!$tablas_base_ok || $item_id <= 0) {
                 http_response_code(400);
@@ -315,6 +344,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     if ($action === 'crear_instalacion_manual') {
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
         $titulo = trim($_POST['titulo'] ?? '');
         $cliente = trim($_POST['cliente'] ?? '');
         $telefono = trim($_POST['telefono'] ?? '');
@@ -356,6 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
         if ($ok_msg === 'Instalación manual creada correctamente.') {
             echo json_encode(['ok' => true, 'msg' => $ok_msg]);
@@ -412,6 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
         if ($ok_msg === 'Visita cargada correctamente.') {
             echo json_encode(['ok' => true, 'msg' => $ok_msg]);
@@ -424,6 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'mover_instalacion') {
         verificar_sesion_json();
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $tipo = $_POST['tipo'] ?? '';
@@ -444,21 +478,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('No se puede mover: falta columna fecha_instalacion.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'orden', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             } elseif ($tipo === 'manual') {
                 if (!$tiene_instalaciones_manuales) {
                     throw new RuntimeException('No existe la tabla de instalaciones manuales.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'manual', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             } else {
                 if (!$tiene_visitas) {
                     throw new RuntimeException('No existe la tabla de visitas.');
                 }
                 $orden_visual = proximo_orden_visual($pdo, 'visita', $fecha_sql);
-                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
                 $stmt->execute([$fecha_sql, $orden_visual, $item_id]);
             }
 
@@ -474,6 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'editar_instalacion_manual') {
         verificar_sesion_json();
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $item_id = (int)($_POST['item_id'] ?? 0);
@@ -496,7 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales
                 SET titulo = ?, cliente = ?, telefono = ?, direccion = ?, localidad = ?, provincia = ?, codigo_postal = ?,
-                    fecha_instalacion = ?, notas = ?, fecha_actualizacion = NOW()
+                    fecha_instalacion = ?, notas = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . "
                 WHERE id = ?");
             $stmt->execute([
                 $titulo,
@@ -567,7 +602,141 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'editar_visita') {
+        verificar_sesion_json();
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $item_id         = (int)($_POST['item_id'] ?? 0);
+        $titulo          = trim($_POST['titulo'] ?? '');
+        $descripcion     = trim($_POST['descripcion'] ?? '');
+        $cliente_nombre  = trim($_POST['cliente_nombre'] ?? '');
+        $telefono        = trim($_POST['telefono'] ?? '');
+        $direccion       = trim($_POST['direccion'] ?? '');
+        $fecha_visita    = trim($_POST['fecha_visita'] ?? '');
+        $hora_visita     = trim($_POST['hora_visita'] ?? '');
+        $estado          = trim($_POST['estado'] ?? 'pendiente');
+
+        if (!$tiene_visitas || $item_id <= 0 || $titulo === '' || $fecha_visita === '' || !valor_fecha_valido($fecha_visita)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para actualizar la visita']);
+            exit;
+        }
+        if ($hora_visita !== '' && !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $hora_visita)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'La hora de visita no es válida.']);
+            exit;
+        }
+        if (!in_array($estado, $estados_visita_validos, true)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'El estado de visita no es válido.']);
+            exit;
+        }
+
+        try {
+            $hora_visita_sql = $hora_visita !== '' ? ($hora_visita . ':00') : null;
+            $stmt = $pdo->prepare(
+                "UPDATE ecommerce_visitas
+                SET titulo = ?, descripcion = ?, cliente_nombre = ?, telefono = ?, direccion = ?,
+                    fecha_visita = ?, hora_visita = ?, estado = ?" .
+                fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') .
+                " WHERE id = ?"
+            );
+            $stmt->execute([
+                $titulo,
+                $descripcion !== '' ? $descripcion : null,
+                $cliente_nombre !== '' ? $cliente_nombre : null,
+                $telefono !== '' ? $telefono : null,
+                $direccion !== '' ? $direccion : null,
+                $fecha_visita,
+                $hora_visita_sql,
+                $estado,
+                $item_id,
+            ]);
+            echo json_encode([
+                'ok' => true,
+                'data' => [
+                    'item_id'       => $item_id,
+                    'titulo'        => $titulo,
+                    'descripcion'   => $descripcion,
+                    'cliente_nombre'=> $cliente_nombre,
+                    'telefono'      => $telefono,
+                    'direccion'     => $direccion,
+                    'fecha_visita'  => $fecha_visita,
+                    'hora_visita'   => $hora_visita,
+                    'estado'        => $estado,
+                ],
+            ]);
+            exit;
+        } catch (Exception $e) {
+            error_log('editar_visita: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo actualizar la visita']);
+            exit;
+        }
+    }
+
+    if ($action === 'editar_orden') {
+        verificar_sesion_json();
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $item_id          = (int)($_POST['item_id'] ?? 0);
+        $fecha_instalacion = trim($_POST['fecha_instalacion'] ?? '');
+        $notas            = trim($_POST['notas'] ?? '');
+
+        if (!$tablas_base_ok || $item_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para actualizar la orden']);
+            exit;
+        }
+        if (!valor_fecha_valido($fecha_instalacion)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Fecha de instalación inválida']);
+            exit;
+        }
+
+        try {
+            $fecha_sql = $fecha_instalacion !== '' ? $fecha_instalacion : null;
+            $notas_sql = $notas !== '' ? $notas : null;
+            $campos = [];
+            if ($tiene_fecha_instalacion) {
+                $campos[] = 'fecha_instalacion = ?';
+            }
+            $tiene_notas_inst = columna_existe($pdo, 'ecommerce_ordenes_produccion', 'notas_instalacion');
+            if ($tiene_notas_inst) {
+                $campos[] = 'notas_instalacion = ?';
+            }
+            if (!empty($campos)) {
+                $campos_str = implode(', ', $campos);
+                $extra = fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion');
+                $sql = "UPDATE ecommerce_ordenes_produccion SET {$campos_str}{$extra} WHERE id = ?";
+                $params = [];
+                if ($tiene_fecha_instalacion) $params[] = $fecha_sql;
+                if ($tiene_notas_inst)        $params[] = $notas_sql;
+                $params[] = $item_id;
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+            }
+            echo json_encode([
+                'ok' => true,
+                'data' => [
+                    'item_id'           => $item_id,
+                    'fecha_instalacion' => $fecha_instalacion,
+                    'notas'             => $notas,
+                ],
+            ]);
+            exit;
+        } catch (Exception $e) {
+            error_log('editar_orden: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo actualizar la orden']);
+            exit;
+        }
+    }
+
     if ($action === 'guardar_texto_tarjeta') {
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $tipo = trim($_POST['tipo'] ?? '');
@@ -582,11 +751,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             if ($tipo === 'orden') {
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET notas_instalacion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET notas_instalacion = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
             } elseif ($tipo === 'manual') {
-                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET notas = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET notas = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
             } else {
-                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET descripcion = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET descripcion = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
             }
 
             $stmt->execute([$texto !== '' ? $texto : null, $item_id]);
@@ -601,21 +770,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'guardar_orden_tarjetas') {
+        ob_clean();
         header('Content-Type: application/json; charset=utf-8');
 
         $fecha_columna = trim($_POST['fecha_columna'] ?? '');
         $orden_json = trim($_POST['orden'] ?? '[]');
 
-        if (!valor_fecha_valido($fecha_columna)) {
+        // Validar fecha si no está vacía, permitir vacío para "sin fecha"
+        if ($fecha_columna !== '' && !valor_fecha_valido($fecha_columna)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'msg' => 'Fecha de columna inválida']);
             exit;
         }
 
-        $orden = json_decode($orden_json, true);
+        $orden = @json_decode($orden_json, true);
         if (!is_array($orden)) {
             http_response_code(400);
-            echo json_encode(['ok' => false, 'msg' => 'Orden inválido']);
+            echo json_encode(['ok' => false, 'msg' => 'Orden inválido: ' . json_last_error_msg()]);
             exit;
         }
 
@@ -637,11 +808,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($tipo === 'orden') {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion') . " WHERE id = ?");
                 } elseif ($tipo === 'manual') {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales SET fecha_instalacion = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . " WHERE id = ?");
                 } else {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?, fecha_actualizacion = NOW() WHERE id = ?");
+                    $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET fecha_visita = ?, orden_visual = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
                 }
 
                 $stmt->execute([$fecha_sql, $pos, $item_id]);
@@ -665,10 +836,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $ok_msg = trim($_GET['msg'] ?? $ok_msg);
 
+// Invertir fechas si es necesario
 $dias_tablero = [];
-if (!valor_fecha_valido($instalacion_desde) || !valor_fecha_valido($instalacion_hasta) || $instalacion_desde > $instalacion_hasta) {
-    $instalacion_desde = $hoy;
-    $instalacion_hasta = $en_7_dias;
+if ($instalacion_desde > $instalacion_hasta) {
+    $temp = $instalacion_desde;
+    $instalacion_desde = $instalacion_hasta;
+    $instalacion_hasta = $temp;
 }
 
 $tablero_desde = $hoy;
@@ -986,6 +1159,20 @@ function render_tarjeta_instalacion($item) {
             data-manual-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
             data-manual-notas="<?= htmlspecialchars($item['notas'] ?? '') ?>"
         <?php endif; ?>
+        <?php if ($tipo === 'visita'): ?>
+            data-visita-titulo="<?= htmlspecialchars($item['titulo']) ?>"
+            data-visita-descripcion="<?= htmlspecialchars($item['notas'] ?? '') ?>"
+            data-visita-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
+            data-visita-telefono="<?= htmlspecialchars($item['telefono']) ?>"
+            data-visita-direccion="<?= htmlspecialchars($item['direccion']) ?>"
+            data-visita-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
+            data-visita-hora="<?= htmlspecialchars($item['hora_visita'] ?? '') ?>"
+            data-visita-estado="<?= htmlspecialchars($item['estado_visita'] ?? 'pendiente') ?>"
+        <?php endif; ?>
+        <?php if ($tipo === 'orden'): ?>
+            data-orden-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
+            data-orden-notas="<?= htmlspecialchars($item['texto_tarjeta']) ?>"
+        <?php endif; ?>
     >
         <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
             <strong class="inst-card-title"><?= htmlspecialchars($titulo) ?></strong>
@@ -1004,11 +1191,12 @@ function render_tarjeta_instalacion($item) {
         <div class="mt-2">
             <label class="form-label small mb-1">Texto tarjeta</label>
             <textarea class="form-control form-control-sm inst-card-texto" rows="2" placeholder="Agregar texto..." data-original="<?= htmlspecialchars($textoTarjeta) ?>"><?= htmlspecialchars($textoTarjeta) ?></textarea>
-            <div class="d-flex gap-1 mt-1">
+            <div class="d-flex gap-1 mt-1 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-dark inst-btn-editar">✎ Editar</button>
                 <button type="button" class="btn btn-sm btn-outline-primary inst-btn-guardar-texto">Guardar texto</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-subir" title="Subir">↑</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-bajar" title="Bajar">↓</button>
-                <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">Eliminar</button>
+                <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">✕</button>
             </div>
         </div>
 
@@ -1416,6 +1604,95 @@ function render_tarjeta_instalacion($item) {
     </div>
 </div>
 
+<div class="modal fade" id="modal-editar-visita" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="form-editar-visita">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar visita</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="item_id" id="visita-item-id">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label mb-1">Título *</label>
+                            <input type="text" name="titulo" id="visita-titulo" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Fecha visita *</label>
+                            <input type="date" name="fecha_visita" id="visita-fecha" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Hora</label>
+                            <input type="time" name="hora_visita" id="visita-hora" class="form-control">
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label mb-1">Cliente</label>
+                            <input type="text" name="cliente_nombre" id="visita-cliente" class="form-control">
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label mb-1">Teléfono</label>
+                            <input type="text" name="telefono" id="visita-telefono" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Dirección</label>
+                            <input type="text" name="direccion" id="visita-direccion" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label mb-1">Estado</label>
+                            <select name="estado" id="visita-estado" class="form-select">
+                                <option value="pendiente">Pendiente</option>
+                                <option value="en_proceso">En proceso</option>
+                                <option value="completada">Completada</option>
+                                <option value="cancelada">Cancelada</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Descripción</label>
+                            <textarea name="descripcion" id="visita-descripcion" rows="3" class="form-control"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Guardar cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-editar-orden" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="form-editar-orden">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar orden de producción</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="item_id" id="orden-item-id">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label mb-1">Fecha instalación</label>
+                            <input type="date" name="fecha_instalacion" id="orden-fecha" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Notas de instalación</label>
+                            <textarea name="notas" id="orden-notas" rows="4" class="form-control"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var draggedCard = null;
@@ -1425,6 +1702,16 @@ document.addEventListener('DOMContentLoaded', function () {
     var btnEliminarManual = document.getElementById('btn-eliminar-manual');
     var editModal = (editModalEl && window.bootstrap) ? new bootstrap.Modal(editModalEl) : null;
     var activeManualId = null;
+
+    var visitaModalEl  = document.getElementById('modal-editar-visita');
+    var formEditarVisita = document.getElementById('form-editar-visita');
+    var visitaModal    = (visitaModalEl && window.bootstrap) ? new bootstrap.Modal(visitaModalEl) : null;
+    var activeVisitaId = null;
+
+    var ordenModalEl   = document.getElementById('modal-editar-orden');
+    var formEditarOrden = document.getElementById('form-editar-orden');
+    var ordenModal     = (ordenModalEl && window.bootstrap) ? new bootstrap.Modal(ordenModalEl) : null;
+    var activeOrdenId  = null;
 
     function actualizarBadgeColumna(dropzone) {
         var cardCount = dropzone.querySelectorAll('.inst-card').length;
@@ -1463,13 +1750,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function guardarOrdenColumna(dropzone, onRollback) {
         if (!dropzone) {
+            console.warn('guardarOrdenColumna: dropzone no válida');
             return;
         }
 
+        var fechaColumna = dropzone.getAttribute('data-fecha') || '';
+        var orden = serializarColumna(dropzone);
+        
+        console.log('Guardando orden columna:', {
+            fecha: fechaColumna,
+            cantidad_items: orden.length,
+            items: orden
+        });
+
         var fd = new FormData();
         fd.append('action', 'guardar_orden_tarjetas');
-        fd.append('fecha_columna', dropzone.getAttribute('data-fecha') || '');
-        fd.append('orden', JSON.stringify(serializarColumna(dropzone)));
+        fd.append('fecha_columna', fechaColumna);
+        fd.append('orden', JSON.stringify(orden));
 
         fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
             method: 'POST',
@@ -1480,24 +1777,45 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         })
         .then(function (r) {
-            return r.text().then(function (text) {
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    throw new Error('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida');
-                }
-            });
+            console.log('Respuesta del servidor:', r.status, r.statusText);
+            if (r.status === 401) {
+                throw new Error('Sesión expirada. Por favor recarga la página.');
+            }
+            if (r.status >= 500) {
+                throw new Error('Error del servidor (HTTP ' + r.status + ')');
+            }
+            return r.text();
+        })
+        .then(function (text) {
+            console.log('Texto de respuesta:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('No se pudo parsear JSON:', e, 'Texto:', text);
+                throw new Error('El servidor devolvió una respuesta inválida');
+            }
         })
         .then(function (res) {
+            console.log('JSON parseado:', res);
             if (!res || !res.ok) {
                 throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar el orden');
             }
+            console.log('Orden guardado exitosamente');
         })
         .catch(function (err) {
+            console.error('Error en guardarOrdenColumna:', err);
             if (typeof onRollback === 'function') {
+                console.log('Ejecutando rollback...');
                 onRollback();
             }
-            alert(err.message || 'No se pudo guardar el orden');
+            if (err && err.message && err.message.indexOf('Sesión') > -1) {
+                alert(err.message + ' Se recargará la página.');
+                setTimeout(function () {
+                    location.reload();
+                }, 1000);
+            } else {
+                alert('Error: ' + (err.message || 'No se pudo guardar el orden'));
+            }
         });
     }
 
@@ -1671,6 +1989,66 @@ document.addEventListener('DOMContentLoaded', function () {
         actualizarResumenInstalaciones();
     }
 
+    function abrirModalVisitaDesdeCard(card) {
+        if (!card || card.getAttribute('data-tipo') !== 'visita' || !visitaModal) { return; }
+        activeVisitaId = card.getAttribute('data-id');
+        document.getElementById('visita-item-id').value  = activeVisitaId || '';
+        document.getElementById('visita-titulo').value    = card.getAttribute('data-visita-titulo') || '';
+        document.getElementById('visita-descripcion').value = card.getAttribute('data-visita-descripcion') || '';
+        document.getElementById('visita-cliente').value  = card.getAttribute('data-visita-cliente') || '';
+        document.getElementById('visita-telefono').value = card.getAttribute('data-visita-telefono') || '';
+        document.getElementById('visita-direccion').value = card.getAttribute('data-visita-direccion') || '';
+        document.getElementById('visita-fecha').value    = card.getAttribute('data-visita-fecha') || '';
+        document.getElementById('visita-hora').value     = card.getAttribute('data-visita-hora') || '';
+        document.getElementById('visita-estado').value   = card.getAttribute('data-visita-estado') || 'pendiente';
+        visitaModal.show();
+    }
+
+    function syncVisitaUI(data) {
+        var cards = document.querySelectorAll('.inst-card[data-tipo="visita"][data-id="' + data.item_id + '"]');
+        cards.forEach(function (card) {
+            card.setAttribute('data-visita-titulo',       data.titulo || '');
+            card.setAttribute('data-visita-descripcion', data.descripcion || '');
+            card.setAttribute('data-visita-cliente',     data.cliente_nombre || '');
+            card.setAttribute('data-visita-telefono',    data.telefono || '');
+            card.setAttribute('data-visita-direccion',   data.direccion || '');
+            card.setAttribute('data-visita-fecha',       data.fecha_visita || '');
+            card.setAttribute('data-visita-hora',        data.hora_visita || '');
+            card.setAttribute('data-visita-estado',      data.estado || 'pendiente');
+            var titleEl = card.querySelector('.inst-card-title');
+            if (titleEl) titleEl.textContent = data.titulo || '';
+            setOrCreateText(card, '.inst-card-subtitle', data.cliente_nombre || '', false);
+            setOrCreateText(card, '.inst-card-address',  data.direccion || '', true);
+            var ta = card.querySelector('.inst-card-texto');
+            if (ta) {
+                ta.value = data.descripcion || '';
+                ta.setAttribute('data-original', data.descripcion || '');
+            }
+        });
+    }
+
+    function abrirModalOrdenDesdeCard(card) {
+        if (!card || card.getAttribute('data-tipo') !== 'orden' || !ordenModal) { return; }
+        activeOrdenId = card.getAttribute('data-id');
+        document.getElementById('orden-item-id').value = activeOrdenId || '';
+        document.getElementById('orden-fecha').value   = card.getAttribute('data-orden-fecha') || '';
+        document.getElementById('orden-notas').value   = card.getAttribute('data-orden-notas') || '';
+        ordenModal.show();
+    }
+
+    function syncOrdenUI(data) {
+        var cards = document.querySelectorAll('.inst-card[data-tipo="orden"][data-id="' + data.item_id + '"]');
+        cards.forEach(function (card) {
+            card.setAttribute('data-orden-fecha',  data.fecha_instalacion || '');
+            card.setAttribute('data-orden-notas', data.notas || '');
+            var ta = card.querySelector('.inst-card-texto');
+            if (ta) {
+                ta.value = data.notas || '';
+                ta.setAttribute('data-original', data.notas || '');
+            }
+        });
+    }
+
     document.querySelectorAll('.inst-card').forEach(function (card) {
         card.addEventListener('dragstart', function () {
             draggedCard = card;
@@ -1686,8 +2064,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (e.target.closest('a') || e.target.closest('button') || e.target.closest('textarea') || e.target.closest('input') || e.target.closest('select') || e.target.closest('label')) {
                 return;
             }
-            if (card.getAttribute('data-tipo') === 'manual') {
+            var tipo = card.getAttribute('data-tipo');
+            if (tipo === 'manual') {
                 abrirModalManualDesdeCard(card);
+            } else if (tipo === 'visita') {
+                abrirModalVisitaDesdeCard(card);
+            } else if (tipo === 'orden') {
+                abrirModalOrdenDesdeCard(card);
             }
         });
 
@@ -1787,28 +2170,73 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            // Guardar el orden actual por si hay que revertir
+            var originalParent = parent.cloneNode(true);
+
             if (direccion === 'up') {
                 parent.insertBefore(cardMover, sibling);
             } else {
-                parent.insertBefore(sibling, cardMover);
+                if (sibling.nextElementSibling) {
+                    parent.insertBefore(cardMover, sibling.nextElementSibling);
+                } else {
+                    parent.appendChild(cardMover);
+                }
             }
 
             guardarOrdenColumna(parent, function () {
-                alert('Error al guardar el orden. Puede que la sesión haya expirado o el servidor devolvió una respuesta inválida.');
+                // Revertir al estado anterior si hay error
+                parent.innerHTML = '';
+                Array.prototype.slice.call(originalParent.childNodes).forEach(function (node) {
+                    if (node.nodeType === 1) { // Solo elementos
+                        parent.appendChild(node.cloneNode(true));
+                    }
+                });
+                // Re-asignar eventos a los nuevos elementos
+                location.reload();
             });
         }
 
         var btnSubir = card.querySelector('.inst-btn-subir');
         if (btnSubir) {
-            btnSubir.addEventListener('click', function () {
-                moverDentroColumna(card, 'up');
+            btnSubir.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    moverDentroColumna(card, 'up');
+                } catch (err) {
+                    console.error('Error al subir tarjeta:', err);
+                    alert('Error al mover la tarjeta hacia arriba');
+                }
             });
         }
 
         var btnBajar = card.querySelector('.inst-btn-bajar');
         if (btnBajar) {
-            btnBajar.addEventListener('click', function () {
-                moverDentroColumna(card, 'down');
+            btnBajar.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    moverDentroColumna(card, 'down');
+                } catch (err) {
+                    console.error('Error al bajar tarjeta:', err);
+                    alert('Error al mover la tarjeta hacia abajo');
+                }
+            });
+        }
+
+        var btnEditar = card.querySelector('.inst-btn-editar');
+        if (btnEditar) {
+            btnEditar.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var tipo = card.getAttribute('data-tipo');
+                if (tipo === 'manual') {
+                    abrirModalManualDesdeCard(card);
+                } else if (tipo === 'visita') {
+                    abrirModalVisitaDesdeCard(card);
+                } else if (tipo === 'orden') {
+                    abrirModalOrdenDesdeCard(card);
+                }
             });
         }
     });
@@ -1845,6 +2273,12 @@ document.addEventListener('DOMContentLoaded', function () {
         editForm.addEventListener('submit', function (e) {
             e.preventDefault();
 
+            var titulo = document.getElementById('edit-titulo').value || '';
+            if (!titulo.trim()) {
+                alert('El título es obligatorio');
+                return;
+            }
+
             var fd = new FormData(editForm);
             fd.append('action', 'editar_instalacion_manual');
 
@@ -1853,7 +2287,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 body: fd,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                if (r.status === 401) {
+                    throw new Error('Tu sesión ha expirado. Por favor, recarga la página.');
+                }
+                return r.json();
+            })
             .then(function (res) {
                 if (!res || !res.ok) {
                     throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar');
@@ -1863,9 +2302,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (editModal) {
                     editModal.hide();
                 }
+                alert('Instalación actualizada correctamente');
             })
             .catch(function (err) {
-                alert(err.message || 'Error al guardar');
+                console.error('Error en editar_instalacion_manual:', err);
+                if (err && err.message && err.message.indexOf('Sesión') > -1) {
+                    alert(err.message + ' Se recargará la página.');
+                    setTimeout(function () {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert(err.message || 'Error al guardar. Intentá nuevamente.');
+                }
             });
         });
     }
@@ -1906,6 +2354,46 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function (err) {
                 alert(err.message || 'Error al eliminar');
             });
+        });
+    }
+
+    if (formEditarVisita) {
+        formEditarVisita.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var titulo = document.getElementById('visita-titulo').value || '';
+            if (!titulo.trim()) { alert('El título es obligatorio'); return; }
+            var fd = new FormData(formEditarVisita);
+            fd.append('action', 'editar_visita');
+            fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                method: 'POST', body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok) { throw new Error((res && res.msg) ? res.msg : 'Error'); }
+                syncVisitaUI(res.data);
+                if (visitaModal) visitaModal.hide();
+            })
+            .catch(function (err) { alert(err.message || 'No se pudo guardar la visita'); });
+        });
+    }
+
+    if (formEditarOrden) {
+        formEditarOrden.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var fd = new FormData(formEditarOrden);
+            fd.append('action', 'editar_orden');
+            fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                method: 'POST', body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok) { throw new Error((res && res.msg) ? res.msg : 'Error'); }
+                syncOrdenUI(res.data);
+                if (ordenModal) ordenModal.hide();
+            })
+            .catch(function (err) { alert(err.message || 'No se pudo guardar la orden'); });
         });
     }
 
