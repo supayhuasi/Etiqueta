@@ -116,7 +116,7 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
     $stmt->execute($valores);
 }
 
-$pedido_id = $_GET['id'] ?? 0;
+$pedido_id = isset($_GET['pedido_id']) ? intval($_GET['pedido_id']) : 0;
 
 // DEBUG: Mostrar el valor de $pedido_id recibido
 if (!isset($_GET['pedido_id'])) {
