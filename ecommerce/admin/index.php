@@ -82,6 +82,7 @@ $modulos = [
     ['perm' => 'gastos', 'titulo' => 'Gastos', 'desc' => 'Control financiero diario', 'url' => 'gastos/gastos.php', 'icon' => 'bi-cash-coin'],
     ['perm' => 'cheques', 'titulo' => 'Cheques', 'desc' => 'Seguimiento y vencimientos', 'url' => 'cheques/cheques.php', 'icon' => 'bi-journal-check'],
     ['perm' => 'inventario', 'titulo' => 'Inventario', 'desc' => 'Stock y reposición', 'url' => 'inventario.php', 'icon' => 'bi-box-seam'],
+    ['perm' => 'productos', 'titulo' => 'Reporte Productos', 'desc' => 'Vendidos y pendientes por color', 'url' => 'reporte_productos.php', 'icon' => 'bi-bar-chart'],
 ];
 ?>
 
