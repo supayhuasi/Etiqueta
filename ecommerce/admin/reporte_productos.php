@@ -35,14 +35,24 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Procesar y agrupar por producto y color
+// DEPURACIÓN: Mostrar los datos crudos obtenidos
+echo '<pre style="background:#fff;color:#000;max-height:300px;overflow:auto;font-size:12px;">';
+echo "ESTADOS ENCONTRADOS:\n";
+$estados_encontrados = array_unique(array_column($items, 'estado'));
+print_r($estados_encontrados);
+echo "\nEJEMPLO DE ITEMS:\n";
+print_r(array_slice($items,0,10));
+echo '</pre>';
+
+// Procesar y agrupar por producto y color (si no hay color, igual sumar)
 $reporte = [];
 $colores_set = [];
 foreach ($items as $item) {
     $color = '';
+    $atributos = [];
     if (!empty($item['atributos'])) {
         $atributos = json_decode($item['atributos'], true);
-        if (is_array($atributos) && isset($atributos['color'])) {
+        if (is_array($atributos) && isset($atributos['color']) && $atributos['color'] !== '') {
             $color = $atributos['color'];
         }
     }
@@ -60,11 +70,13 @@ foreach ($items as $item) {
             'faltan_entregar' => 0
         ];
     }
-    if (in_array($item['estado'], ['confirmado','preparando','enviado','entregado'])) {
+    // Mostrar todos los estados para depuración
+    // Sumar vendidos y faltan_entregar para cualquier estado que no sea cancelado
+    if ($item['estado'] !== 'cancelado') {
         $reporte[$key]['vendidos'] += $item['cantidad'];
-    }
-    if (in_array($item['estado'], ['confirmado','preparando','enviado'])) {
-        $reporte[$key]['faltan_entregar'] += $item['cantidad'];
+        if (in_array($item['estado'], ['confirmado','preparando','enviado'])) {
+            $reporte[$key]['faltan_entregar'] += $item['cantidad'];
+        }
     }
 }
 $reporte = array_values($reporte);
