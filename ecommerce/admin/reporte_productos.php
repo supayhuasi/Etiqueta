@@ -168,7 +168,11 @@ $total_faltan = array_sum(array_column($reporte, 'faltan_entregar'));
                 <tbody>
                     <?php foreach ($reporte as $row): ?>
                         <tr>
-                            <td><strong><?= htmlspecialchars($row['producto']) ?></strong></td>
+                            <td>
+                                <strong><?= htmlspecialchars($row['producto']) ?></strong>
+                                <br>
+                                <a href="reporte_productos.php?ver_pedidos=1&producto_id=<?= urlencode($row['producto_id']) ?>&color=<?= urlencode($row['color']) ?>" class="btn btn-link btn-sm p-0">Ver pedidos</a>
+                            </td>
                             <td><?= htmlspecialchars($row['color'] ?? 'Sin color') ?></td>
                             <td class="text-end"><?= (int)$row['vendidos'] ?></td>
                             <td class="text-end"><?= (int)$row['faltan_entregar'] ?></td>
@@ -180,4 +184,58 @@ $total_faltan = array_sum(array_column($reporte, 'faltan_entregar'));
     </div>
 </div>
 
-<?php require 'includes/footer.php'; ?>
+<?php
+// Mostrar pedidos que contienen el producto y color seleccionados
+if (isset($_GET['ver_pedidos'], $_GET['producto_id'])) {
+    $producto_id = (int)$_GET['producto_id'];
+    $color_filtro_pedidos = $_GET['color'] ?? '';
+    $sql_pedidos = "
+        SELECT pe.id AS pedido_id, pe.estado, pe.fecha_creacion, pi.cantidad, pi.atributos
+        FROM ecommerce_pedidos pe
+        JOIN ecommerce_pedido_items pi ON pe.id = pi.pedido_id
+        WHERE pi.producto_id = ?
+        AND pe.estado != 'cancelado'
+        ORDER BY pe.fecha_creacion DESC
+        LIMIT 100
+    ";
+    $stmt_pedidos = $pdo->prepare($sql_pedidos);
+    $stmt_pedidos->execute([$producto_id]);
+    $pedidos = $stmt_pedidos->fetchAll(PDO::FETCH_ASSOC);
+    echo '<div class="card mt-4"><div class="card-body">';
+    echo '<h5>Pedidos con el producto seleccionado';
+    if ($color_filtro_pedidos) echo ' y color <b>' . htmlspecialchars($color_filtro_pedidos) . '</b>';
+    echo '</h5>';
+    if (empty($pedidos)) {
+        echo '<div class="alert alert-info">No se encontraron pedidos.</div>';
+    } else {
+        echo '<table class="table table-sm"><thead><tr><th>ID Pedido</th><th>Estado</th><th>Fecha</th><th>Cantidad</th><th>Color</th></tr></thead><tbody>';
+        foreach ($pedidos as $p) {
+            $color_p = '';
+            if (!empty($p['atributos'])) {
+                $atributos = json_decode($p['atributos'], true);
+                if (is_array($atributos) && isset($atributos[0]) && is_array($atributos[0])) {
+                    foreach ($atributos as $attr) {
+                        if (isset($attr['nombre']) && mb_strtolower($attr['nombre']) === 'color' && isset($attr['valor'])) {
+                            $color_p = $attr['valor'];
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($color_p === '' || $color_p === null) $color_p = 'Sin color';
+            if ($color_filtro_pedidos && $color_p !== $color_filtro_pedidos) continue;
+            echo '<tr>';
+            echo '<td>' . (int)$p['pedido_id'] . '</td>';
+            echo '<td>' . htmlspecialchars($p['estado']) . '</td>';
+            echo '<td>' . htmlspecialchars($p['fecha_creacion']) . '</td>';
+            echo '<td>' . (int)$p['cantidad'] . '</td>';
+            echo '<td>' . htmlspecialchars($color_p) . '</td>';
+            echo '</tr>';
+        }
+        echo '</tbody></table>';
+    }
+    echo '<a href="reporte_productos.php" class="btn btn-secondary btn-sm mt-2">Volver al reporte</a>';
+    echo '</div></div>';
+}
+
+require 'includes/footer.php';
