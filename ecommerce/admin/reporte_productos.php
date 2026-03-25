@@ -23,7 +23,7 @@ SELECT p.id AS producto_id, p.nombre AS producto, pa.valor AS color,
     SUM(CASE WHEN pe.estado IN ('confirmado','preparando','enviado','entregado') THEN pi.cantidad ELSE 0 END) AS vendidos,
     SUM(CASE WHEN pe.estado IN ('confirmado','preparando','enviado') THEN pi.cantidad ELSE 0 END) AS faltan_entregar
 FROM ecommerce_pedidos pe
-JOIN ecommerce_pedidos_items pi ON pe.id = pi.pedido_id
+JOIN ecommerce_pedido_items pi ON pe.id = pi.pedido_id
 JOIN ecommerce_productos p ON pi.producto_id = p.id
 LEFT JOIN ecommerce_producto_atributos pa ON pa.producto_id = p.id AND pa.nombre = 'color'
 WHERE pe.estado != 'cancelado'
