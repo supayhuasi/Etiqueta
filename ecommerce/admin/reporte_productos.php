@@ -35,25 +35,21 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// DEPURACIÓN: Mostrar los datos crudos obtenidos
-echo '<pre style="background:#fff;color:#000;max-height:300px;overflow:auto;font-size:12px;">';
-echo "ESTADOS ENCONTRADOS:\n";
-$estados_encontrados = array_unique(array_column($items, 'estado'));
-print_r($estados_encontrados);
-echo "\nEJEMPLO DE ITEMS:\n";
-print_r(array_slice($items,0,10));
-echo '</pre>';
-
-// Procesar y agrupar por producto y color (si no hay color, igual sumar)
+// Procesar y agrupar por producto y color (soportando array de atributos y estados reales)
 $reporte = [];
 $colores_set = [];
 foreach ($items as $item) {
     $color = '';
-    $atributos = [];
     if (!empty($item['atributos'])) {
         $atributos = json_decode($item['atributos'], true);
-        if (is_array($atributos) && isset($atributos['color']) && $atributos['color'] !== '') {
-            $color = $atributos['color'];
+        // Si es un array de objetos, buscar el que tenga nombre 'Color'
+        if (is_array($atributos) && isset($atributos[0]) && is_array($atributos[0])) {
+            foreach ($atributos as $attr) {
+                if (isset($attr['nombre']) && mb_strtolower($attr['nombre']) === 'color' && isset($attr['valor'])) {
+                    $color = $attr['valor'];
+                    break;
+                }
+            }
         }
     }
     if ($color === '' || $color === null) {
@@ -70,11 +66,11 @@ foreach ($items as $item) {
             'faltan_entregar' => 0
         ];
     }
-    // Mostrar todos los estados para depuración
-    // Sumar vendidos y faltan_entregar para cualquier estado que no sea cancelado
-    if ($item['estado'] !== 'cancelado') {
+    // Sumar vendidos y faltan_entregar para estados 'pendiente_pago' y 'pagado'
+    if (in_array($item['estado'], ['pendiente_pago','pagado'])) {
         $reporte[$key]['vendidos'] += $item['cantidad'];
-        if (in_array($item['estado'], ['confirmado','preparando','enviado'])) {
+        // Si quieres distinguir faltan_entregar, puedes ajustar aquí según tu lógica
+        if ($item['estado'] === 'pendiente_pago') {
             $reporte[$key]['faltan_entregar'] += $item['cantidad'];
         }
     }
