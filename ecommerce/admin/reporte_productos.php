@@ -17,34 +17,65 @@ if (!$pdo) {
 $buscar = $_GET['buscar'] ?? '';
 $color_filtro = $_GET['color'] ?? '';
 
-// Consulta para obtener productos vendidos y pendientes de entrega, agrupados por producto y color
+
+// Obtener todos los items de pedidos con productos y atributos
 $sql = "
-SELECT p.id AS producto_id, p.nombre AS producto, pa.valor AS color,
-    SUM(CASE WHEN pe.estado IN ('confirmado','preparando','enviado','entregado') THEN pi.cantidad ELSE 0 END) AS vendidos,
-    SUM(CASE WHEN pe.estado IN ('confirmado','preparando','enviado') THEN pi.cantidad ELSE 0 END) AS faltan_entregar
+SELECT p.id AS producto_id, p.nombre AS producto, pi.cantidad, pi.atributos,
+    pe.estado
 FROM ecommerce_pedidos pe
 JOIN ecommerce_pedido_items pi ON pe.id = pi.pedido_id
 JOIN ecommerce_productos p ON pi.producto_id = p.id
-LEFT JOIN ecommerce_producto_atributos pa ON pa.producto_id = p.id AND pa.nombre = 'color'
-WHERE pe.estado != 'cancelado'
-";
+WHERE pe.estado != 'cancelado' ";
 $params = [];
 if ($buscar) {
     $sql .= " AND p.nombre LIKE ?";
     $params[] = "%$buscar%";
 }
-if ($color_filtro) {
-    $sql .= " AND pa.valor = ?";
-    $params[] = $color_filtro;
-}
-$sql .= " GROUP BY p.id, pa.valor ORDER BY p.nombre, pa.valor";
-
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
-$reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener lista de colores para filtro
-$colores = $pdo->query("SELECT DISTINCT valor FROM ecommerce_producto_atributos WHERE nombre = 'color' AND valor IS NOT NULL AND valor != '' ORDER BY valor")->fetchAll(PDO::FETCH_COLUMN);
+// Procesar y agrupar por producto y color
+$reporte = [];
+$colores_set = [];
+foreach ($items as $item) {
+    $color = '';
+    if (!empty($item['atributos'])) {
+        $atributos = json_decode($item['atributos'], true);
+        if (is_array($atributos) && isset($atributos['color'])) {
+            $color = $atributos['color'];
+        }
+    }
+    if ($color === '' || $color === null) {
+        $color = 'Sin color';
+    }
+    $colores_set[$color] = true;
+    $key = $item['producto_id'] . '||' . $color;
+    if (!isset($reporte[$key])) {
+        $reporte[$key] = [
+            'producto_id' => $item['producto_id'],
+            'producto' => $item['producto'],
+            'color' => $color,
+            'vendidos' => 0,
+            'faltan_entregar' => 0
+        ];
+    }
+    if (in_array($item['estado'], ['confirmado','preparando','enviado','entregado'])) {
+        $reporte[$key]['vendidos'] += $item['cantidad'];
+    }
+    if (in_array($item['estado'], ['confirmado','preparando','enviado'])) {
+        $reporte[$key]['faltan_entregar'] += $item['cantidad'];
+    }
+}
+$reporte = array_values($reporte);
+$colores = array_keys($colores_set);
+sort($colores);
+if ($color_filtro) {
+    $reporte = array_filter($reporte, function($row) use ($color_filtro) {
+        return $row['color'] === $color_filtro;
+    });
+    $reporte = array_values($reporte);
+}
 
 // Estadísticas
 $total_productos = count(array_unique(array_column($reporte, 'producto_id')));
