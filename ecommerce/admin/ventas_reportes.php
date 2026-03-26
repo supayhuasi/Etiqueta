@@ -66,9 +66,12 @@ try {
 }
 
 try {
-    // Total vendido
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ?");
-    $stmt->execute([$startStr, $endStr]);
+    // Total vendido SOLO en estados facturables
+    $estados_facturables = ['pagado','entregado','confirmado','preparando','enviado'];
+    $placeholders_fact = implode(',', array_fill(0, count($estados_facturables), '?'));
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado IN ($placeholders_fact)");
+    $params_fact = array_merge([$startStr, $endStr], $estados_facturables);
+    $stmt->execute($params_fact);
     $total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
 } catch (Exception $e) {
     die('Error en consulta de ventas: ' . $e->getMessage());
@@ -83,9 +86,10 @@ try {
             SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
             FROM ecommerce_pedido_pagos pp
             INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-            WHERE p.$fecha_columna BETWEEN ? AND ?
+            WHERE p.$fecha_columna BETWEEN ? AND ? AND p.estado IN ($placeholders_fact)
         ");
-        $stmt->execute([$startStr, $endStr]);
+        $params_cobro = array_merge([$startStr, $endStr], $estados_facturables);
+        $stmt->execute($params_cobro);
         $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
     }
 } catch (Exception $e) {
