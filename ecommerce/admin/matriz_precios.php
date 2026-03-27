@@ -449,8 +449,11 @@ if ($_POST['accion'] === 'aumentar' && isset($_POST['porcentaje_ajuste'])) {
 
     <div class="col-md-8">
         <div class="card">
-            <div class="card-header">
-                <h5>Matriz de Precios Actual (<?= count($matriz) ?> registros)</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Matriz de Precios Actual (<?= count($matriz) ?> registros)</h5>
+                <a href="matriz_precios_excel.php?producto_id=<?= $producto_id ?>" class="btn btn-success btn-sm">
+                    <i class="bi bi-file-earmark-excel"></i> Descargar Excel
+                </a>
             </div>
             <div class="card-body">
                 <?php if (empty($matriz)): ?>
