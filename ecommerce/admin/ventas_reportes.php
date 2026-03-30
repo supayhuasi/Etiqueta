@@ -66,18 +66,17 @@ try {
 }
 
 try {
-    // Total vendido SOLO en estados facturables
-    $estados_facturables = ['pagado','entregado','confirmado','preparando','enviado'];
-    $placeholders_fact = implode(',', array_fill(0, count($estados_facturables), '?'));
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado IN ($placeholders_fact)");
-    $params_fact = array_merge([$startStr, $endStr], $estados_facturables);
-    $stmt->execute($params_fact);
+    // Total vendido: TODOS los pedidos excepto cancelados
+    // Esto incluye: pendiente_pago, esperando_transferencia, esperando_envio, pagado,
+    // confirmado, preparando, enviado, entregado, y otros pendientes de actualización
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_vendido FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado != 'cancelado'");
+    $stmt->execute([$startStr, $endStr]);
     $total_vendido = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_vendido'];
 } catch (Exception $e) {
     die('Error en consulta de ventas: ' . $e->getMessage());
 }
 
-// Total cobrado
+// Total cobrado: SOLO pedidos con estado 'pagado'
 $total_cobrado = 0.0;
 try {
     $tabla_pagos = $pdo->query("SHOW TABLES LIKE 'ecommerce_pedido_pagos'")->rowCount() > 0;
@@ -86,32 +85,56 @@ try {
             SELECT COALESCE(SUM(pp.monto),0) as total_cobrado
             FROM ecommerce_pedido_pagos pp
             INNER JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-            WHERE p.$fecha_columna BETWEEN ? AND ? AND p.estado IN ($placeholders_fact)
+            WHERE p.$fecha_columna BETWEEN ? AND ? AND pp.estado = 'completado'
         ");
-        $params_cobro = array_merge([$startStr, $endStr], $estados_facturables);
-        $stmt->execute($params_cobro);
+        $stmt->execute([$startStr, $endStr]);
+        $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+    } else {
+        // Alternativa: si no existe tabla de pagos, contar como cobrado solo los con estado 'pagado'
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_cobrado FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado = 'pagado'");
+        $stmt->execute([$startStr, $endStr]);
         $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
     }
 } catch (Exception $e) {
-    // Si hay error, continuar con total_cobrado = 0
-    $total_cobrado = 0.0;
+    // Si hay error intentar fallback: contar estado='pagado'
+    try {
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as total_cobrado FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado = 'pagado'");
+        $stmt->execute([$startStr, $endStr]);
+        $total_cobrado = (float)$stmt->fetch(PDO::FETCH_ASSOC)['total_cobrado'];
+    } catch (Exception $e2) {
+        $total_cobrado = 0.0;
+    }
 }
 
 $porcentaje_cobrado = $total_vendido > 0 ? ($total_cobrado / $total_vendido) * 100 : 0;
 
-// Pendiente de entrega (monto)
+// Pendiente de entrega (monto) - usa tabla ecommerce_ordenes_produccion que tiene los estados correctos
+$pendiente_entrega = 0.0;
 try {
-    $estados_pendientes = ['pendiente', 'en_produccion', 'terminado'];
-    $placeholders = implode(',', array_fill(0, count($estados_pendientes), '?'));
-    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado IN ($placeholders)");
-    $params = array_merge([$startStr, $endStr], $estados_pendientes);
-    $stmt->execute($params);
+    // Estados pendientes de entrega: pendiente, en_produccion, terminado (sin entregar aún)
+    $stmt = $pdo->prepare("
+        SELECT COALESCE(SUM(p.total),0) as pendiente_entrega
+        FROM ecommerce_pedidos p
+        INNER JOIN ecommerce_ordenes_produccion op ON p.id = op.pedido_id
+        WHERE p.$fecha_columna BETWEEN ? AND ? AND op.estado IN ('pendiente','en_produccion','terminado')
+    ");
+    $stmt->execute([$startStr, $endStr]);
     $pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
 } catch (Exception $e) {
-    $pendiente_entrega = 0.0;
+    // Si falla (tabla no existe), usar fallback: pendientes en ecommerce_pedidos
+    try {
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as pendiente_entrega FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado IN ('esperando_envio','preparando','confirmado')");
+        $stmt->execute([$startStr, $endStr]);
+        $pendiente_entrega = (float)$stmt->fetch(PDO::FETCH_ASSOC)['pendiente_entrega'];
+    } catch (Exception $e2) {
+        $pendiente_entrega = 0.0;
+    }
 }
 
 $pendiente_cobro = max(0, $total_vendido - $total_cobrado);
+if ($pendiente_cobro < 0) {
+    $pendiente_cobro = 0; // Asegurar que nunca sea negativo
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
