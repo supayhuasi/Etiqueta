@@ -1239,6 +1239,7 @@ function render_tarjeta_instalacion($item) {
     padding: .75rem;
     flex: 1;
     min-height: 180px;
+    overflow-y: auto;
 }
 .inst-dropzone.drag-over {
     background: #eef6ff;
@@ -1259,6 +1260,63 @@ function render_tarjeta_instalacion($item) {
 }
 .inst-card .badge {
     font-size: .68rem;
+    flex-shrink: 0;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .inst-dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: .75rem;
+    }
+    .inst-col {
+        min-height: 200px;
+    }
+    .inst-dropzone {
+        min-height: 150px;
+        max-height: 300px;
+    }
+    .inst-card {
+        padding: .5rem;
+        margin-bottom: .35rem;
+    }
+    .inst-card-texto {
+        font-size: .85rem !important;
+        min-height: 60px !important;
+    }
+    .btn-sm {
+        padding: .25rem .4rem;
+        font-size: .75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .inst-card .d-flex {
+        flex-wrap: wrap;
+    }
+    .btn-sm {
+        flex: 0 0 calc(50% - .25rem);
+    }
+    .inst-dropzone {
+        max-height: 250px;
+    }
+}
+
+/* Collapse que siempre se muestra en lg+ pero colapsa en pantallas menores */
+.collapse-lg {
+    display: block !important;
+}
+
+@media (max-width: 991.98px) {
+    .collapse-lg.collapse:not(.show) {
+        display: none;
+    }
+}
+
+.filters-collapse-mobile { display: none; }
+@media (max-width: 768px) {
+    .filters-collapse-mobile { display: block; }
+    .filters-inline { display: none; }
 }
 </style>
 
@@ -1392,66 +1450,94 @@ function render_tarjeta_instalacion($item) {
 
     <div class="col-xl-4">
         <div class="card h-100">
-            <div class="card-header"><h5 class="mb-0">Filtros y resumen</h5></div>
+            <div class="card-header">
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span>Filtros y resumen</span>
+                    <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false">⚙ Filtros</button>
+                </h5>
+            </div>
             <div class="card-body">
-                <form method="GET" class="row g-3 align-items-end mb-3">
-                    <div class="col-md-3">
-                        <label class="form-label">Pedido desde</label>
-                        <input type="date" name="fecha_desde" class="form-control" value="<?= htmlspecialchars($fecha_desde) ?>">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Pedido hasta</label>
-                        <input type="date" name="fecha_hasta" class="form-control" value="<?= htmlspecialchars($fecha_hasta) ?>">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Tablero desde</label>
-                        <input type="date" name="instalacion_desde" class="form-control" value="<?= htmlspecialchars($instalacion_desde) ?>">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Tablero hasta</label>
-                        <input type="date" name="instalacion_hasta" class="form-control" value="<?= htmlspecialchars($instalacion_hasta) ?>">
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="incluir_entregados" value="1" id="incluir_entregados" <?= $incluir_entregados ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="incluir_entregados">Incluir entregados</label>
-                        </div>
-                    </div>
-                    <div class="col-md-8 d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Aplicar filtros</button>
-                        <a href="instalaciones.php" class="btn btn-outline-secondary">Limpiar</a>
-                        <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-outline-dark" target="_blank">Reporte direcciones</a>
-                        <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-outline-dark" target="_blank">Reporte productos</a>
-                    </div>
-                </form>
+                <!-- Botones rápidos para cambiar período -->
+                <div class="btn-group w-100 mb-3" role="group" aria-label="Rango rápido">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setFechaRapida(7)">Últimos 7</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setFechaRapida(30)">Últimos 30</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setFechaRapida(-7)">Próximos 7</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setFechaRapida(0)">Hoy</button>
+                </div>
 
-                <div class="row g-2">
-                    <div class="col-6">
-                        <div class="border rounded p-2 text-center">
-                            <div class="text-muted small">Total instalaciones</div>
-                            <div class="h4 mb-0"><?= count($items_instalacion) ?></div>
+                <!-- Formulario de filtros (colapsa en mobile) -->
+                <div id="filterCollapse" class="collapse show collapse-lg">
+                    <form method="GET" class="row g-2 mb-3 filters-inline">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Pedido desde</label>
+                            <input type="date" name="fecha_desde" class="form-control form-control-sm" value="<?= htmlspecialchars($fecha_desde) ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Pedido hasta</label>
+                            <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="<?= htmlspecialchars($fecha_hasta) ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Tablero desde</label>
+                            <input type="date" name="instalacion_desde" class="form-control form-control-sm" value="<?= htmlspecialchars($instalacion_desde) ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Tablero hasta</label>
+                            <input type="date" name="instalacion_hasta" class="form-control form-control-sm" value="<?= htmlspecialchars($instalacion_hasta) ?>">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-check-sm">
+                                <input class="form-check-input" type="checkbox" name="incluir_entregados" value="1" id="incluir_entregados" <?= $incluir_entregados ? 'checked' : '' ?>>
+                                <label class="form-check-label small" for="incluir_entregados">Incluir entregados</label>
+                            </div>
+                        </div>
+                        <div class="col-12 d-grid gap-2">
+                            <button type="submit" class="btn btn-sm btn-primary">Aplicar filtros</button>
+                            <a href="instalaciones.php" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Resumen de instalaciones -->
+                <div class="row g-2 mt-2">
+                    <div class="col-6 col-md-12">
+                        <div class="border rounded p-2 text-center small">
+                            <div class="text-muted tiny">Total</div>
+                            <div class="h6 mb-0 fw-bold"><?= count($items_instalacion) ?></div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 text-center">
-                            <div class="text-muted small">Órdenes de producción</div>
-                            <div class="h4 mb-0"><?= (int)$total_ordenes ?></div>
+                    <div class="col-6 col-md-12">
+                        <div class="border rounded p-2 text-center small">
+                            <div class="text-muted tiny">Órdenes</div>
+                            <div class="h6 mb-0"><?= (int)$total_ordenes ?></div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 text-center">
-                            <div class="text-muted small">Instalaciones manuales</div>
-                            <div class="h4 mb-0"><?= (int)$total_manuales ?></div>
+                    <div class="col-6 col-md-12">
+                        <div class="border rounded p-2 text-center small">
+                            <div class="text-muted tiny">Manuales</div>
+                            <div class="h6 mb-0"><?= (int)$total_manuales ?></div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 text-center">
-                            <div class="text-muted small">Visitas</div>
-                            <div class="h4 mb-0"><?= (int)$total_visitas ?></div>
+                    <div class="col-6 col-md-12">
+                        <div class="border rounded p-2 text-center small">
+                            <div class="text-muted tiny">Visitas</div>
+                            <div class="h6 mb-0"><?= (int)$total_visitas ?></div>
                         </div>
                     </div>
                 </div>
-                <div class="small text-muted mt-2">Arrastrá o usá ↑/↓ para reordenar. Cada tarjeta permite guardar texto propio.</div>
+
+                <!-- Enlaces de reportes (apilados en mobile) -->
+                <div class="d-flex flex-column gap-2 mt-3 d-md-none">
+                    <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">📍 Reporte direcciones</a>
+                    <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">📦 Reporte productos</a>
+                </div>
+                <div class="d-flex gap-2 mt-3 d-none d-md-flex">
+                    <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">Reporte direcciones</a>
+                    <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">Reporte productos</a>
+                </div>
+
+                <div class="small text-muted mt-3 text-center">
+                    ↑/↓ para reordenar • Toca para editar
+                </div>
             </div>
         </div>
     </div>
@@ -1712,6 +1798,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var formEditarOrden = document.getElementById('form-editar-orden');
     var ordenModal     = (ordenModalEl && window.bootstrap) ? new bootstrap.Modal(ordenModalEl) : null;
     var activeOrdenId  = null;
+
+    // Performance: throttle drag events
+    var dragThrottle = false;
+    function handleDragThrottle(fn) {
+        return function () {
+            if (!dragThrottle) {
+                dragThrottle = true;
+                fn.apply(this, arguments);
+                setTimeout(function () { dragThrottle = false; }, 50);
+            }
+        };
+    }
 
     function actualizarBadgeColumna(dropzone) {
         var cardCount = dropzone.querySelectorAll('.inst-card').length;
@@ -2433,6 +2531,30 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
-</script>
 
-<?php require 'includes/footer.php'; ?>
+window.setFechaRapida = function(dias) {
+    var hoy = new Date();
+    var desde = new Date();
+    var hasta = new Date();
+    if (dias >= 0) {
+        desde.setDate(hoy.getDate() - dias);
+        hasta = hoy;
+    } else {
+        desde = hoy;
+        hasta.setDate(hoy.getDate() - dias);
+    }
+    var fmt = function (d) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    };
+    var f = document.querySelector('input[name="instalacion_desde"]');
+    var t = document.querySelector('input[name="instalacion_hasta"]');
+    if (f && t) {
+        f.value = fmt(desde);
+        t.value = fmt(hasta);
+        var form = document.querySelector('form');
+        if (form) form.submit();
+    }
+};\n</script>\n\n<?php require 'includes/footer.php'; ?>
