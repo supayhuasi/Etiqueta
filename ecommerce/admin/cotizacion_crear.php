@@ -209,6 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'alto' => !empty($item['alto']) ? floatval($item['alto']) : null,
                     'precio_base' => $precio,
                     'atributos' => $atributos,
+                    'descuento_pct' => max(0, min(100, floatval($item['descuento_pct'] ?? 0))),
                     'precio_unitario' => $precio_total_unitario,
                     'precio_total' => $total_item
                 ];
@@ -585,6 +586,10 @@ foreach ($lista_cat_rows as $row) {
                                 </div>
                                 <small class="text-muted">Se guarda como precio base, sin atributos.</small>
                             </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Desc. %</label>
+                                <input type="number" class="form-control" id="descuento_pct_modal" step="0.01" min="0" max="100" value="0">
+                            </div>
                         </div>
 
                         <!-- Atributos del producto -->
@@ -655,6 +660,35 @@ function calcularPrecioConLista(productoId, precioBase) {
     return precioBase;
 }
 
+function calcularDescuentoPorLista(productoId, precioBase) {
+    const listaId = obtenerListaSeleccionada();
+    const base = parseFloat(precioBase || 0);
+    if (!listaId || !isFinite(base) || base <= 0) {
+        return 0;
+    }
+
+    const item = listaItems?.[listaId]?.[productoId];
+    if (item) {
+        const descItem = parseFloat(item.descuento_porcentaje || 0);
+        if (descItem > 0) {
+            return Math.min(100, Math.max(0, descItem));
+        }
+        const precioNuevo = parseFloat(item.precio_nuevo || 0);
+        if (precioNuevo > 0 && precioNuevo < base) {
+            return Math.min(100, Math.max(0, ((base - precioNuevo) / base) * 100));
+        }
+    }
+
+    const producto = productos.find(p => String(p.id) === String(productoId));
+    const categoriaId = producto?.categoria_id;
+    const descCat = parseFloat(listaCategorias?.[listaId]?.[categoriaId] ?? 0);
+    if (descCat > 0) {
+        return Math.min(100, Math.max(0, descCat));
+    }
+
+    return 0;
+}
+
 function obtenerDescuentoPorcentajeDefault() {
     const input = document.getElementById('descuento_porcentaje_default');
     const valor = parseFloat(input?.value || 0);
@@ -674,6 +708,14 @@ function aplicarDescuentoDefault(precioBase) {
         return base;
     }
     return Math.max(0, parseFloat((base * (1 - (pct / 100))).toFixed(2)));
+}
+
+function obtenerDescuentoInicialItem(productoId, precioBase) {
+    const descLista = calcularDescuentoPorLista(productoId, precioBase);
+    if (descLista > 0) {
+        return descLista;
+    }
+    return obtenerDescuentoPorcentajeDefault();
 }
 
 function actualizarCostoAtributo(index, attrId, costoBase, costoOpcion, valorSeleccionado) {
@@ -755,6 +797,8 @@ function abrirModalItem(editIndex = null) {
             const precioInput = document.getElementById('precio_modal');
             precioInput.value = itemData.precio || '';
             precioInput.dataset.base = itemData.precio || '';
+            const descuentoInput = document.getElementById('descuento_pct_modal');
+            if (descuentoInput) descuentoInput.value = parseFloat(itemData.descuento_pct || 0).toFixed(2);
             if (itemData.producto_id) {
                 cargarAtributosProductoModal(itemData.producto_id, itemData.atributos || []);
             }
@@ -868,6 +912,10 @@ function aplicarProductoModal(producto) {
         const precioFinal = esNuevo ? aplicarDescuentoDefault(precioBase) : precioBase;
         precioInput.dataset.base = precioFinal.toFixed(2);
         precioInput.value = precioFinal.toFixed(2);
+        const descuentoInput = document.getElementById('descuento_pct_modal');
+        if (descuentoInput && esNuevo) {
+            descuentoInput.value = obtenerDescuentoInicialItem(producto.id, precioBase).toFixed(2);
+        }
         if (info) {
             const pct = obtenerDescuentoPorcentajeDefault();
             info.innerHTML = (esNuevo && pct > 0)
@@ -1043,6 +1091,10 @@ function actualizarPrecioItemModal() {
                     const precioInput = document.getElementById('precio_modal');
                     precioInput.dataset.base = precioFinal.toFixed(2);
                     precioInput.value = precioFinal.toFixed(2);
+                    const descuentoInput = document.getElementById('descuento_pct_modal');
+                    if (descuentoInput && esNuevo) {
+                        descuentoInput.value = obtenerDescuentoInicialItem(productoId, precioBase).toFixed(2);
+                    }
                     const info = document.getElementById('precio-info-modal');
                     if (info) {
                         const pct = obtenerDescuentoPorcentajeDefault();
@@ -1093,6 +1145,7 @@ function obtenerItemDesdeDOM(index) {
         alto: getVal(`alto_${index}`),
         cantidad: getVal(`cantidad_${index}`),
         precio: getVal(`precio_${index}`),
+        descuento_pct: getVal(`descuento_pct_${index}`),
         atributos
     };
 }
@@ -1144,6 +1197,7 @@ function renderItemResumen(index, itemData) {
     const dimensiones = (itemData.ancho && itemData.alto)
         ? `${itemData.ancho} x ${itemData.alto} cm`
         : '—';
+    const descuentoPct = Math.max(0, Math.min(100, parseFloat(itemData.descuento_pct || 0) || 0));
 
     const html = `
         <div class="card mb-3 item-row" id="item_${index}">
@@ -1154,6 +1208,7 @@ function renderItemResumen(index, itemData) {
                         ${itemData.descripcion ? `<div class="item-resumen-meta">${itemData.descripcion}</div>` : ''}
                         <div class="item-resumen-meta">Cantidad: <strong>${itemData.cantidad}</strong> · Medidas: <strong>${dimensiones}</strong></div>
                         <div class="item-resumen-meta">Precio base: <strong>$${parseFloat(itemData.precio || 0).toFixed(2)}</strong></div>
+                        <div class="item-resumen-meta">Descuento item: <strong id="descuento_pct_text_${index}">${descuentoPct.toFixed(2)}%</strong></div>
                         <div class="item-resumen-attrs mt-2">${atributosResumen}</div>
                     </div>
                     <div class="text-end">
@@ -1161,6 +1216,10 @@ function renderItemResumen(index, itemData) {
                             Subtotal: $<span class="item-subtotal-text" id="item_subtotal_text_${index}">0.00</span>
                         </div>
                         <div class="mt-2">
+                            <div class="input-group input-group-sm mb-2" style="max-width:160px; margin-left:auto;">
+                                <span class="input-group-text">Desc %</span>
+                                <input type="number" class="form-control text-end" id="descuento_pct_input_${index}" value="${descuentoPct.toFixed(2)}" min="0" max="100" step="0.01" onchange="actualizarDescuentoItem(${index}, this.value)">
+                            </div>
                             <button type="button" class="btn btn-sm btn-outline-primary" onclick="abrirModalItem(${index})">✏️ Editar</button>
                             <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarItem(${index})">🗑️ Eliminar</button>
                         </div>
@@ -1173,6 +1232,7 @@ function renderItemResumen(index, itemData) {
                 <input type="hidden" class="item-alto" id="alto_${index}" name="items[${index}][alto]" value="${itemData.alto || ''}">
                 <input type="hidden" class="item-cantidad" id="cantidad_${index}" name="items[${index}][cantidad]" value="${itemData.cantidad || 1}">
                 <input type="hidden" class="item-precio" id="precio_${index}" name="items[${index}][precio]" value="${itemData.precio || 0}" data-base="${itemData.precio || 0}">
+                <input type="hidden" class="item-descuento-pct" id="descuento_pct_${index}" name="items[${index}][descuento_pct]" value="${descuentoPct.toFixed(2)}">
                 <input type="hidden" id="producto_id_${index}" name="items[${index}][producto_id]" value="${itemData.producto_id || ''}">
                 <input type="text" class="form-control item-subtotal" id="subtotal_${index}" readonly style="display:none;">
                 <div id="precio-info-${index}" style="display:none;"></div>
@@ -1234,6 +1294,7 @@ function guardarItemDesdeModal() {
         alto: document.getElementById('alto_modal').value,
         cantidad: cantidadValue,
         precio: precioValue.toFixed(2),
+        descuento_pct: Math.max(0, Math.min(100, parseFloat(document.getElementById('descuento_pct_modal')?.value || 0) || 0)),
         atributos
     };
 
@@ -1315,6 +1376,17 @@ function eliminarItem(index) {
     try { calcularTotales(); } catch(e) { console.error('calcularTotales error', e); }
 }
 
+function actualizarDescuentoItem(index, valor) {
+    const pct = Math.max(0, Math.min(100, parseFloat(valor || 0) || 0));
+    const hidden = document.getElementById(`descuento_pct_${index}`);
+    const input = document.getElementById(`descuento_pct_input_${index}`);
+    const text = document.getElementById(`descuento_pct_text_${index}`);
+    if (hidden) hidden.value = pct.toFixed(2);
+    if (input) input.value = pct.toFixed(2);
+    if (text) text.textContent = pct.toFixed(2) + '%';
+    calcularTotales();
+}
+
 function calcularTotales() {
     let subtotal = 0;
     let descuentoListaTotal = 0;
@@ -1347,22 +1419,18 @@ function calcularTotales() {
 
         subtotal += subtotalItem;
 
-        const productoId = row.querySelector('input[type="hidden"][id^="producto_id_"]')?.value;
-        if (productoId) {
-            const precioLista = calcularPrecioConLista(productoId, precioBase);
-            const descUnit = Math.max(0, precioBase - precioLista);
-            descuentoListaTotal += descUnit * cantidad;
-        }
+        const descuentoPct = parseFloat(row.querySelector('.item-descuento-pct')?.value || 0) || 0;
+        const descuentoItem = (precioBase + costoAtributos) * cantidad * (descuentoPct / 100);
+        descuentoListaTotal += descuentoItem;
     });
 
-    const listaId = obtenerListaSeleccionada();
     const descuentoInput = document.getElementById('descuento');
     const descuentoInfo = document.getElementById('descuento_lista_info');
 
-    if (listaId && descuentoInput) {
+    if (descuentoInput) {
         descuentoInput.value = descuentoListaTotal.toFixed(2);
         if (descuentoInfo) {
-            descuentoInfo.textContent = `Base: $${subtotal.toFixed(2)} | Descuento lista: $${descuentoListaTotal.toFixed(2)}`;
+            descuentoInfo.textContent = `Base: $${subtotal.toFixed(2)} | Descuento items: $${descuentoListaTotal.toFixed(2)}`;
         }
     } else if (descuentoInfo) {
         descuentoInfo.textContent = '';
@@ -1456,6 +1524,22 @@ document.addEventListener('change', function(e) {
 
 
 function aplicarListaPrecios() {
+    document.querySelectorAll('.item-row').forEach(row => {
+        const idxMatch = (row.id || '').match(/item_(\d+)/);
+        if (!idxMatch) return;
+        const index = parseInt(idxMatch[1], 10);
+        const productoId = document.getElementById(`producto_id_${index}`)?.value;
+        const precioInput = document.getElementById(`precio_${index}`);
+        const precioBase = parseFloat(precioInput?.dataset.base || precioInput?.value || 0) || 0;
+        if (!productoId || precioBase <= 0) return;
+        const pct = obtenerDescuentoInicialItem(productoId, precioBase);
+        const hidden = document.getElementById(`descuento_pct_${index}`);
+        const input = document.getElementById(`descuento_pct_input_${index}`);
+        const text = document.getElementById(`descuento_pct_text_${index}`);
+        if (hidden) hidden.value = pct.toFixed(2);
+        if (input) input.value = pct.toFixed(2);
+        if (text) text.textContent = pct.toFixed(2) + '%';
+    });
     calcularTotales();
 }
 
@@ -1608,6 +1692,7 @@ function collectItemsForSubmit() {
         const alto = document.getElementById(`alto_${idx}`)?.value || '';
         const cantidad = document.getElementById(`cantidad_${idx}`)?.value || 0;
         const precio = document.getElementById(`precio_${idx}`)?.value || 0;
+        const descuento_pct = document.getElementById(`descuento_pct_${idx}`)?.value || 0;
         const producto_id = document.getElementById(`producto_id_${idx}`)?.value || null;
 
         // recoger atributos asociados (si los hay)
@@ -1632,7 +1717,7 @@ function collectItemsForSubmit() {
             });
         } catch(e) {}
 
-        items.push({ producto_id: producto_id || null, nombre, descripcion, ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0,10), precio: parseFloat(precio || 0), atributos });
+        items.push({ producto_id: producto_id || null, nombre, descripcion, ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0,10), precio: parseFloat(precio || 0), descuento_pct: parseFloat(descuento_pct || 0), atributos });
     });
     return items;
 }
