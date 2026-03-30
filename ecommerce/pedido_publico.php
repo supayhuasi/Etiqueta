@@ -123,6 +123,20 @@ if ($token !== '') {
                     </div>
                 <?php endif; ?>
 
+                <?php if (!empty($pedido['factura_archivo'])): ?>
+                    <?php
+                        $facturaHref = '/' . ltrim((string)$pedido['factura_archivo'], '/');
+                        $facturaLabel = trim((string)($pedido['factura_nombre_original'] ?? 'Factura adjunta'));
+                    ?>
+                    <div class="mb-4">
+                        <h5 class="mb-2">Factura</h5>
+                        <a class="btn btn-outline-primary" href="<?= htmlspecialchars($facturaHref) ?>" target="_blank" rel="noopener" download>
+                            Descargar factura
+                        </a>
+                        <div class="small text-muted mt-1"><?= htmlspecialchars($facturaLabel) ?></div>
+                    </div>
+                <?php endif; ?>
+
                 <div class="mb-3">
                     <h5 class="mb-3">Pagos registrados</h5>
                     <?php if (empty($pagos)): ?>

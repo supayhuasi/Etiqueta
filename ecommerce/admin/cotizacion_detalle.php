@@ -6,6 +6,15 @@ try {
     if (!in_array('dni', $cols_cot, true)) {
         $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN dni VARCHAR(20) NULL AFTER telefono");
     }
+    if (!in_array('cuit', $cols_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cuit VARCHAR(20) NULL AFTER dni");
+    }
+    if (!in_array('factura_a', $cols_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+    }
+    if (!in_array('es_empresa', $cols_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+    }
 } catch (Exception $e) {
 }
 
@@ -13,6 +22,29 @@ try {
     $cols_cli_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
     if (!in_array('dni', $cols_cli_cot, true)) {
         $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN dni VARCHAR(20) NULL AFTER telefono");
+    }
+    if (!in_array('direccion', $cols_cli_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN direccion VARCHAR(255) NULL AFTER telefono");
+    }
+    if (!in_array('cuit', $cols_cli_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN cuit VARCHAR(20) NULL AFTER direccion");
+    }
+    if (!in_array('factura_a', $cols_cli_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+    }
+    if (!in_array('es_empresa', $cols_cli_cot, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+    }
+} catch (Exception $e) {
+}
+
+try {
+    $cols_ped = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('factura_archivo', $cols_ped, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_archivo VARCHAR(255) NULL AFTER public_token");
+    }
+    if (!in_array('factura_nombre_original', $cols_ped, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_nombre_original VARCHAR(255) NULL AFTER factura_archivo");
     }
 } catch (Exception $e) {
 }
@@ -40,6 +72,15 @@ if ($cotizacion && !empty($cotizacion['cliente_id'])) {
         if (in_array('dni', $cols, true)) {
             $select_cols[] = 'dni';
         }
+        if (in_array('cuit', $cols, true)) {
+            $select_cols[] = 'cuit';
+        }
+        if (in_array('factura_a', $cols, true)) {
+            $select_cols[] = 'factura_a';
+        }
+        if (in_array('es_empresa', $cols, true)) {
+            $select_cols[] = 'es_empresa';
+        }
 
         if (!empty($select_cols)) {
             $stmt_extra = $pdo->prepare("SELECT " . implode(', ', $select_cols) . " FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
@@ -54,6 +95,15 @@ if ($cotizacion && !empty($cotizacion['cliente_id'])) {
             }
             if (array_key_exists('dni', $extra_data)) {
                 $cotizacion['cliente_dni'] = $extra_data['dni'];
+            }
+            if (array_key_exists('cuit', $extra_data)) {
+                $cotizacion['cliente_cuit'] = $extra_data['cuit'];
+            }
+            if (array_key_exists('factura_a', $extra_data)) {
+                $cotizacion['cliente_factura_a'] = $extra_data['factura_a'];
+            }
+            if (array_key_exists('es_empresa', $extra_data)) {
+                $cotizacion['cliente_es_empresa'] = $extra_data['es_empresa'];
             }
         }
     } catch (Exception $e) {
@@ -106,57 +156,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $telefono = trim((string)($cotizacion['cliente_telefono'] ?? $cotizacion['telefono'] ?? ''));
                 // Compatibilidad con empresa/direccion
                 $direccion = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
-                    $dni = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? '')));
+                $dni = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? '')));
+                $cuit = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_cuit'] ?? $cotizacion['cuit'] ?? '')));
+                $es_empresa = (int)($cotizacion['cliente_es_empresa'] ?? $cotizacion['es_empresa'] ?? 0);
+                $factura_a = (int)($cotizacion['cliente_factura_a'] ?? $cotizacion['factura_a'] ?? 0);
 
-                if ($telefono === '') {
-                    throw new Exception('Teléfono requerido para crear cliente del pedido');
+                if ($direccion === '') {
+                    throw new Exception('Domicilio obligatorio para convertir la cotización en pedido');
                 }
-                    if ($direccion === '') {
-                        throw new Exception('Domicilio obligatorio para convertir la cotización en pedido');
-                    }
-                    if ($dni === '') {
-                        throw new Exception('DNI obligatorio para convertir la cotización en pedido');
-                    }
+                if ($es_empresa && $factura_a && strlen($cuit) !== 11) {
+                    throw new Exception('Para empresa con Factura A se requiere CUIT válido (11 dígitos)');
+                }
 
-                // Buscar si ya existe un cliente con ese teléfono en ecommerce_clientes
-                $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
-                $stmt->execute([$telefono]);
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $documento_tipo = null;
+                $documento_numero = null;
+                if ($es_empresa && $cuit !== '') {
+                    $documento_tipo = 'CUIT';
+                    $documento_numero = $cuit;
+                } elseif ($dni !== '') {
+                    $documento_tipo = 'DNI';
+                    $documento_numero = $dni;
+                }
+
+                $email_normalizado = strtolower(trim((string)$email));
+                if ($email_normalizado === '') {
+                    $email_normalizado = 'cotizacion-' . date('YmdHis') . '-' . rand(1000, 9999) . '@cliente.local';
+                }
+
+                $facturaAdjunta = $_FILES['factura_adjunto'] ?? null;
+                $subirFactura = $facturaAdjunta && isset($facturaAdjunta['error']) && (int)$facturaAdjunta['error'] !== UPLOAD_ERR_NO_FILE;
+                $facturaOriginal = null;
+                $facturaExt = null;
+                if ($subirFactura) {
+                    if ((int)$facturaAdjunta['error'] !== UPLOAD_ERR_OK) {
+                        throw new Exception('No se pudo cargar el archivo de factura');
+                    }
+                    if ((int)$facturaAdjunta['size'] > 5 * 1024 * 1024) {
+                        throw new Exception('La factura adjunta no puede superar 5MB');
+                    }
+                    $facturaOriginal = trim((string)$facturaAdjunta['name']);
+                    $ext = strtolower(pathinfo($facturaOriginal, PATHINFO_EXTENSION));
+                    $permitidas = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+                    if (!in_array($ext, $permitidas, true)) {
+                        throw new Exception('Formato de factura no permitido. Usá PDF/JPG/PNG/WEBP');
+                    }
+                    $facturaExt = $ext;
+                }
+
+                $row = null;
+                if ($email_normalizado !== '') {
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ? LIMIT 1");
+                    $stmt->execute([$email_normalizado]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$row && $telefono !== '') {
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
+                    $stmt->execute([$telefono]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$row && $documento_numero !== null) {
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE documento_numero = ? LIMIT 1");
+                    $stmt->execute([$documento_numero]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
 
                 if ($row) {
                     // Cliente existe, usar ese ID
                     $cliente_id = (int)$row['id'];
                     // Actualizar datos del cliente con la info más reciente
-                        try {
-                            $stmt = $pdo->prepare("
-                                UPDATE ecommerce_clientes 
-                                SET nombre = ?, email = ?, direccion = ?, documento_tipo = 'DNI', documento_numero = ?
-                                WHERE id = ?
-                            ");
-                            $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $direccion, $dni, $cliente_id]);
-                        } catch (Exception $e) {
-                            $stmt = $pdo->prepare("
-                                UPDATE ecommerce_clientes 
-                                SET nombre = ?, email = ?
-                                WHERE id = ?
-                            ");
-                            $stmt->execute([$nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $cliente_id]);
-                        }
+                    try {
+                        $stmt = $pdo->prepare("
+                            UPDATE ecommerce_clientes 
+                            SET nombre = ?, email = ?, telefono = ?, direccion = ?, responsabilidad_fiscal = ?, documento_tipo = ?, documento_numero = ?
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([
+                            $nombre ?: ($telefono ?: 'Cliente'),
+                            $email_normalizado,
+                            $telefono ?: null,
+                            $direccion,
+                            $factura_a ? 'Responsable Inscripto' : 'Consumidor Final',
+                            $documento_tipo,
+                            $documento_numero,
+                            $cliente_id,
+                        ]);
+                    } catch (Exception $e) {
+                        $stmt = $pdo->prepare("UPDATE ecommerce_clientes SET nombre = ?, email = ? WHERE id = ?");
+                        $stmt->execute([$nombre ?: ($telefono ?: 'Cliente'), $email_normalizado, $cliente_id]);
+                    }
                 } else {
                     // Cliente no existe, crear uno nuevo
-                        try {
-                            $stmt = $pdo->prepare("
-                                INSERT INTO ecommerce_clientes (telefono, nombre, email, direccion, documento_tipo, documento_numero)
-                                VALUES (?, ?, ?, ?, 'DNI', ?)
-                            ");
-                            $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local'), $direccion, $dni]);
-                        } catch (Exception $e) {
-                            $stmt = $pdo->prepare("
-                                INSERT INTO ecommerce_clientes (telefono, nombre, email)
-                                VALUES (?, ?, ?)
-                            ");
-                            $stmt->execute([$telefono, $nombre ?: $telefono, $email ?: ($telefono . '@cliente.local')]);
-                        }
+                    try {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO ecommerce_clientes (telefono, nombre, email, direccion, responsabilidad_fiscal, documento_tipo, documento_numero)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $telefono ?: null,
+                            $nombre ?: ($telefono ?: 'Cliente'),
+                            $email_normalizado,
+                            $direccion,
+                            $factura_a ? 'Responsable Inscripto' : 'Consumidor Final',
+                            $documento_tipo,
+                            $documento_numero,
+                        ]);
+                    } catch (Exception $e) {
+                        $stmt = $pdo->prepare("INSERT INTO ecommerce_clientes (telefono, nombre, email) VALUES (?, ?, ?)");
+                        $stmt->execute([$telefono ?: null, $nombre ?: ($telefono ?: 'Cliente'), $email_normalizado]);
+                    }
                     $cliente_id = (int)$pdo->lastInsertId();
                 }
 
@@ -167,31 +274,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $public_token = bin2hex(random_bytes(16));
                     try {
                         $stmt = $pdo->prepare("
-                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, total, metodo_pago, estado, public_token, envio_nombre, envio_telefono, envio_direccion, observaciones)
-                            VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, total, factura_a, metodo_pago, estado, public_token, envio_nombre, envio_telefono, envio_direccion, observaciones)
+                            VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt->execute([
                             $numero_pedido,
                             $cliente_id,
                             (float)$cotizacion['total'],
                             (float)$cotizacion['total'],
+                            $factura_a,
                             $metodo_pago,
                             $estado_pedido,
                             $public_token,
-                            $nombre ?: $telefono,
-                            $telefono,
+                            $nombre ?: ($telefono ?: 'Cliente'),
+                            $telefono ?: null,
                             $direccion,
-                            'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ' | DNI: ' . $dni
+                            'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ($documento_numero ? ' | ' . $documento_tipo . ': ' . $documento_numero : '')
                         ]);
                     } catch (Exception $e) {
                         $stmt = $pdo->prepare("
-                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, metodo_pago, estado, public_token)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, factura_a, metodo_pago, estado, public_token)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt->execute([
                             $numero_pedido,
                             $cliente_id,
                             (float)$cotizacion['total'],
+                            $factura_a,
                             $metodo_pago,
                             $estado_pedido,
                             $public_token
@@ -222,6 +331,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $subtotal_item,
                         $atributos_json
                     ]);
+                }
+
+                if ($subirFactura) {
+                    $dirFacturas = realpath(__DIR__ . '/../../uploads');
+                    if ($dirFacturas === false) {
+                        throw new Exception('No se encontró la carpeta de uploads');
+                    }
+                    $dirFacturas .= '/facturas_pedidos';
+                    if (!is_dir($dirFacturas) && !mkdir($dirFacturas, 0755, true)) {
+                        throw new Exception('No se pudo crear carpeta de facturas');
+                    }
+                    $nombreArchivo = 'pedido_' . $pedido_id . '_' . date('YmdHis') . '.' . $facturaExt;
+                    $destinoAbs = $dirFacturas . '/' . $nombreArchivo;
+                    if (!move_uploaded_file($facturaAdjunta['tmp_name'], $destinoAbs)) {
+                        throw new Exception('No se pudo guardar el archivo adjunto de factura');
+                    }
+                    $rutaRel = 'uploads/facturas_pedidos/' . $nombreArchivo;
+                    $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET factura_archivo = ?, factura_nombre_original = ? WHERE id = ?");
+                    $stmt->execute([$rutaRel, $facturaOriginal ?: $nombreArchivo, $pedido_id]);
                 }
 
                 $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = 'convertida' WHERE id = ?");
@@ -335,6 +463,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <tr>
                         <th>DNI:</th>
                         <td><?= htmlspecialchars($dni_ui) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php $cuit_ui = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_cuit'] ?? $cotizacion['cuit'] ?? ''))); ?>
+                    <?php if ($cuit_ui !== ''): ?>
+                    <tr>
+                        <th>CUIT:</th>
+                        <td><?= htmlspecialchars($cuit_ui) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php $factura_a_ui = (int)($cotizacion['cliente_factura_a'] ?? $cotizacion['factura_a'] ?? 0); ?>
+                    <?php if ($factura_a_ui === 1): ?>
+                    <tr>
+                        <th>Factura:</th>
+                        <td><span class="badge bg-success">A</span></td>
                     </tr>
                     <?php endif; ?>
                 </table>
@@ -509,15 +651,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($cotizacion['estado'] !== 'convertida'): ?>
                 <?php
                     $dir_oblig = trim((string)($cotizacion['cliente_direccion'] ?? $cotizacion['direccion'] ?? $cotizacion['cliente_empresa'] ?? $cotizacion['empresa'] ?? ''));
-                    $dni_oblig = trim((string)($cotizacion['cliente_dni'] ?? $cotizacion['dni'] ?? ''));
+                    $es_empresa_oblig = (int)($cotizacion['cliente_es_empresa'] ?? $cotizacion['es_empresa'] ?? 0);
+                    $factura_a_oblig = (int)($cotizacion['cliente_factura_a'] ?? $cotizacion['factura_a'] ?? 0);
+                    $cuit_oblig = preg_replace('/\D+/', '', trim((string)($cotizacion['cliente_cuit'] ?? $cotizacion['cuit'] ?? '')));
                 ?>
-                <?php if ($dir_oblig === '' || $dni_oblig === ''): ?>
+                <?php if ($dir_oblig === '' || ($es_empresa_oblig && $factura_a_oblig && strlen($cuit_oblig) !== 11)): ?>
                     <div class="alert alert-warning mb-0 py-2 px-3 d-flex align-items-center">
-                        ⚠️ Para convertir a pedido se requiere completar domicilio y DNI en la cotización.
+                        ⚠️ Para convertir a pedido se requiere domicilio y, si corresponde Factura A de empresa, CUIT válido.
                     </div>
                 <?php endif; ?>
-                <form method="POST" style="display:inline;">
+                <form method="POST" enctype="multipart/form-data" style="display:inline;">
                     <input type="hidden" name="accion" value="convertir_pedido">
+                    <div class="d-inline-block me-2 align-middle">
+                        <input type="file" name="factura_adjunto" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" title="Adjuntar factura (opcional)">
+                    </div>
                     <button type="submit" class="btn btn-success" onclick="return confirm('¿Convertir esta cotización a pedido?')">🛒 Convertir a Pedido</button>
                 </form>
             <?php endif; ?>

@@ -241,6 +241,14 @@ try {
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN public_token VARCHAR(64) NULL AFTER mercadopago_status");
     }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'factura_archivo'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_archivo VARCHAR(255) NULL AFTER public_token");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos LIKE 'factura_nombre_original'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_nombre_original VARCHAR(255) NULL AFTER factura_archivo");
+    }
     $idx = $pdo->query("SHOW INDEX FROM ecommerce_pedidos WHERE Key_name = 'idx_public_token'");
     if ($idx->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD UNIQUE INDEX idx_public_token (public_token)");

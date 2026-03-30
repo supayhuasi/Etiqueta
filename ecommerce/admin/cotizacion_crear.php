@@ -5,6 +5,16 @@ require_once __DIR__ . '/../includes/descuentos.php';
 $mensaje = '';
 $error = '';
 
+function tabla_tiene_columna(PDO $pdo, string $tabla, string $columna): bool {
+    try {
+        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
+        $stmt->execute([$columna]);
+        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 // Tabla de cupones
 $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_cupones (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -24,6 +34,29 @@ if (!in_array('cupon_codigo', $cols_cot, true)) {
 }
 if (!in_array('cupon_descuento', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
+}
+if (!in_array('cuit', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cuit VARCHAR(20) NULL AFTER telefono");
+}
+if (!in_array('factura_a', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+}
+if (!in_array('es_empresa', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+}
+
+$cols_cli_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('direccion', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN direccion VARCHAR(255) NULL AFTER telefono");
+}
+if (!in_array('cuit', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN cuit VARCHAR(20) NULL AFTER direccion");
+}
+if (!in_array('factura_a', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+}
+if (!in_array('es_empresa', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
 }
 
 // Procesar formulario
@@ -46,7 +79,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
         $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
-        $guardar_cliente = isset($_POST['guardar_cliente']) ? 1 : 0;
+        $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
+        $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
+        $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
         
         // Validaciones
         if (empty($nombre_cliente)) {
@@ -55,6 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Email no válido");
+        }
+
+        if ($es_empresa && $factura_a && strlen($cuit) !== 11) {
+            throw new Exception("Si es empresa con Factura A, el CUIT debe tener 11 dígitos");
         }
         
         // Resolver cliente si corresponde
@@ -66,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($cliente_id <= 0 && $guardar_cliente) {
+        if ($cliente_id <= 0) {
             $email_normalizado = $email ? strtolower(trim($email)) : '';
             if ($email_normalizado) {
                 $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE email = ? LIMIT 1");
@@ -77,34 +116,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            if ($cliente_id <= 0) {
-                // Intentar insertar con direccion, si falla usar empresa
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, activo)
-                        VALUES (?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([
-                        $nombre_cliente,
-                        $email ? $email : null,
-                        $telefono ? $telefono : null,
-                        $direccion ? $direccion : null
-                    ]);
-                } catch (Exception $e) {
-                    // Fallback a empresa si direccion no existe
-                    $stmt = $pdo->prepare("
-                        INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, empresa, activo)
-                        VALUES (?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([
-                        $nombre_cliente,
-                        $email ? $email : null,
-                        $telefono ? $telefono : null,
-                        $direccion ? $direccion : null
-                    ]);
+            if ($cliente_id <= 0 && $telefono !== '') {
+                $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE telefono = ? LIMIT 1");
+                $stmt->execute([$telefono]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($row) {
+                    $cliente_id = (int)$row['id'];
                 }
+            }
+
+            if ($cliente_id <= 0) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, cuit, factura_a, es_empresa, activo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([
+                    $nombre_cliente,
+                    $email ? strtolower(trim($email)) : null,
+                    $telefono ? $telefono : null,
+                    $direccion ? $direccion : null,
+                    $cuit !== '' ? $cuit : null,
+                    $factura_a,
+                    $es_empresa,
+                ]);
                 $cliente_id = (int)$pdo->lastInsertId();
             }
+        }
+
+        if ($cliente_id > 0) {
+            $stmt = $pdo->prepare("UPDATE ecommerce_cotizacion_clientes SET nombre = ?, email = ?, telefono = ?, direccion = ?, cuit = ?, factura_a = ?, es_empresa = ?, activo = 1 WHERE id = ?");
+            $stmt->execute([
+                $nombre_cliente,
+                $email ? strtolower(trim($email)) : null,
+                $telefono ? $telefono : null,
+                $direccion ? $direccion : null,
+                $cuit !== '' ? $cuit : null,
+                $factura_a,
+                $es_empresa,
+                $cliente_id,
+            ]);
         }
 
         // Procesar items
@@ -196,39 +246,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $max_id = $stmt->fetch()['max_id'] ?? 0;
         $numero_cotizacion = 'COT-' . $año . '-' . str_pad($max_id + 1, 5, '0', STR_PAD_LEFT);
         
-        // Guardar cotización (compatible con empresa/direccion)
-        try {
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_cotizaciones 
-                (numero_cotizacion, nombre_cliente, email, telefono, direccion, cliente_id, lista_precio_id, items, subtotal, descuento, cupon_codigo, cupon_descuento, total, observaciones, validez_dias, creado_por)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-        } catch (Exception $e) {
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_cotizaciones 
-                (numero_cotizacion, nombre_cliente, email, telefono, empresa, cliente_id, lista_precio_id, items, subtotal, descuento, cupon_codigo, cupon_descuento, total, observaciones, validez_dias, creado_por)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
+        // Guardar cotización en forma dinámica según columnas disponibles
+        $cols_cot_insert = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
+        $insert_cols = ['numero_cotizacion', 'nombre_cliente', 'email', 'telefono'];
+        $insert_vals = [$numero_cotizacion, $nombre_cliente, $email, $telefono];
+
+        if (in_array('direccion', $cols_cot_insert, true)) {
+            $insert_cols[] = 'direccion';
+            $insert_vals[] = $direccion;
+        } elseif (in_array('empresa', $cols_cot_insert, true)) {
+            $insert_cols[] = 'empresa';
+            $insert_vals[] = $direccion;
         }
-        
-        $stmt->execute([
-            $numero_cotizacion,
-            $nombre_cliente,
-            $email,
-            $telefono,
-            $direccion,
-            $cliente_id ?: null,
-            $lista_precio_id,
-            json_encode($items),
-            $subtotal,
-            $descuento,
-            $cupon_codigo ?: null,
-            $cupon_descuento,
-            $total,
-            $observaciones,
-            $validez_dias,
-            $_SESSION['user']['id']
-        ]);
+
+        if (in_array('cliente_id', $cols_cot_insert, true)) {
+            $insert_cols[] = 'cliente_id';
+            $insert_vals[] = $cliente_id ?: null;
+        }
+        if (in_array('es_empresa', $cols_cot_insert, true)) {
+            $insert_cols[] = 'es_empresa';
+            $insert_vals[] = $es_empresa;
+        }
+        if (in_array('cuit', $cols_cot_insert, true)) {
+            $insert_cols[] = 'cuit';
+            $insert_vals[] = $cuit !== '' ? $cuit : null;
+        }
+        if (in_array('factura_a', $cols_cot_insert, true)) {
+            $insert_cols[] = 'factura_a';
+            $insert_vals[] = $factura_a;
+        }
+
+        $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
+        $insert_vals = array_merge($insert_vals, [$lista_precio_id, json_encode($items), $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id']]);
+
+        $placeholders = implode(', ', array_fill(0, count($insert_cols), '?'));
+        $sql_insert = "INSERT INTO ecommerce_cotizaciones (" . implode(', ', $insert_cols) . ") VALUES (" . $placeholders . ")";
+        $stmt = $pdo->prepare($sql_insert);
+        $stmt->execute($insert_vals);
         
         $cotizacion_id = $pdo->lastInsertId();
         
@@ -261,7 +315,7 @@ $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_listas_precios WHERE activ
 $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Clientes para cotizaciones
-$stmt = $pdo->query("SELECT id, nombre, email, telefono, direccion FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
+$stmt = $pdo->query("SELECT id, nombre, email, telefono, direccion, cuit, factura_a, es_empresa FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
 $clientes_cot = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
@@ -345,6 +399,20 @@ foreach ($lista_cat_rows as $row) {
                         <label for="direccion" class="form-label">Dirección</label>
                         <input type="text" class="form-control" id="direccion" name="direccion">
                     </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="1" id="es_empresa" name="es_empresa" onchange="toggleEmpresaFields()">
+                        <label class="form-check-label" for="es_empresa">Es empresa</label>
+                    </div>
+                    <div id="empresaFields" style="display:none;">
+                        <div class="mb-3">
+                            <label for="cuit" class="form-label">CUIT</label>
+                            <input type="text" class="form-control" id="cuit" name="cuit" maxlength="13" placeholder="Ej: 30-12345678-9">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="1" id="factura_a" name="factura_a" onchange="toggleEmpresaFields()">
+                            <label class="form-check-label" for="factura_a">Necesita Factura A</label>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -372,20 +440,24 @@ foreach ($lista_cat_rows as $row) {
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
                     </div>
                     <div class="mb-3">
+                        <label for="descuento_porcentaje_default" class="form-label">Descuento % por defecto (nuevos ítems)</label>
+                        <input type="number" class="form-control" id="descuento_porcentaje_default" name="descuento_porcentaje_default" value="0" min="0" max="100" step="0.01">
+                        <small class="text-muted">Se aplica al precio sugerido al agregar un item nuevo.</small>
+                    </div>
+                    <div class="mb-3">
                         <label for="cliente_id" class="form-label">Cliente</label>
                         <select class="form-select" id="cliente_id" name="cliente_id" onchange="autocompletarCliente()">
                             <option value="">-- Seleccionar cliente --</option>
                             <?php foreach ($clientes_cot as $cli): ?>
                                 <option value="<?= $cli['id'] ?>">
-                                    <?= htmlspecialchars($cli['nombre']) ?><?= !empty($cli['empresa']) ? ' - ' . htmlspecialchars($cli['empresa']) : '' ?>
+                                    <?= htmlspecialchars($cli['nombre']) ?><?= !empty($cli['direccion']) ? ' - ' . htmlspecialchars($cli['direccion']) : '' ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                         <small class="text-muted">Si seleccionás un cliente, se completan los datos.</small>
                     </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" value="1" id="guardar_cliente" name="guardar_cliente">
-                        <label class="form-check-label" for="guardar_cliente">Guardar cliente en agenda</label>
+                    <div class="alert alert-light border mb-3 py-2 small">
+                        El cliente se guarda automáticamente si no existe en la agenda.
                     </div>
                     <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
@@ -583,6 +655,27 @@ function calcularPrecioConLista(productoId, precioBase) {
     return precioBase;
 }
 
+function obtenerDescuentoPorcentajeDefault() {
+    const input = document.getElementById('descuento_porcentaje_default');
+    const valor = parseFloat(input?.value || 0);
+    if (!isFinite(valor) || valor <= 0) {
+        return 0;
+    }
+    return Math.min(100, Math.max(0, valor));
+}
+
+function aplicarDescuentoDefault(precioBase) {
+    const base = parseFloat(precioBase || 0);
+    if (!isFinite(base) || base <= 0) {
+        return 0;
+    }
+    const pct = obtenerDescuentoPorcentajeDefault();
+    if (pct <= 0) {
+        return base;
+    }
+    return Math.max(0, parseFloat((base * (1 - (pct / 100))).toFixed(2)));
+}
+
 function actualizarCostoAtributo(index, attrId, costoBase, costoOpcion, valorSeleccionado) {
     const inputCosto = document.getElementById(`attr_costo_${attrId}_${index}`);
     if (!inputCosto) return;
@@ -771,10 +864,15 @@ function aplicarProductoModal(producto) {
 
     if (producto.tipo_precio === 'fijo') {
         const precioBase = parseFloat(producto.precio_base || 0);
-        precioInput.dataset.base = precioBase.toFixed(2);
-        precioInput.value = precioBase.toFixed(2);
+        const esNuevo = (modalEditIndex === null || modalEditIndex === undefined);
+        const precioFinal = esNuevo ? aplicarDescuentoDefault(precioBase) : precioBase;
+        precioInput.dataset.base = precioFinal.toFixed(2);
+        precioInput.value = precioFinal.toFixed(2);
         if (info) {
-            info.innerHTML = '✓ Precio fijo del producto';
+            const pct = obtenerDescuentoPorcentajeDefault();
+            info.innerHTML = (esNuevo && pct > 0)
+                ? ('✓ Precio fijo del producto con descuento por defecto (' + pct.toFixed(2) + '%)')
+                : '✓ Precio fijo del producto';
             info.style.display = 'block';
         }
     } else {
@@ -940,12 +1038,17 @@ function actualizarPrecioItemModal() {
                         return;
                     }
                     const precioBase = parseFloat(data.precio || 0);
+                    const esNuevo = (modalEditIndex === null || modalEditIndex === undefined);
+                    const precioFinal = esNuevo ? aplicarDescuentoDefault(precioBase) : precioBase;
                     const precioInput = document.getElementById('precio_modal');
-                    precioInput.dataset.base = precioBase.toFixed(2);
-                    precioInput.value = precioBase.toFixed(2);
+                    precioInput.dataset.base = precioFinal.toFixed(2);
+                    precioInput.value = precioFinal.toFixed(2);
                     const info = document.getElementById('precio-info-modal');
                     if (info) {
-                        info.innerHTML = '✓ ' + data.precio_info;
+                        const pct = obtenerDescuentoPorcentajeDefault();
+                        info.innerHTML = (esNuevo && pct > 0)
+                            ? ('✓ ' + data.precio_info + ' (con descuento por defecto ' + pct.toFixed(2) + '%)')
+                            : ('✓ ' + data.precio_info);
                         info.style.display = 'block';
                     }
                 })
@@ -1369,16 +1472,41 @@ function autocompletarCliente() {
     const nombreInput = document.getElementById('nombre_cliente');
     const emailInput = document.getElementById('email');
     const telefonoInput = document.getElementById('telefono');
-    const empresaInput = document.getElementById('empresa');
+    const direccionInput = document.getElementById('direccion');
+    const esEmpresaInput = document.getElementById('es_empresa');
+    const cuitInput = document.getElementById('cuit');
+    const facturaAInput = document.getElementById('factura_a');
 
     if (nombreInput && cliente.nombre) nombreInput.value = cliente.nombre;
     if (emailInput && cliente.email) emailInput.value = cliente.email;
     if (telefonoInput && cliente.telefono) telefonoInput.value = cliente.telefono;
-    if (empresaInput && cliente.empresa) empresaInput.value = cliente.empresa;
+    if (direccionInput && cliente.direccion) direccionInput.value = cliente.direccion;
+    if (esEmpresaInput) esEmpresaInput.checked = String(cliente.es_empresa || '0') === '1';
+    if (cuitInput) cuitInput.value = cliente.cuit || '';
+    if (facturaAInput) facturaAInput.checked = String(cliente.factura_a || '0') === '1';
+    toggleEmpresaFields();
+}
+
+function toggleEmpresaFields() {
+    const esEmpresa = document.getElementById('es_empresa');
+    const facturaA = document.getElementById('factura_a');
+    const cuit = document.getElementById('cuit');
+    const wrapper = document.getElementById('empresaFields');
+    const activo = !!(esEmpresa && esEmpresa.checked);
+    if (wrapper) {
+        wrapper.style.display = activo ? '' : 'none';
+    }
+    if (!activo && facturaA) {
+        facturaA.checked = false;
+    }
+    if (cuit) {
+        cuit.required = !!(activo && facturaA && facturaA.checked);
+    }
 }
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    toggleEmpresaFields();
     aplicarListaPrecios();
     const btnGuardar = document.getElementById('guardarItemBtn');
     if (btnGuardar) {

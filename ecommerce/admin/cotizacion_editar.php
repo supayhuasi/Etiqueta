@@ -36,11 +36,37 @@ if (!in_array('cupon_codigo', $cols_cot, true)) {
 if (!in_array('cupon_descuento', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cupon_descuento DECIMAL(10,2) NULL");
 }
+if (!in_array('cuit', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN cuit VARCHAR(20) NULL AFTER telefono");
+}
+if (!in_array('factura_a', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+}
+if (!in_array('es_empresa', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+}
+
+$cols_cli_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('direccion', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN direccion VARCHAR(255) NULL AFTER telefono");
+}
+if (!in_array('cuit', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN cuit VARCHAR(20) NULL AFTER direccion");
+}
+if (!in_array('factura_a', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
+}
+if (!in_array('es_empresa', $cols_cli_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+}
 
 $cols_cot_actuales = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
 
 $direccion_col = in_array('direccion', $cols_cot_actuales, true) ? 'direccion' : (in_array('empresa', $cols_cot_actuales, true) ? 'empresa' : null);
 $dni_col = in_array('dni', $cols_cot_actuales, true) ? 'dni' : null;
+$cuit_col = in_array('cuit', $cols_cot_actuales, true) ? 'cuit' : null;
+$factura_a_col = in_array('factura_a', $cols_cot_actuales, true) ? 'factura_a' : null;
+$es_empresa_col = in_array('es_empresa', $cols_cot_actuales, true) ? 'es_empresa' : null;
 $tiene_lista_precio = in_array('lista_precio_id', $cols_cot_actuales, true);
 
 $direccion_actual = '';
@@ -48,6 +74,9 @@ if ($direccion_col !== null) {
     $direccion_actual = (string)($cotizacion[$direccion_col] ?? '');
 }
 $dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
+$cuit_actual = $cuit_col !== null ? preg_replace('/\D+/', '', (string)($cotizacion[$cuit_col] ?? '')) : '';
+$factura_a_actual = $factura_a_col !== null ? (int)($cotizacion[$factura_a_col] ?? 0) : 0;
+$es_empresa_actual = $es_empresa_col !== null ? (int)($cotizacion[$es_empresa_col] ?? 0) : 0;
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -59,6 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $telefono = $_POST['telefono'] ?? '';
         $direccion = $_POST['direccion'] ?? '';
         $dni = trim((string)($_POST['dni'] ?? ''));
+        $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
+        $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
+        $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
         $observaciones = $_POST['observaciones'] ?? '';
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
@@ -69,6 +101,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Email no válido");
+        }
+        if ($es_empresa && $factura_a && strlen($cuit) !== 11) {
+            throw new Exception("Si es empresa con Factura A, el CUIT debe tener 11 dígitos");
         }
 
         $items_nuevos = [];
@@ -189,6 +224,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $set_parts[] = $dni_col . ' = ?';
                 $params[] = ($dni !== '' ? $dni : null);
             }
+            if ($cuit_col !== null) {
+                $set_parts[] = $cuit_col . ' = ?';
+                $params[] = ($cuit !== '' ? $cuit : null);
+            }
+            if ($factura_a_col !== null) {
+                $set_parts[] = $factura_a_col . ' = ?';
+                $params[] = $factura_a;
+            }
+            if ($es_empresa_col !== null) {
+                $set_parts[] = $es_empresa_col . ' = ?';
+                $params[] = $es_empresa;
+            }
 
             if (empty($set_parts)) {
                 throw new Exception('No se pudo guardar: no hay columnas editables disponibles en ecommerce_cotizaciones.');
@@ -199,6 +246,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare($sql_update);
             $stmt->execute($params);
+
+            $cliente_id_rel = (int)($cotizacion['cliente_id'] ?? 0);
+            if ($cliente_id_rel <= 0) {
+                $email_norm = strtolower(trim((string)$email));
+                if ($email_norm !== '') {
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE email = ? LIMIT 1");
+                    $stmt->execute([$email_norm]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($row) {
+                        $cliente_id_rel = (int)$row['id'];
+                    }
+                }
+                if ($cliente_id_rel <= 0 && trim((string)$telefono) !== '') {
+                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE telefono = ? LIMIT 1");
+                    $stmt->execute([trim((string)$telefono)]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($row) {
+                        $cliente_id_rel = (int)$row['id'];
+                    }
+                }
+                if ($cliente_id_rel <= 0) {
+                    $stmt = $pdo->prepare("INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, cuit, factura_a, es_empresa, activo) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
+                    $stmt->execute([
+                        $nombre_cliente,
+                        $email !== '' ? strtolower(trim((string)$email)) : null,
+                        $telefono !== '' ? trim((string)$telefono) : null,
+                        $direccion !== '' ? $direccion : null,
+                        $cuit !== '' ? $cuit : null,
+                        $factura_a,
+                        $es_empresa,
+                    ]);
+                    $cliente_id_rel = (int)$pdo->lastInsertId();
+                }
+            }
+
+            if ($cliente_id_rel > 0) {
+                $stmt = $pdo->prepare("UPDATE ecommerce_cotizacion_clientes SET nombre = ?, email = ?, telefono = ?, direccion = ?, cuit = ?, factura_a = ?, es_empresa = ?, activo = 1 WHERE id = ?");
+                $stmt->execute([
+                    $nombre_cliente,
+                    $email !== '' ? strtolower(trim((string)$email)) : null,
+                    $telefono !== '' ? trim((string)$telefono) : null,
+                    $direccion !== '' ? $direccion : null,
+                    $cuit !== '' ? $cuit : null,
+                    $factura_a,
+                    $es_empresa,
+                    $cliente_id_rel,
+                ]);
+
+                if (in_array('cliente_id', $cols_cot_actuales, true) && (int)($cotizacion['cliente_id'] ?? 0) <= 0) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET cliente_id = ? WHERE id = ?");
+                    $stmt->execute([$cliente_id_rel, $id]);
+                }
+            }
 
         header("Location: cotizacion_detalle.php?id=" . $id);
         exit;
@@ -308,6 +408,20 @@ foreach ($lista_cat_rows as $row) {
                     <div class="mb-3">
                         <label for="direccion" class="form-label">Dirección</label>
                         <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars($direccion_actual) ?>">
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="1" id="es_empresa" name="es_empresa" <?= $es_empresa_actual === 1 ? 'checked' : '' ?> onchange="toggleEmpresaFields()">
+                        <label class="form-check-label" for="es_empresa">Es empresa</label>
+                    </div>
+                    <div id="empresaFields" style="display:none;">
+                        <div class="mb-3">
+                            <label for="cuit" class="form-label">CUIT</label>
+                            <input type="text" class="form-control" id="cuit" name="cuit" value="<?= htmlspecialchars($cuit_actual) ?>" maxlength="13" placeholder="Ej: 30-12345678-9">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="1" id="factura_a" name="factura_a" <?= $factura_a_actual === 1 ? 'checked' : '' ?> onchange="toggleEmpresaFields()">
+                            <label class="form-check-label" for="factura_a">Necesita Factura A</label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1458,7 +1572,25 @@ function collectItemsForSubmit() {
     return items;
 }
 
+function toggleEmpresaFields() {
+    const esEmpresa = document.getElementById('es_empresa');
+    const facturaA = document.getElementById('factura_a');
+    const cuit = document.getElementById('cuit');
+    const wrapper = document.getElementById('empresaFields');
+    const activo = !!(esEmpresa && esEmpresa.checked);
+    if (wrapper) {
+        wrapper.style.display = activo ? '' : 'none';
+    }
+    if (!activo && facturaA) {
+        facturaA.checked = false;
+    }
+    if (cuit) {
+        cuit.required = !!(activo && facturaA && facturaA.checked);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    toggleEmpresaFields();
     if (itemsExistentes.length > 0) {
         itemsExistentes.forEach(item => {
             agregarItem(item);
