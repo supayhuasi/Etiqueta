@@ -104,6 +104,67 @@ function calcularSueldoTotal(PDO $pdo, int $empleado_id, string $mes): float
     return max(0, $sueldo_base + $bonificaciones - $descuentos);
 }
 
+function calcularMinutosExtrasMesPorEmpleado(PDO $pdo, string $mes): array
+{
+    $resultado = [];
+
+    try {
+        $stmt = $pdo->prepare(" 
+            SELECT
+                a.empleado_id,
+                a.fecha,
+                a.hora_salida,
+                COALESCE(hd.hora_salida, h.hora_salida) AS horario_salida
+            FROM asistencias a
+            LEFT JOIN empleados_horarios h
+                ON a.empleado_id = h.empleado_id
+               AND h.activo = 1
+            LEFT JOIN empleados_horarios_dias hd
+                ON a.empleado_id = hd.empleado_id
+               AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1
+               AND hd.activo = 1
+            WHERE DATE_FORMAT(a.fecha, '%Y-%m') = ?
+              AND a.hora_salida IS NOT NULL
+              AND a.hora_salida <> ''
+        ");
+        $stmt->execute([$mes]);
+        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($filas as $fila) {
+            $empleadoId = (int)($fila['empleado_id'] ?? 0);
+            if ($empleadoId <= 0) {
+                continue;
+            }
+
+            $fecha = (string)($fila['fecha'] ?? '');
+            $horaSalidaReal = trim((string)($fila['hora_salida'] ?? ''));
+            $horaSalidaHorario = trim((string)($fila['horario_salida'] ?? ''));
+
+            if ($fecha === '' || $horaSalidaReal === '' || $horaSalidaHorario === '') {
+                continue;
+            }
+
+            $tsReal = strtotime($fecha . ' ' . $horaSalidaReal);
+            $tsHorario = strtotime($fecha . ' ' . $horaSalidaHorario);
+            if ($tsReal === false || $tsHorario === false) {
+                continue;
+            }
+
+            $minutosExtra = (int)floor(($tsReal - $tsHorario) / 60);
+            if ($minutosExtra > 0) {
+                if (!isset($resultado[$empleadoId])) {
+                    $resultado[$empleadoId] = 0;
+                }
+                $resultado[$empleadoId] += $minutosExtra;
+            }
+        }
+    } catch (Exception $e) {
+        return [];
+    }
+
+    return $resultado;
+}
+
 // Obtener mes seleccionado o usar mes actual
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $mes_actual = date('Y-m');
@@ -137,6 +198,12 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$mes_filtro, $mes_filtro]);
 $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$minutos_extras_por_empleado = calcularMinutosExtrasMesPorEmpleado($pdo, $mes_filtro);
+$total_minutos_extras_mes = 0;
+foreach ($minutos_extras_por_empleado as $mins) {
+    $total_minutos_extras_mes += (int)$mins;
+}
 
 // Calcular totales del mes
 $total_sueldo = 0;
@@ -265,6 +332,12 @@ foreach ($empleados as $emp) {
                                 </div>
                             </div>
                         </div>
+                        <div class="col-md-3 mt-3 mt-md-0">
+                            <div class="text-center">
+                                <h6>Min. Extras (mes)</h6>
+                                <h3 class="text-warning"><?= (int)$total_minutos_extras_mes ?></h3>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -286,6 +359,7 @@ foreach ($empleados as $emp) {
                             <th>Sueldo Base</th>
                             <th>Plantilla Actual</th>
                             <th>Sueldo Total</th>
+                            <th>Min. Extras</th>
                             <th>Estado de Pago</th>
                             <th>Pendiente</th>
                             <th>Acciones</th>
@@ -303,6 +377,7 @@ foreach ($empleados as $emp) {
                                 if ($sueldo_total_emp > 0) {
                                     $porcentaje_pagado = round(($monto_total_pagado / $sueldo_total_emp) * 100, 0);
                                 }
+                                $minutos_extras_emp = (int)($minutos_extras_por_empleado[$emp['id']] ?? 0);
                             ?>
                         <tr>
                             <td>
@@ -318,6 +393,13 @@ foreach ($empleados as $emp) {
                                 <?php endif; ?>
                             </td>
                             <td><strong>$<?= number_format($sueldo_total_emp, 2, ',', '.') ?></strong></td>
+                            <td>
+                                <?php if ($minutos_extras_emp > 0): ?>
+                                    <span class="badge bg-warning text-dark"><?= $minutos_extras_emp ?> min</span>
+                                <?php else: ?>
+                                    <span class="badge bg-light text-dark">0 min</span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php if ($emp['pago_id'] > 0 || $emp['pagos_parciales'] > 0): ?>
                                     <div style="width: 180px;">

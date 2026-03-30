@@ -606,6 +606,19 @@ function productoLabel(p) {
     return `${p.nombre} ${precioLabel}`;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
+}
+
 function obtenerListaSeleccionada() {
     const select = document.getElementById('lista_precio_id');
     return select ? parseInt(select.value || '0', 10) : 0;
@@ -735,6 +748,7 @@ function normalizarItemData(item) {
         alto: item.alto || '',
         cantidad: item.cantidad || 1,
         precio: precioBaseCalculado.toFixed(2),
+        precio_base: precioBaseCalculado.toFixed(2),
         descuento_pct: maxDescuentoInicial(item, precioBaseCalculado),
         atributos: Array.isArray(item.atributos) ? item.atributos.map((a, i) => ({
             id: a.id != null && a.id !== '' ? a.id : i,
@@ -779,7 +793,7 @@ function abrirModalItem(editIndex = null) {
             document.getElementById('cantidad_modal').value = itemData.cantidad || 1;
             const precioInput = document.getElementById('precio_modal');
             precioInput.value = itemData.precio || '';
-            precioInput.dataset.base = itemData.precio || '';
+            precioInput.dataset.base = itemData.precio_base || itemData.precio || '';
             const descuentoInput = document.getElementById('descuento_pct_modal');
             if (descuentoInput) descuentoInput.value = parseFloat(itemData.descuento_pct || 0).toFixed(2);
             if (itemData.producto_id) {
@@ -1002,7 +1016,7 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
 
                         const radios = Array.from(wrapper.querySelectorAll('input[type="radio"]'));
                         if (radios.length > 0) {
-                            const radio = radios.find(r => String(r.value).trim() === valorExistente);
+                            const radio = radios.find(r => normalizarTxt(r.value) === normalizarTxt(valorExistente));
                             if (radio) {
                                 radio.checked = true;
                                 marcarOpcionAtributo(radio);
@@ -1012,6 +1026,12 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                         const input = wrapper.querySelector(`[data-attr-valor="${attrId}"]`);
                         if (input) {
                             input.value = valorExistente;
+                            if (input.type === 'color') {
+                                const preview = document.getElementById(`modal_color_preview_${attrId}`);
+                                if (preview) {
+                                    preview.style.backgroundColor = valorExistente || '#000000';
+                                }
+                            }
                         }
 
                         const baseInput = document.getElementById(`modal_attr_costo_${attrId}`);
@@ -1120,10 +1140,12 @@ function obtenerItemDesdeDOM(index) {
     const getVal = (id) => document.getElementById(id)?.value || '';
     const productoId = getVal(`producto_id_${index}`);
     const producto = productos.find(p => String(p.id) === String(productoId));
+    const precioInput = document.getElementById(`precio_${index}`);
+    const precioBase = precioInput?.dataset?.base || precioInput?.value || '';
     const atributos = [];
 
     row.querySelectorAll(`input[name^="items[${index}][atributos]"][name$="[nombre]"]`).forEach(input => {
-        const match = input.name.match(/atributos\]\[(\d+)\]\[nombre\]/);
+        const match = input.name.match(/atributos\]\[([^\]]+)\]\[nombre\]/);
         if (!match) return;
         const attrId = match[1];
         const valorInput = row.querySelector(`input[name="items[${index}][atributos][${attrId}][valor]"]`);
@@ -1142,6 +1164,7 @@ function obtenerItemDesdeDOM(index) {
         alto: getVal(`alto_${index}`),
         cantidad: getVal(`cantidad_${index}`),
         precio: getVal(`precio_${index}`),
+        precio_base: precioBase,
         descuento_pct: getVal(`descuento_pct_${index}`),
         atributos
     };
@@ -1188,23 +1211,27 @@ function obtenerAtributosDesdeModal() {
 function renderItemResumen(index, itemData) {
     const atributos = itemData.atributos || [];
     const atributosResumen = atributos.length
-        ? atributos.map(a => `<span class="badge bg-light text-dark me-1">${a.nombre}: ${a.valor}${a.costo > 0 ? ` (+$${parseFloat(a.costo).toFixed(2)})` : ''}</span>`).join('')
+        ? atributos.map(a => `<span class="badge bg-light text-dark me-1">${escapeHtml(a.nombre)}: ${escapeHtml(a.valor)}${a.costo > 0 ? ` (+$${parseFloat(a.costo).toFixed(2)})` : ''}</span>`).join('')
         : '<span class="text-muted">Sin atributos</span>';
 
     const dimensiones = (itemData.ancho && itemData.alto)
-        ? `${itemData.ancho} x ${itemData.alto} cm`
+        ? `${escapeHtml(itemData.ancho)} x ${escapeHtml(itemData.alto)} cm`
         : '—';
     const descuentoPct = Math.max(0, Math.min(100, parseFloat(itemData.descuento_pct || 0) || 0));
+    const precioBase = parseFloat(itemData.precio_base ?? itemData.precio ?? 0) || 0;
+    const precioVisible = parseFloat(itemData.precio || 0) || 0;
+    const nombre = escapeHtml(itemData.nombre || 'Producto sin nombre');
+    const descripcion = escapeHtml(itemData.descripcion || '');
 
     const html = `
         <div class="card mb-3 item-row" id="item_${index}">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
                     <div class="flex-grow-1">
-                        <div class="item-resumen-title">${itemData.nombre || 'Producto sin nombre'}</div>
-                        ${itemData.descripcion ? `<div class="item-resumen-meta">${itemData.descripcion}</div>` : ''}
+                        <div class="item-resumen-title">${nombre}</div>
+                        ${descripcion ? `<div class="item-resumen-meta">${descripcion}</div>` : ''}
                         <div class="item-resumen-meta">Cantidad: <strong>${itemData.cantidad}</strong> · Medidas: <strong>${dimensiones}</strong></div>
-                        <div class="item-resumen-meta">Precio base: <strong>$${parseFloat(itemData.precio || 0).toFixed(2)}</strong></div>
+                        <div class="item-resumen-meta">Precio base: <strong>$${precioVisible.toFixed(2)}</strong></div>
                         <div class="item-resumen-meta">Descuento item: <strong id="descuento_pct_text_${index}">${descuentoPct.toFixed(2)}%</strong></div>
                         <div class="item-resumen-attrs mt-2">${atributosResumen}</div>
                     </div>
@@ -1223,19 +1250,19 @@ function renderItemResumen(index, itemData) {
                     </div>
                 </div>
 
-                <input type="hidden" class="item-nombre" id="nombre_${index}" name="items[${index}][nombre]" value="${itemData.nombre || ''}">
-                <input type="hidden" id="descripcion_${index}" name="items[${index}][descripcion]" value="${itemData.descripcion || ''}">
-                <input type="hidden" class="item-ancho" id="ancho_${index}" name="items[${index}][ancho]" value="${itemData.ancho || ''}">
-                <input type="hidden" class="item-alto" id="alto_${index}" name="items[${index}][alto]" value="${itemData.alto || ''}">
+                <input type="hidden" class="item-nombre" id="nombre_${index}" name="items[${index}][nombre]" value="${escapeAttr(itemData.nombre || '')}">
+                <input type="hidden" id="descripcion_${index}" name="items[${index}][descripcion]" value="${escapeAttr(itemData.descripcion || '')}">
+                <input type="hidden" class="item-ancho" id="ancho_${index}" name="items[${index}][ancho]" value="${escapeAttr(itemData.ancho || '')}">
+                <input type="hidden" class="item-alto" id="alto_${index}" name="items[${index}][alto]" value="${escapeAttr(itemData.alto || '')}">
                 <input type="hidden" class="item-cantidad" id="cantidad_${index}" name="items[${index}][cantidad]" value="${itemData.cantidad || 1}">
-                <input type="hidden" class="item-precio" id="precio_${index}" name="items[${index}][precio]" value="${itemData.precio || 0}" data-base="${itemData.precio || 0}">
+                <input type="hidden" class="item-precio" id="precio_${index}" name="items[${index}][precio]" value="${precioVisible.toFixed(2)}" data-base="${precioBase.toFixed(2)}">
                 <input type="hidden" class="item-descuento-pct" id="descuento_pct_${index}" name="items[${index}][descuento_pct]" value="${descuentoPct.toFixed(2)}">
                 <input type="hidden" id="producto_id_${index}" name="items[${index}][producto_id]" value="${itemData.producto_id || ''}">
                 <input type="text" class="form-control item-subtotal" id="subtotal_${index}" readonly style="display:none;">
                 <div id="precio-info-${index}" style="display:none;"></div>
                 ${atributos.map(a => `
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][nombre]" value="${a.nombre}">
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][valor]" value="${a.valor}">
+                    <input type="hidden" name="items[${index}][atributos][${a.id}][nombre]" value="${escapeAttr(a.nombre)}">
+                    <input type="hidden" name="items[${index}][atributos][${a.id}][valor]" value="${escapeAttr(a.valor)}">
                     <input type="hidden" name="items[${index}][atributos][${a.id}][costo]" value="${parseFloat(a.costo || 0).toFixed(2)}">
                 `).join('')}
             </div>
@@ -1290,6 +1317,7 @@ async function guardarItemDesdeModal() {
         alto: document.getElementById('alto_modal').value,
         cantidad: cantidadValue,
         precio: precioValue.toFixed(2),
+        precio_base: (document.getElementById('precio_modal')?.dataset?.base || precioValue.toFixed(2)),
         descuento_pct: Math.max(0, Math.min(100, parseFloat(document.getElementById('descuento_pct_modal')?.value || 0) || 0)),
         atributos
     };
@@ -1643,7 +1671,7 @@ function collectItemsForSubmit() {
             var attrInputs = row.querySelectorAll('input[name^="items[' + idx + '][atributos]"]');
             var grouped = {};
             attrInputs.forEach(function(inp) {
-                var m = inp.name.match(/atributos\]\[(\d+)\]\[(\w+)\]/);
+                var m = inp.name.match(/atributos\]\[([^\]]+)\]\[(\w+)\]/);
                 if (m) {
                     var aid = m[1], key = m[2];
                     grouped[aid] = grouped[aid] || {};
