@@ -121,7 +121,7 @@ unset($a);
                 $nombre_empleado = 'Error al cargar';
             }
             ?>
-            <h4>Empleado: <?= htmlspecialchars($nombre_empleado) ?></h4>
+            <h4>Empleado: <?= htmlspecialchars((string)($nombre_empleado ?? '')) ?></h4>
         <?php endif; ?>
         <p>Generado: <?= date('d/m/Y H:i') ?></p>
     </div>
@@ -171,7 +171,7 @@ unset($a);
             <?php else: ?>
                 <?php foreach ($asistencias as $a): ?>
                     <tr>
-                        <td><?= htmlspecialchars($a['empleado']) ?></td>
+                        <td><?= htmlspecialchars((string)($a['empleado'] ?? '')) ?></td>
                         <td><?= date('d/m/Y', strtotime($a['fecha'])) ?></td>
                         <td>
                             <?php if ($a['horario_entrada']): ?>
@@ -202,7 +202,7 @@ unset($a);
                             ?>
                             <span class="badge bg-<?= $badge ?>"><?= ucfirst($a['estado']) ?></span>
                         </td>
-                        <td><small><?= htmlspecialchars($a['observaciones']) ?></small></td>
+                        <td><small><?= htmlspecialchars((string)($a['observaciones'] ?? '')) ?></small></td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
