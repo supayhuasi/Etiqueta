@@ -53,6 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     INSERT INTO sueldo_conceptos (empleado_id, concepto_id, monto, formula, es_porcentaje, mes, fecha_creacion)
                     VALUES (?, ?, ?, ?, ?, ?, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        monto = VALUES(monto),
+                        formula = VALUES(formula),
+                        es_porcentaje = VALUES(es_porcentaje),
+                        mes = VALUES(mes),
+                        fecha_creacion = NOW()
                 ");
                 $stmt->execute([
                     $id,
@@ -88,20 +94,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mes = $_POST['mes'] ?? $mes_actual;
         
         // Verificar si ya existe ese concepto para el empleado en ese mes
-        $stmt_check = $pdo->prepare("
-            SELECT id FROM sueldo_conceptos 
-            WHERE empleado_id = ? AND concepto_id = ? AND mes = ?
-        ");
-        $stmt_check->execute([$id, $concepto_id, $mes]);
-        
-        if ($stmt_check->fetch()) {
-            header("Location: sueldo_conceptos.php?id=$id&error=El concepto ya existe para este mes");
-            exit;
-        }
+        // Eliminated the check for existing concept since we are using upsert now
         
         $stmt = $pdo->prepare("
             INSERT INTO sueldo_conceptos (empleado_id, concepto_id, monto, formula, es_porcentaje, mes, fecha_creacion) 
             VALUES (?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+                monto = VALUES(monto),
+                formula = VALUES(formula),
+                es_porcentaje = VALUES(es_porcentaje),
+                mes = VALUES(mes),
+                fecha_creacion = NOW()
         ");
         $stmt->execute([
             $id,
@@ -112,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mes
         ]);
         
-        header("Location: sueldo_conceptos.php?id=$id&success=Concepto agregado");
+        header("Location: sueldo_conceptos.php?id=$id&success=Concepto guardado");
         exit;
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
