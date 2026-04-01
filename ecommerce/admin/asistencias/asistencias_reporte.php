@@ -58,12 +58,26 @@ $totales = [
     'presentes' => 0,
     'tardes' => 0,
     'ausentes' => 0,
-    'justificados' => 0
+    'justificados' => 0,
+    'minutos_extra' => 0
 ];
 
-foreach ($asistencias as $a) {
+foreach ($asistencias as &$a) {
     $totales[$a['estado'] . 's']++;
+
+    $minutos_extra = 0;
+    if (!empty($a['fecha']) && !empty($a['horario_salida']) && !empty($a['hora_salida'])) {
+        $dt_programada = strtotime($a['fecha'] . ' ' . $a['horario_salida']);
+        $dt_real = strtotime($a['fecha'] . ' ' . $a['hora_salida']);
+        if ($dt_programada && $dt_real && $dt_real > $dt_programada) {
+            $minutos_extra = (int) floor(($dt_real - $dt_programada) / 60);
+        }
+    }
+
+    $a['minutos_extra'] = $minutos_extra;
+    $totales['minutos_extra'] += $minutos_extra;
 }
+unset($a);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -130,6 +144,9 @@ foreach ($asistencias as $a) {
         <div class="stats-box bg-info text-white">
             <strong>Justificados:</strong> <?= $totales['justificados'] ?>
         </div>
+        <div class="stats-box bg-dark text-white">
+            <strong>Min. Extra:</strong> <?= (int)$totales['minutos_extra'] ?>
+        </div>
     </div>
 
     <!-- Tabla de Asistencias -->
@@ -141,6 +158,7 @@ foreach ($asistencias as $a) {
                 <th>Horario</th>
                 <th>Entrada</th>
                 <th>Salida</th>
+                <th>Min. Extra</th>
                 <th>Estado</th>
                 <th>Observaciones</th>
             </tr>
@@ -148,7 +166,7 @@ foreach ($asistencias as $a) {
         <tbody>
             <?php if (empty($asistencias)): ?>
                 <tr>
-                    <td colspan="7" class="text-center">No hay registros</td>
+                    <td colspan="8" class="text-center">No hay registros</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($asistencias as $a): ?>
@@ -157,6 +175,13 @@ foreach ($asistencias as $a) {
                         <td><?= date('d/m/Y', strtotime($a['fecha'])) ?></td>
                         <td>
                             <?php if ($a['horario_entrada']): ?>
+                        <td>
+                            <?php if (($a['minutos_extra'] ?? 0) > 0): ?>
+                                <strong>+<?= (int)$a['minutos_extra'] ?> min</strong>
+                            <?php else: ?>
+                                <span class="text-muted">0</span>
+                            <?php endif; ?>
+                        </td>
                                 <?= date('H:i', strtotime($a['horario_entrada'])) ?> - 
                                 <?= date('H:i', strtotime($a['horario_salida'])) ?>
                             <?php else: ?>

@@ -46,15 +46,31 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $asistencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$minutos_extra_total_mes = 0;
 $asistencias_por_empleado = [];
 foreach ($asistencias as $asistencia) {
     $emp_id = (int)($asistencia['empleado_id'] ?? 0);
+
+    $minutos_extra = 0;
+    if (!empty($asistencia['fecha']) && !empty($asistencia['horario_salida']) && !empty($asistencia['hora_salida'])) {
+        $dt_programada = strtotime($asistencia['fecha'] . ' ' . $asistencia['horario_salida']);
+        $dt_real = strtotime($asistencia['fecha'] . ' ' . $asistencia['hora_salida']);
+        if ($dt_programada && $dt_real && $dt_real > $dt_programada) {
+            $minutos_extra = (int) floor(($dt_real - $dt_programada) / 60);
+        }
+    }
+    $asistencia['minutos_extra'] = $minutos_extra;
+
     if (!isset($asistencias_por_empleado[$emp_id])) {
         $asistencias_por_empleado[$emp_id] = [
             'nombre' => $asistencia['empleado_nombre'] ?? 'Empleado',
+            'minutos_extra_total' => 0,
             'items' => []
         ];
     }
+
+    $asistencias_por_empleado[$emp_id]['minutos_extra_total'] += $minutos_extra;
+    $minutos_extra_total_mes += $minutos_extra;
     $asistencias_por_empleado[$emp_id]['items'][] = $asistencia;
 }
 
@@ -149,6 +165,14 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
+        <div class="col-md-2">
+            <div class="card bg-dark text-white h-100">
+                <div class="card-body text-center">
+                    <h6>Min. Extra</h6>
+                    <h3><?= (int)$minutos_extra_total_mes ?></h3>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Filtros -->
@@ -200,6 +224,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#<?= $collapse_id ?>" aria-expanded="false" aria-controls="<?= $collapse_id ?>">
                                     👤 <?= htmlspecialchars($grupo['nombre']) ?>
                                     <span class="badge bg-secondary ms-2"><?= count($grupo['items']) ?></span>
+                                    <span class="badge bg-dark ms-2" title="Minutos extra del mes">+<?= (int)($grupo['minutos_extra_total'] ?? 0) ?> min</span>
                                 </button>
                             </h2>
                             <div id="<?= $collapse_id ?>" class="accordion-collapse collapse" aria-labelledby="<?= $heading_id ?>" data-bs-parent="#asistenciasAccordion">
@@ -212,6 +237,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                                     <th>Horario</th>
                                                     <th>Entrada</th>
                                                     <th>Salida</th>
+                                                    <th>Min. Extra</th>
                                                     <th>Estado</th>
                                                     <th>Observaciones</th>
                                                     <th>Acciones</th>
@@ -248,6 +274,13 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                                             <?php endif; ?>
                                                         </td>
                                                         <td><?= $asistencia['hora_salida'] ? date('H:i', strtotime($asistencia['hora_salida'])) : '-' ?></td>
+                                                        <td>
+                                                            <?php if (($asistencia['minutos_extra'] ?? 0) > 0): ?>
+                                                                <span class="badge bg-dark">+<?= (int)$asistencia['minutos_extra'] ?> min</span>
+                                                            <?php else: ?>
+                                                                <span class="text-muted">0</span>
+                                                            <?php endif; ?>
+                                                        </td>
                                                         <td>
                                                             <?php
                                                             $badges = [
