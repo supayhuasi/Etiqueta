@@ -1,5 +1,13 @@
 <?php
+require_once __DIR__ . '/../../config.php';
+header('Content-Type: text/plain; charset=utf-8');
 
+if (!isset($pdo) || !($pdo instanceof PDO)) {
+    http_response_code(500);
+    exit("Error: no se pudo inicializar la conexión a la base de datos.\n");
+}
+
+try {
 // Crear tabla tipos_gastos
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS tipos_gastos (
@@ -117,4 +125,8 @@ foreach ($estados as $estado) {
 echo "✓ Tablas de gastos creadas correctamente\n";
 echo "✓ Tipos de gastos insertados\n";
 echo "✓ Estados de gastos insertados\n";
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo "Error al configurar gastos: " . $e->getMessage() . "\n";
+}
 ?>
