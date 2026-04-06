@@ -23,14 +23,25 @@ function crm_column_exists(PDO $pdo, string $table, string $column): bool
     }
 }
 
-function crm_ensure_schema(PDO $pdo): void
+function crm_safe_exec(PDO $pdo, string $sql, array &$warnings, string $context): void
+{
+    try {
+        $pdo->exec($sql);
+    } catch (Throwable $e) {
+        $warnings[] = $context;
+        error_log('crm_schema_' . $context . ': ' . $e->getMessage());
+    }
+}
+
+function crm_ensure_schema(PDO $pdo): array
 {
     static $initialized = false;
+    static $warnings = [];
     if ($initialized) {
-        return;
+        return $warnings;
     }
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_visitas (
+    crm_safe_exec($pdo, "CREATE TABLE IF NOT EXISTS ecommerce_visitas (
         id INT AUTO_INCREMENT PRIMARY KEY,
         titulo VARCHAR(180) NOT NULL,
         descripcion TEXT NULL,
@@ -46,9 +57,9 @@ function crm_ensure_schema(PDO $pdo): void
         fecha_actualizacion DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_fecha_visita (fecha_visita),
         INDEX idx_estado (estado)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $warnings, 'crear tabla ecommerce_visitas');
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_crm_visitas (
+    crm_safe_exec($pdo, "CREATE TABLE IF NOT EXISTS ecommerce_crm_visitas (
         id INT AUTO_INCREMENT PRIMARY KEY,
         visita_id INT NOT NULL,
         estado ENUM('nuevo','contactado','propuesta','negociacion','ganado','perdido') NOT NULL DEFAULT 'nuevo',
@@ -70,19 +81,19 @@ function crm_ensure_schema(PDO $pdo): void
         INDEX idx_prioridad (prioridad),
         INDEX idx_proximo_contacto (proximo_contacto),
         INDEX idx_asignado_a (asignado_a)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $warnings, 'crear tabla ecommerce_crm_visitas');
 
-    if (!crm_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_id')) {
-        $pdo->exec("ALTER TABLE ecommerce_crm_visitas ADD COLUMN ultima_cotizacion_id INT NULL AFTER notas_internas");
+    if (crm_table_exists($pdo, 'ecommerce_crm_visitas') && !crm_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_id')) {
+        crm_safe_exec($pdo, "ALTER TABLE ecommerce_crm_visitas ADD COLUMN ultima_cotizacion_id INT NULL AFTER notas_internas", $warnings, 'agregar ultima_cotizacion_id');
     }
-    if (!crm_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_numero')) {
-        $pdo->exec("ALTER TABLE ecommerce_crm_visitas ADD COLUMN ultima_cotizacion_numero VARCHAR(50) NULL AFTER ultima_cotizacion_id");
+    if (crm_table_exists($pdo, 'ecommerce_crm_visitas') && !crm_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_numero')) {
+        crm_safe_exec($pdo, "ALTER TABLE ecommerce_crm_visitas ADD COLUMN ultima_cotizacion_numero VARCHAR(50) NULL AFTER ultima_cotizacion_id", $warnings, 'agregar ultima_cotizacion_numero');
     }
-    if (!crm_column_exists($pdo, 'ecommerce_crm_visitas', 'fecha_ultima_cotizacion')) {
-        $pdo->exec("ALTER TABLE ecommerce_crm_visitas ADD COLUMN fecha_ultima_cotizacion DATETIME NULL AFTER ultima_cotizacion_numero");
+    if (crm_table_exists($pdo, 'ecommerce_crm_visitas') && !crm_column_exists($pdo, 'ecommerce_crm_visitas', 'fecha_ultima_cotizacion')) {
+        crm_safe_exec($pdo, "ALTER TABLE ecommerce_crm_visitas ADD COLUMN fecha_ultima_cotizacion DATETIME NULL AFTER ultima_cotizacion_numero", $warnings, 'agregar fecha_ultima_cotizacion');
     }
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_crm_seguimientos (
+    crm_safe_exec($pdo, "CREATE TABLE IF NOT EXISTS ecommerce_crm_seguimientos (
         id INT AUTO_INCREMENT PRIMARY KEY,
         crm_id INT NOT NULL,
         visita_id INT NOT NULL,
@@ -97,9 +108,11 @@ function crm_ensure_schema(PDO $pdo): void
         INDEX idx_resultado (resultado),
         INDEX idx_fecha_contacto (fecha_contacto),
         INDEX idx_proximo_contacto (proximo_contacto)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $warnings, 'crear tabla ecommerce_crm_seguimientos');
 
+    $warnings = array_values(array_unique($warnings));
     $initialized = true;
+    return $warnings;
 }
 
 function crm_sync_from_visits(PDO $pdo): void
@@ -276,7 +289,7 @@ function crm_whatsapp_link(?string $telefono): string
     return 'https://wa.me/' . $digits;
 }
 
-crm_ensure_schema($pdo);
+$crm_schema_warnings = crm_ensure_schema($pdo);
 crm_sync_from_visits($pdo);
 
 $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
@@ -738,6 +751,11 @@ if ($lead_actual) {
 
 <?php if ($mensaje !== ''): ?>
     <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+<?php endif; ?>
+<?php if (!empty($crm_schema_warnings)): ?>
+    <div class="alert alert-warning">
+        El CRM cargó con advertencias de estructura, pero la pantalla sigue operativa. Si algo puntual no aparece, avisame y lo ajusto.
+    </div>
 <?php endif; ?>
 <?php if ($error !== ''): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
