@@ -79,6 +79,7 @@ $modulos = [
     ['perm' => 'pedidos', 'titulo' => 'Pedidos', 'desc' => 'Ventas y estados de compra', 'url' => 'pedidos.php', 'icon' => 'bi-cart-check'],
     ['perm' => 'ordenes_produccion', 'titulo' => 'Producción', 'desc' => 'Órdenes y fabricación', 'url' => 'ordenes_produccion.php', 'icon' => 'bi-gear-wide-connected'],
     ['perm' => 'instalaciones', 'titulo' => 'Instalaciones y visitas', 'desc' => 'Programación y seguimiento en un solo tablero', 'url' => 'instalaciones.php', 'icon' => 'bi-calendar-check'],
+    ['perm' => 'calidad', 'titulo' => 'Calidad', 'desc' => 'Reclamos, rehechos, demoras y satisfacción', 'url' => 'calidad.php', 'icon' => 'bi-award'],
     ['perm' => 'gastos', 'titulo' => 'Gastos', 'desc' => 'Control financiero diario', 'url' => 'gastos/gastos.php', 'icon' => 'bi-cash-coin'],
     ['perm' => 'cheques', 'titulo' => 'Cheques', 'desc' => 'Seguimiento y vencimientos', 'url' => 'cheques/cheques.php', 'icon' => 'bi-journal-check'],
     ['perm' => 'inventario', 'titulo' => 'Inventario', 'desc' => 'Stock y reposición', 'url' => 'inventario.php', 'icon' => 'bi-box-seam'],

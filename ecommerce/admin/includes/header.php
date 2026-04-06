@@ -165,6 +165,7 @@ $role_permissions = [
         'cheques',
         'gastos',
         'encuestas',
+        'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ],
     'operario' => [
@@ -172,6 +173,7 @@ $role_permissions = [
         'ordenes_produccion',
         'recordatorios',
         'inventario',
+        'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ],
     'ventas' => [
@@ -184,6 +186,7 @@ $role_permissions = [
         'cotizacion_clientes',
         'clientes_web',
         'encuestas',
+        'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -255,6 +258,8 @@ $page_permissions = [
     'encuestas.php' => 'encuestas',
     'encuestas_crear.php' => 'encuestas',
     'encuestas_editar.php' => 'encuestas',
+    'calidad.php' => 'calidad',
+    'calidad_reporte.php' => 'calidad',
     'ventas_reportes.php' => 'ventas_reportes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
@@ -1230,7 +1235,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -1267,6 +1272,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('encuestas')): ?>
                         <a href="<?= $admin_url ?>encuestas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['encuestas.php', 'encuestas_crear.php', 'encuestas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-clipboard-check"></i> Encuestas</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('calidad')): ?>
+                        <a href="<?= $admin_url ?>calidad.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['calidad.php', 'calidad_reporte.php']) ? 'active' : '' ?>"><i class="bi bi-award"></i> Calidad</a>
                         <?php endif; ?>
                         <?php if ($can_access('ventas_reportes')): ?>
                         <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
