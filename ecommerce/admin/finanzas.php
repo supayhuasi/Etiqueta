@@ -41,6 +41,17 @@ function fin_scalar(PDO $pdo, $sql, $default = 0)
     }
 }
 
+function fin_first_existing_column(PDO $pdo, string $table, array $columns): ?string
+{
+    foreach ($columns as $column) {
+        if (fin_column_exists($pdo, $table, $column)) {
+            return $column;
+        }
+    }
+
+    return null;
+}
+
 $mes = $_GET['mes'] ?? date('Y-m');
 if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
     $mes = date('Y-m');
@@ -95,22 +106,50 @@ if (fin_table_exists($pdo, 'ecommerce_pedidos') && fin_table_exists($pdo, 'ecomm
 }
 
 $valor_stock_productos = 0.0;
-if (fin_table_exists($pdo, 'ecommerce_productos') && fin_column_exists($pdo, 'ecommerce_productos', 'stock') && fin_column_exists($pdo, 'ecommerce_productos', 'precio_base')) {
-    $valor_stock_productos = (float) fin_scalar($pdo, "SELECT SUM(GREATEST(stock,0) * COALESCE(precio_base,0)) FROM ecommerce_productos", 0);
+$valor_stock_materiales = 0.0;
+$productos_con_stock = 0;
+$materiales_con_stock = 0;
+$detalle_valorizacion_productos = 'Productos sin valorización disponible';
+$detalle_valorizacion_materiales = 'Materiales sin valorización disponible';
+
+if (fin_table_exists($pdo, 'ecommerce_productos') && fin_column_exists($pdo, 'ecommerce_productos', 'stock')) {
+    $productos_con_stock = (int) fin_scalar($pdo, "SELECT COUNT(*) FROM ecommerce_productos WHERE COALESCE(stock, 0) > 0", 0);
+
+    $tiene_costos_compra = fin_table_exists($pdo, 'ecommerce_compra_items')
+        && fin_column_exists($pdo, 'ecommerce_compra_items', 'producto_id')
+        && fin_column_exists($pdo, 'ecommerce_compra_items', 'costo_unitario');
+
+    if ($tiene_costos_compra) {
+        $valor_stock_productos = (float) fin_scalar($pdo, "
+            SELECT COALESCE(SUM(GREATEST(COALESCE(p.stock, 0), 0) * COALESCE(uc.costo_unitario, p.precio_base, 0)), 0)
+            FROM ecommerce_productos p
+            LEFT JOIN (
+                SELECT ci.producto_id, ci.costo_unitario
+                FROM ecommerce_compra_items ci
+                INNER JOIN (
+                    SELECT producto_id, MAX(id) AS max_id
+                    FROM ecommerce_compra_items
+                    WHERE COALESCE(costo_unitario, 0) > 0
+                    GROUP BY producto_id
+                ) ult ON ult.max_id = ci.id
+            ) uc ON uc.producto_id = p.id
+        ", 0);
+        $detalle_valorizacion_productos = 'Productos valorizados al último costo de compra';
+    } elseif (fin_column_exists($pdo, 'ecommerce_productos', 'precio_base')) {
+        $valor_stock_productos = (float) fin_scalar($pdo, "SELECT COALESCE(SUM(GREATEST(COALESCE(stock, 0), 0) * COALESCE(precio_base, 0)), 0) FROM ecommerce_productos", 0);
+        $detalle_valorizacion_productos = 'Productos valorizados a precio base';
+    }
 }
 
-$valor_stock_materiales = 0.0;
 if (fin_table_exists($pdo, 'ecommerce_materiales') && fin_column_exists($pdo, 'ecommerce_materiales', 'stock')) {
-    $costo_material = '0';
-    if (fin_column_exists($pdo, 'ecommerce_materiales', 'costo_unitario')) {
-        $costo_material = 'COALESCE(costo_unitario,0)';
-    } elseif (fin_column_exists($pdo, 'ecommerce_materiales', 'precio')) {
-        $costo_material = 'COALESCE(precio,0)';
-    } elseif (fin_column_exists($pdo, 'ecommerce_materiales', 'precio_base')) {
-        $costo_material = 'COALESCE(precio_base,0)';
-    }
+    $materiales_con_stock = (int) fin_scalar($pdo, "SELECT COUNT(*) FROM ecommerce_materiales WHERE COALESCE(stock, 0) > 0", 0);
 
-    $valor_stock_materiales = (float) fin_scalar($pdo, "SELECT SUM(GREATEST(stock,0) * {$costo_material}) FROM ecommerce_materiales", 0);
+    $columnaCostoMaterial = fin_first_existing_column($pdo, 'ecommerce_materiales', ['costo_unitario', 'costo', 'precio', 'precio_base']);
+    if ($columnaCostoMaterial !== null) {
+        $costo_material = 'COALESCE(`' . $columnaCostoMaterial . '`, 0)';
+        $valor_stock_materiales = (float) fin_scalar($pdo, "SELECT COALESCE(SUM(GREATEST(COALESCE(stock, 0), 0) * {$costo_material}), 0) FROM ecommerce_materiales", 0);
+        $detalle_valorizacion_materiales = 'Materiales valorizados por ' . str_replace('_', ' ', $columnaCostoMaterial);
+    }
 }
 
 $valor_total_stock = $valor_stock_productos + $valor_stock_materiales;
@@ -161,7 +200,32 @@ $saldo_real_estimado = $saldo_flujo_mes + $cxc_pedidos + $valor_total_stock - $g
             <div class="card-body">
                 <h6>Inventario Valorizado</h6>
                 <h3>$<?= number_format($valor_total_stock, 0, ',', '.') ?></h3>
-                <small>Productos + materiales al costo base</small>
+                <small>
+                    Productos: $<?= number_format($valor_stock_productos, 0, ',', '.') ?> ·
+                    Materiales: $<?= number_format($valor_stock_materiales, 0, ',', '.') ?>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3 border-info">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <div class="small text-muted">Productos con stock</div>
+                <div class="h5 mb-0"><?= number_format($productos_con_stock, 0, ',', '.') ?></div>
+            </div>
+            <div class="col-md-4">
+                <div class="small text-muted">Materiales con stock</div>
+                <div class="h5 mb-0"><?= number_format($materiales_con_stock, 0, ',', '.') ?></div>
+            </div>
+            <div class="col-md-4">
+                <div class="small text-muted">Criterio de valorización</div>
+                <div class="small">
+                    <?= htmlspecialchars($detalle_valorizacion_productos) ?><br>
+                    <?= htmlspecialchars($detalle_valorizacion_materiales) ?>
+                </div>
             </div>
         </div>
     </div>
