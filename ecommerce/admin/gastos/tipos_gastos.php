@@ -14,6 +14,7 @@ if (!isset($can_access) || !$can_access('gastos')) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accion = (string)($_POST['action'] ?? 'save');
     $id = (int)($_POST['id'] ?? 0);
     $nombre = trim((string)($_POST['nombre'] ?? ''));
     $descripcion = trim((string)($_POST['descripcion'] ?? ''));
@@ -23,13 +24,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bloquear_exceso = !empty($_POST['bloquear_exceso']) ? 1 : 0;
     $activo = !empty($_POST['activo']) ? 1 : 0;
 
-    $errores = [];
-    if ($nombre === '') $errores[] = 'El nombre es obligatorio';
-    if ($presupuesto_mensual !== null && $presupuesto_mensual < 0) $errores[] = 'El presupuesto mensual no puede ser negativo';
-    if ($porcentaje_alerta <= 0 || $porcentaje_alerta > 100) $errores[] = 'El porcentaje de alerta debe estar entre 1 y 100';
+    try {
+        if ($accion === 'toggle' && $id > 0) {
+            $stmt = $pdo->prepare("UPDATE tipos_gastos SET activo = CASE WHEN activo = 1 THEN 0 ELSE 1 END WHERE id = ?");
+            $stmt->execute([$id]);
+            $mensaje = 'Estado del tipo actualizado correctamente';
+        } elseif ($accion === 'delete' && $id > 0) {
+            $stmtUso = $pdo->prepare("SELECT COUNT(*) FROM gastos WHERE tipo_gasto_id = ?");
+            $stmtUso->execute([$id]);
+            $cantidadUsos = (int)$stmtUso->fetchColumn();
 
-    if (empty($errores)) {
-        try {
+            if ($cantidadUsos > 0) {
+                $stmt = $pdo->prepare("UPDATE tipos_gastos SET activo = 0 WHERE id = ?");
+                $stmt->execute([$id]);
+                $mensaje = 'El tipo tenía gastos asociados, por seguridad se desactivó en lugar de eliminarse.';
+            } else {
+                $stmt = $pdo->prepare("DELETE FROM tipos_gastos WHERE id = ?");
+                $stmt->execute([$id]);
+                $mensaje = 'Tipo eliminado correctamente';
+            }
+        } else {
+            $errores = [];
+            if ($nombre === '') $errores[] = 'El nombre es obligatorio';
+            if ($presupuesto_mensual !== null && $presupuesto_mensual < 0) $errores[] = 'El presupuesto mensual no puede ser negativo';
+            if ($porcentaje_alerta <= 0 || $porcentaje_alerta > 100) $errores[] = 'El porcentaje de alerta debe estar entre 1 y 100';
+
+            if (!empty($errores)) {
+                throw new Exception(implode('<br>', $errores));
+            }
+
             if ($id > 0) {
                 $stmt = $pdo->prepare("UPDATE tipos_gastos SET nombre = ?, descripcion = ?, color = ?, presupuesto_mensual = ?, porcentaje_alerta = ?, bloquear_exceso = ?, activo = ? WHERE id = ?");
                 $stmt->execute([$nombre, $descripcion, $color, $presupuesto_mensual, $porcentaje_alerta, $bloquear_exceso, $activo, $id]);
@@ -39,23 +62,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$nombre, $descripcion, $color, $presupuesto_mensual, $porcentaje_alerta, $bloquear_exceso, $activo]);
                 $mensaje = 'Tipo creado correctamente';
             }
-        } catch (Exception $e) {
-            $error = 'Error: ' . $e->getMessage();
         }
-    } else {
-        $error = implode('<br>', $errores);
+    } catch (Exception $e) {
+        $error = 'Error: ' . $e->getMessage();
     }
 }
 
-$stmt = $pdo->query("SELECT * FROM tipos_gastos ORDER BY nombre");
+$stmt = $pdo->query("SELECT t.*, COUNT(g.id) AS cantidad_gastos FROM tipos_gastos t LEFT JOIN gastos g ON g.tipo_gasto_id = t.id GROUP BY t.id, t.nombre, t.descripcion, t.color, t.presupuesto_mensual, t.porcentaje_alerta, t.bloquear_exceso, t.activo, t.fecha_creacion ORDER BY t.activo DESC, t.nombre ASC");
 $tipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="container mt-4">
     <div class="row">
         <div class="col-md-10 offset-md-1">
-            <h2>Tipos de Gastos</h2>
-            <p class="text-muted">Configurá presupuesto mensual, porcentaje de alerta y bloqueo por exceso para cada tipo.</p>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div>
+                    <h2 class="mb-1">Tipos de Gastos</h2>
+                    <p class="text-muted mb-0">Creá nuevos tipos, desactivá los que no uses o eliminá los que todavía no tengan movimientos.</p>
+                </div>
+                <a href="gastos.php" class="btn btn-outline-secondary">← Volver a Gastos</a>
+            </div>
 
             <?php if (isset($mensaje)): ?>
                 <div class="alert alert-success" role="alert"><?= htmlspecialchars($mensaje) ?></div>
@@ -111,8 +137,9 @@ $tipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
 
             <div class="card">
-                <div class="card-header">
-                    <h5>Tipos Registrados y Configuración</h5>
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="mb-0">Tipos Registrados y Configuración</h5>
+                    <small class="text-muted">Si un tipo ya tiene gastos guardados, al quitarlo se desactiva para no romper el historial.</small>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -126,7 +153,8 @@ $tipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <th>Alerta %</th>
                                     <th>Bloquear</th>
                                     <th>Activo</th>
-                                    <th>Acción</th>
+                                    <th>Usos</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -140,8 +168,22 @@ $tipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <td><input type="number" class="form-control form-control-sm" name="presupuesto_mensual" step="0.01" min="0" value="<?= isset($tipo['presupuesto_mensual']) && $tipo['presupuesto_mensual'] !== null ? htmlspecialchars((string)$tipo['presupuesto_mensual']) : '' ?>" placeholder="Sin tope"></td>
                                             <td><input type="number" class="form-control form-control-sm" name="porcentaje_alerta" step="0.01" min="1" max="100" value="<?= htmlspecialchars((string)($tipo['porcentaje_alerta'] ?? 80)) ?>"></td>
                                             <td class="text-center"><input type="checkbox" class="form-check-input" name="bloquear_exceso" <?= !empty($tipo['bloquear_exceso']) ? 'checked' : '' ?>></td>
-                                            <td class="text-center"><input type="checkbox" class="form-check-input" name="activo" <?= !empty($tipo['activo']) ? 'checked' : '' ?>></td>
-                                            <td><button type="submit" class="btn btn-sm btn-outline-primary">Guardar</button></td>
+                                            <td class="text-center">
+                                                <input type="checkbox" class="form-check-input" name="activo" <?= !empty($tipo['activo']) ? 'checked' : '' ?>>
+                                                <div><small class="<?= !empty($tipo['activo']) ? 'text-success' : 'text-muted' ?>"><?= !empty($tipo['activo']) ? 'Activo' : 'Inactivo' ?></small></div>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-secondary"><?= (int)($tipo['cantidad_gastos'] ?? 0) ?></span>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <button type="submit" name="action" value="save" class="btn btn-sm btn-outline-primary">Guardar</button>
+                                                    <button type="submit" name="action" value="toggle" class="btn btn-sm btn-outline-warning">
+                                                        <?= !empty($tipo['activo']) ? 'Desactivar' : 'Activar' ?>
+                                                    </button>
+                                                    <button type="submit" name="action" value="delete" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Querés quitar este tipo de gasto? Si ya tiene movimientos, se va a desactivar.')">Quitar</button>
+                                                </div>
+                                            </td>
                                         </form>
                                     </tr>
                                 <?php endforeach; ?>

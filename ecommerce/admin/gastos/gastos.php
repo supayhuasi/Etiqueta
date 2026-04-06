@@ -93,6 +93,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
             <p class="text-muted mb-0">Seguimiento mensual de gastos y estado de pago</p>
         </div>
         <div class="col-md-6 text-md-end mt-3 mt-md-0">
+            <a href="tipos_gastos.php" class="btn btn-outline-secondary">⚙️ Tipos de Gasto</a>
             <a href="gastos_crear.php" class="btn btn-primary">+ Nuevo Gasto</a>
         </div>
     </div>
