@@ -598,6 +598,58 @@ const itemsExistentes = <?= json_encode($items) ?>;
 const productos = <?= json_encode($productos) ?>;
 const listaItems = <?= json_encode($lista_items_map) ?>;
 const listaCategorias = <?= json_encode($lista_cat_map) ?>;
+const cotizacionItemsState = new Map();
+
+function clonarItemData(item) {
+    try {
+        return JSON.parse(JSON.stringify(item ?? {}));
+    } catch (e) {
+        return { ...(item || {}) };
+    }
+}
+
+function setItemState(index, itemData) {
+    if (index === null || index === undefined) return;
+    cotizacionItemsState.set(String(index), clonarItemData(normalizarItemData(itemData || {})));
+}
+
+function getItemState(index) {
+    return cotizacionItemsState.get(String(index)) || null;
+}
+
+function removeItemState(index) {
+    cotizacionItemsState.delete(String(index));
+}
+
+function leerAtributosDesdeRow(row, index) {
+    if (!row) return [];
+
+    const grouped = {};
+    const selector = `input[name^="items[${index}][atributos]"], .item-attr-field`;
+    row.querySelectorAll(selector).forEach(input => {
+        let attrId = input.dataset.attrId || '';
+        let key = input.dataset.attrKey || '';
+
+        if ((!attrId || !key) && input.name) {
+            const match = input.name.match(/atributos\]\[([^\]]+)\]\[(\w+)\]/);
+            if (match) {
+                attrId = match[1];
+                key = match[2];
+            }
+        }
+
+        if (!attrId || !key) return;
+
+        grouped[attrId] = grouped[attrId] || { id: attrId, nombre: '', valor: '', costo: 0 };
+        if (key === 'costo') {
+            grouped[attrId].costo = parseFloat(input.value || 0) || 0;
+        } else {
+            grouped[attrId][key] = input.value || '';
+        }
+    });
+
+    return Object.values(grouped).filter(attr => attr.nombre || attr.valor || attr.costo);
+}
 
 function productoLabel(p) {
     const precioLabel = p.tipo_precio === 'variable'
@@ -716,6 +768,7 @@ function agregarItem(itemData = null) {
     const normalizado = normalizarItemData(itemData);
     const html = renderItemResumen(itemIndex, normalizado);
     document.getElementById('itemsContainer').insertAdjacentHTML('beforeend', html);
+    setItemState(itemIndex, normalizado);
     calcularTotales();
 }
 
@@ -1136,38 +1189,34 @@ function actualizarBasePrecioModal() {
 
 function obtenerItemDesdeDOM(index) {
     const row = document.getElementById(`item_${index}`);
-    if (!row) return null;
-    const getVal = (id) => document.getElementById(id)?.value || '';
-    const productoId = getVal(`producto_id_${index}`);
+    if (!row) return getItemState(index);
+
+    const state = getItemState(index) || {};
+    const getVal = (id, fallback = '') => {
+        const el = document.getElementById(id);
+        return el ? el.value : fallback;
+    };
+
+    const productoId = getVal(`producto_id_${index}`, state.producto_id || '');
     const producto = productos.find(p => String(p.id) === String(productoId));
     const precioInput = document.getElementById(`precio_${index}`);
-    const precioBase = precioInput?.dataset?.base || precioInput?.value || '';
-    const atributos = [];
+    const precioBase = getVal(`precio_base_${index}`, precioInput?.dataset?.base || state.precio_base || precioInput?.value || state.precio || '');
+    const atributos = leerAtributosDesdeRow(row, index);
 
-    row.querySelectorAll(`input[name^="items[${index}][atributos]"][name$="[nombre]"]`).forEach(input => {
-        const match = input.name.match(/atributos\]\[([^\]]+)\]\[nombre\]/);
-        if (!match) return;
-        const attrId = match[1];
-        const valorInput = row.querySelector(`input[name="items[${index}][atributos][${attrId}][valor]"]`);
-        const costoInput = row.querySelector(`input[name="items[${index}][atributos][${attrId}][costo]"]`);
-        const valor = valorInput?.value || '';
-        const costo = parseFloat(costoInput?.value || 0) || 0;
-        atributos.push({ id: attrId, nombre: input.value, valor, costo });
-    });
-
-    return {
+    return normalizarItemData({
+        ...state,
         producto_id: productoId,
-        productoLabel: producto ? productoLabel(producto) : '',
-        nombre: getVal(`nombre_${index}`),
-        descripcion: getVal(`descripcion_${index}`),
-        ancho: getVal(`ancho_${index}`),
-        alto: getVal(`alto_${index}`),
-        cantidad: getVal(`cantidad_${index}`),
-        precio: getVal(`precio_${index}`),
+        productoLabel: producto ? productoLabel(producto) : (state.productoLabel || ''),
+        nombre: getVal(`nombre_${index}`, state.nombre || ''),
+        descripcion: getVal(`descripcion_${index}`, state.descripcion || ''),
+        ancho: getVal(`ancho_${index}`, state.ancho || ''),
+        alto: getVal(`alto_${index}`, state.alto || ''),
+        cantidad: getVal(`cantidad_${index}`, state.cantidad || 1),
+        precio: getVal(`precio_${index}`, state.precio || 0),
         precio_base: precioBase,
-        descuento_pct: getVal(`descuento_pct_${index}`),
-        atributos
-    };
+        descuento_pct: getVal(`descuento_pct_${index}`, state.descuento_pct || 0),
+        atributos: atributos.length > 0 ? atributos : (Array.isArray(state.atributos) ? state.atributos : [])
+    });
 }
 
 function obtenerAtributosDesdeModal() {
@@ -1256,14 +1305,15 @@ function renderItemResumen(index, itemData) {
                 <input type="hidden" class="item-alto" id="alto_${index}" name="items[${index}][alto]" value="${escapeAttr(itemData.alto || '')}">
                 <input type="hidden" class="item-cantidad" id="cantidad_${index}" name="items[${index}][cantidad]" value="${itemData.cantidad || 1}">
                 <input type="hidden" class="item-precio" id="precio_${index}" name="items[${index}][precio]" value="${precioVisible.toFixed(2)}" data-base="${precioBase.toFixed(2)}">
+                <input type="hidden" class="item-precio-base" id="precio_base_${index}" value="${precioBase.toFixed(2)}">
                 <input type="hidden" class="item-descuento-pct" id="descuento_pct_${index}" name="items[${index}][descuento_pct]" value="${descuentoPct.toFixed(2)}">
                 <input type="hidden" id="producto_id_${index}" name="items[${index}][producto_id]" value="${itemData.producto_id || ''}">
                 <input type="text" class="form-control item-subtotal" id="subtotal_${index}" readonly style="display:none;">
                 <div id="precio-info-${index}" style="display:none;"></div>
                 ${atributos.map(a => `
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][nombre]" value="${escapeAttr(a.nombre)}">
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][valor]" value="${escapeAttr(a.valor)}">
-                    <input type="hidden" name="items[${index}][atributos][${a.id}][costo]" value="${parseFloat(a.costo || 0).toFixed(2)}">
+                    <input type="hidden" class="item-attr-field" data-attr-id="${escapeAttr(a.id)}" data-attr-key="nombre" name="items[${index}][atributos][${a.id}][nombre]" value="${escapeAttr(a.nombre)}">
+                    <input type="hidden" class="item-attr-field" data-attr-id="${escapeAttr(a.id)}" data-attr-key="valor" name="items[${index}][atributos][${a.id}][valor]" value="${escapeAttr(a.valor)}">
+                    <input type="hidden" class="item-attr-field" data-attr-id="${escapeAttr(a.id)}" data-attr-key="costo" name="items[${index}][atributos][${a.id}][costo]" value="${parseFloat(a.costo || 0).toFixed(2)}">
                 `).join('')}
             </div>
         </div>
@@ -1335,6 +1385,8 @@ async function guardarItemDesdeModal() {
             return;
         }
         // Si index es null o undefined, es un nuevo item
+        const itemNormalizado = normalizarItemData(itemData);
+
         if (index === null || index === undefined) {
             // Buscar el mayor índice actual
             let maxIndex = 0;
@@ -1348,10 +1400,10 @@ async function guardarItemDesdeModal() {
             });
             index = maxIndex + 1;
             itemIndex = index;
-            const html = renderItemResumen(index, itemData);
+            const html = renderItemResumen(index, itemNormalizado);
             itemsContainer.insertAdjacentHTML('beforeend', html);
         } else {
-            const html = renderItemResumen(index, itemData);
+            const html = renderItemResumen(index, itemNormalizado);
             const row = document.getElementById(`item_${index}`);
             if (row) {
                 // Reemplazar el nodo por uno nuevo para evitar problemas de referencias
@@ -1359,8 +1411,12 @@ async function guardarItemDesdeModal() {
                 newNode.innerHTML = html;
                 const newItem = newNode.firstElementChild;
                 itemsContainer.replaceChild(newItem, row);
+            } else {
+                itemsContainer.insertAdjacentHTML('beforeend', html);
             }
         }
+
+        setItemState(index, itemNormalizado);
     } catch (err) {
         console.error('Error guardando item:', err);
         alert('No se pudo guardar el item.');
@@ -1418,6 +1474,7 @@ function eliminarItem(index) {
     try {
         const el = document.getElementById('item_' + index);
         if (el && typeof el.remove === 'function') el.remove();
+        removeItemState(index);
     } catch(e) { console.error('eliminarItem error', e); }
     try { calcularTotales(); } catch(e) { console.error('calcularTotales error', e); }
 }
@@ -1430,6 +1487,13 @@ function actualizarDescuentoItem(index, valor) {
     if (hidden) hidden.value = pct.toFixed(2);
     if (input) input.value = pct.toFixed(2);
     if (text) text.textContent = pct.toFixed(2) + '%';
+
+    const current = getItemState(index);
+    if (current) {
+        current.descuento_pct = pct.toFixed(2);
+        setItemState(index, current);
+    }
+
     calcularTotales();
 }
 
@@ -1438,21 +1502,30 @@ function calcularTotales() {
     let descuentoListaTotal = 0;
 
     document.querySelectorAll('.item-row').forEach(row => {
+        const index = obtenerIndexDesdeRow(row);
         const cantidad = parseFloat(row.querySelector('.item-cantidad')?.value || 0);
         const precioInput = row.querySelector('.item-precio');
+        const precioBaseHidden = index !== null ? document.getElementById(`precio_base_${index}`) : null;
         if (precioInput && (precioInput.dataset.base === undefined || precioInput.dataset.base === '')) {
-            precioInput.dataset.base = precioInput.value || '';
+            precioInput.dataset.base = precioBaseHidden?.value || precioInput.value || '';
         }
         const precioBaseData = parseFloat(precioInput?.dataset.base ?? '');
+        const precioBaseHiddenValue = parseFloat(precioBaseHidden?.value ?? '');
         const precioBaseValue = parseFloat(precioInput?.value ?? '');
         const precioBase = Number.isFinite(precioBaseData)
             ? precioBaseData
-            : (Number.isFinite(precioBaseValue) ? precioBaseValue : 0);
+            : (Number.isFinite(precioBaseHiddenValue)
+                ? precioBaseHiddenValue
+                : (Number.isFinite(precioBaseValue) ? precioBaseValue : 0));
         let costoAtributos = 0;
-        row.querySelectorAll('input[name*="[atributos]"][name$="[costo]"]').forEach(input => {
+        row.querySelectorAll('.item-attr-field[data-attr-key="costo"], input[name*="[atributos]"][name$="[costo]"]').forEach(input => {
             const costo = parseFloat(input.value ?? '');
             costoAtributos += Number.isFinite(costo) ? costo : 0;
         });
+
+        if (precioBaseHidden) {
+            precioBaseHidden.value = precioBase.toFixed(2);
+        }
 
         const cantidadSafe = Number.isFinite(cantidad) ? cantidad : 0;
         const subtotalItem = cantidadSafe * (precioBase + costoAtributos);
@@ -1646,45 +1719,38 @@ function collectItemsForSubmit() {
     const formCot = document.getElementById('formCotizacion');
     const container = formCot ? formCot.querySelector('#itemsContainer') : null;
     const rows = container ? container.querySelectorAll('.item-row') : document.querySelectorAll('.item-row');
+
     rows.forEach(function(row) {
         const idMatch = (row.id || '').match(/item_(\d+)/);
         if (!idMatch) return;
+
         const idx = idMatch[1];
-        var nombre = (row.querySelector('input[name="items[' + idx + '][nombre]"]') || document.getElementById('nombre_' + idx));
-        var descripcion = (row.querySelector('input[name="items[' + idx + '][descripcion]"]') || document.getElementById('descripcion_' + idx));
-        var ancho = (row.querySelector('input[name="items[' + idx + '][ancho]"]') || document.getElementById('ancho_' + idx));
-        var alto = (row.querySelector('input[name="items[' + idx + '][alto]"]') || document.getElementById('alto_' + idx));
-        var cantidad = (row.querySelector('input[name="items[' + idx + '][cantidad]"]') || document.getElementById('cantidad_' + idx));
-        var precio = (row.querySelector('input[name="items[' + idx + '][precio]"]') || document.getElementById('precio_' + idx));
-        var descuento_pct = (row.querySelector('input[name="items[' + idx + '][descuento_pct]"]') || document.getElementById('descuento_pct_' + idx));
-        var producto_id = (row.querySelector('input[name="items[' + idx + '][producto_id]"]') || document.getElementById('producto_id_' + idx));
-        nombre = nombre ? nombre.value : '';
-        descripcion = descripcion ? descripcion.value : '';
-        ancho = ancho ? ancho.value : '';
-        alto = alto ? alto.value : '';
-        cantidad = cantidad ? cantidad.value : 0;
-        precio = precio ? precio.value : 0;
-        descuento_pct = descuento_pct ? descuento_pct.value : 0;
-        producto_id = producto_id ? producto_id.value : null;
-        var atributos = [];
-        try {
-            var attrInputs = row.querySelectorAll('input[name^="items[' + idx + '][atributos]"]');
-            var grouped = {};
-            attrInputs.forEach(function(inp) {
-                var m = inp.name.match(/atributos\]\[([^\]]+)\]\[(\w+)\]/);
-                if (m) {
-                    var aid = m[1], key = m[2];
-                    grouped[aid] = grouped[aid] || {};
-                    grouped[aid][key] = inp.value;
-                }
-            });
-            Object.keys(grouped).forEach(function(aid) {
-                var g = grouped[aid];
-                atributos.push({ id: aid, nombre: g.nombre || '', valor: g.valor || '', costo: parseFloat(g.costo || 0) });
-            });
-        } catch (e) {}
-        items.push({ producto_id: producto_id || null, nombre: String(nombre).trim(), descripcion: String(descripcion).trim(), ancho: ancho || null, alto: alto || null, cantidad: parseInt(cantidad || 0, 10), precio: parseFloat(String(precio).replace(',', '.') || 0), descuento_pct: parseFloat(String(descuento_pct).replace(',', '.') || 0), atributos: atributos });
+        const item = obtenerItemDesdeDOM(idx);
+        if (!item) return;
+
+        const atributos = Array.isArray(item.atributos)
+            ? item.atributos.map(attr => ({
+                id: attr.id ?? '',
+                nombre: String(attr.nombre || '').trim(),
+                valor: String(attr.valor || '').trim(),
+                costo: parseFloat(String(attr.costo ?? attr.costo_adicional ?? 0).replace(',', '.')) || 0
+            })).filter(attr => attr.nombre || attr.valor || attr.costo)
+            : [];
+
+        items.push({
+            producto_id: item.producto_id || null,
+            nombre: String(item.nombre || '').trim(),
+            descripcion: String(item.descripcion || '').trim(),
+            ancho: item.ancho || null,
+            alto: item.alto || null,
+            cantidad: parseInt(item.cantidad || 0, 10),
+            precio: parseFloat(String(item.precio || 0).replace(',', '.')) || 0,
+            precio_base: parseFloat(String(item.precio_base ?? item.precio ?? 0).replace(',', '.')) || 0,
+            descuento_pct: parseFloat(String(item.descuento_pct || 0).replace(',', '.')) || 0,
+            atributos: atributos
+        });
     });
+
     return items;
 }
 
@@ -1777,7 +1843,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
-            formCot.submit();
+            const nativeSubmit = HTMLFormElement.prototype.submit;
+            if (typeof nativeSubmit === 'function') {
+                nativeSubmit.call(formCot);
+            } else {
+                formCot.submit();
+            }
         });
     }
 });
