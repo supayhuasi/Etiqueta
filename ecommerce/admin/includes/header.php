@@ -158,6 +158,7 @@ $role_permissions = [
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
         'pedidos', 'ordenes_produccion', 'instalaciones',
         'recordatorios',
+        'crm',
         'clientes_web',
         'inventario',
         'finanzas',
@@ -182,6 +183,7 @@ $role_permissions = [
         'ordenes_produccion',
         'instalaciones',
         'recordatorios',
+        'crm',
         'cotizaciones',
         'cotizacion_clientes',
         'clientes_web',
@@ -253,6 +255,7 @@ $page_permissions = [
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
     'recordatorios.php' => 'recordatorios',
+    'crm.php' => 'crm',
     'descuentos.php' => 'descuentos',
     'cotizacion_clientes.php' => 'cotizacion_clientes',
     'encuestas.php' => 'encuestas',
@@ -1235,7 +1238,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -1254,6 +1257,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('recordatorios')): ?>
                         <a href="<?= $admin_url ?>recordatorios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'recordatorios.php' ? 'active' : '' ?>"><i class="bi bi-journal-check"></i> Recordatorios</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('crm')): ?>
+                        <a href="<?= $admin_url ?>crm.php" class="<?= basename($_SERVER['PHP_SELF']) === 'crm.php' ? 'active' : '' ?>"><i class="bi bi-person-lines-fill"></i> CRM Seguimiento</a>
                         <?php endif; ?>
                         <?php if ($can_access('facturacion_clientes')): ?>
                         <a href="<?= $admin_url ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark-text"></i> Facturación</a>

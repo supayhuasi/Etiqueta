@@ -5,6 +5,16 @@ require_once __DIR__ . '/../includes/descuentos.php';
 $mensaje = '';
 $error = '';
 
+function cotizacion_tabla_existe(PDO $pdo, string $tabla): bool {
+    try {
+        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt->execute([$tabla]);
+        return (bool)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 function tabla_tiene_columna(PDO $pdo, string $tabla, string $columna): bool {
     try {
         $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
@@ -44,6 +54,12 @@ if (!in_array('factura_a', $cols_cot, true)) {
 if (!in_array('es_empresa', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
 }
+if (!in_array('crm_id', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN crm_id INT NULL AFTER cliente_id");
+}
+if (!in_array('visita_id', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN visita_id INT NULL AFTER crm_id");
+}
 
 $cols_cli_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
 if (!in_array('direccion', $cols_cli_cot, true)) {
@@ -57,6 +73,36 @@ if (!in_array('factura_a', $cols_cli_cot, true)) {
 }
 if (!in_array('es_empresa', $cols_cli_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+}
+
+$crm_id_context = max(0, (int)($_POST['crm_id'] ?? $_GET['crm_id'] ?? 0));
+$crm_context = null;
+
+if ($crm_id_context > 0 && cotizacion_tabla_existe($pdo, 'ecommerce_crm_visitas') && cotizacion_tabla_existe($pdo, 'ecommerce_visitas')) {
+    try {
+        $stmt = $pdo->prepare("SELECT
+            c.id,
+            c.visita_id,
+            c.estado AS crm_estado,
+            c.notas_internas,
+            c.proximo_contacto,
+            c.ultima_cotizacion_id,
+            c.ultima_cotizacion_numero,
+            v.titulo,
+            v.descripcion AS visita_descripcion,
+            v.cliente_nombre,
+            v.telefono,
+            v.direccion,
+            v.fecha_visita
+        FROM ecommerce_crm_visitas c
+        INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
+        WHERE c.id = ?
+        LIMIT 1");
+        $stmt->execute([$crm_id_context]);
+        $crm_context = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Exception $e) {
+        $crm_context = null;
+    }
 }
 
 // Procesar formulario
@@ -79,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
         $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
+        $crm_id = !empty($_POST['crm_id']) ? intval($_POST['crm_id']) : $crm_id_context;
         $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
         $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
         $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
@@ -264,6 +311,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insert_cols[] = 'cliente_id';
             $insert_vals[] = $cliente_id ?: null;
         }
+        if (in_array('crm_id', $cols_cot_insert, true)) {
+            $insert_cols[] = 'crm_id';
+            $insert_vals[] = $crm_id > 0 ? $crm_id : null;
+        }
+        if (in_array('visita_id', $cols_cot_insert, true)) {
+            $insert_cols[] = 'visita_id';
+            $insert_vals[] = !empty($crm_context['visita_id']) ? (int)$crm_context['visita_id'] : null;
+        }
         if (in_array('es_empresa', $cols_cot_insert, true)) {
             $insert_cols[] = 'es_empresa';
             $insert_vals[] = $es_empresa;
@@ -286,6 +341,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute($insert_vals);
         
         $cotizacion_id = $pdo->lastInsertId();
+
+        if (!empty($crm_id) && cotizacion_tabla_existe($pdo, 'ecommerce_crm_visitas')) {
+            try {
+                $proximo_seguimiento = date('Y-m-d', strtotime('+3 days'));
+                $update_parts = [
+                    "estado = 'propuesta'",
+                    "fecha_cierre = NULL",
+                    "ultima_gestion = NOW()",
+                    "proximo_contacto = CASE WHEN proximo_contacto IS NULL OR proximo_contacto < CURDATE() THEN ? ELSE proximo_contacto END"
+                ];
+                $update_vals = [$proximo_seguimiento];
+
+                if (tabla_tiene_columna($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_id')) {
+                    $update_parts[] = 'ultima_cotizacion_id = ?';
+                    $update_vals[] = $cotizacion_id;
+                }
+                if (tabla_tiene_columna($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_numero')) {
+                    $update_parts[] = 'ultima_cotizacion_numero = ?';
+                    $update_vals[] = $numero_cotizacion;
+                }
+                if (tabla_tiene_columna($pdo, 'ecommerce_crm_visitas', 'fecha_ultima_cotizacion')) {
+                    $update_parts[] = 'fecha_ultima_cotizacion = NOW()';
+                }
+
+                $update_vals[] = $crm_id;
+                $stmt = $pdo->prepare("UPDATE ecommerce_crm_visitas SET " . implode(', ', $update_parts) . " WHERE id = ?");
+                $stmt->execute($update_vals);
+
+                if (cotizacion_tabla_existe($pdo, 'ecommerce_crm_seguimientos')) {
+                    $comentario_crm = "Se generó la cotización {$numero_cotizacion} por " . ($_SESSION['user']['usuario'] ?? $_SESSION['user']['nombre'] ?? 'usuario') . ".";
+                    $stmt = $pdo->prepare("INSERT INTO ecommerce_crm_seguimientos (crm_id, visita_id, usuario_id, canal, resultado, comentario, proximo_contacto)
+                        VALUES (?, ?, ?, 'cotizacion', 'cotizado', ?, ?)");
+                    $stmt->execute([
+                        $crm_id,
+                        !empty($crm_context['visita_id']) ? (int)$crm_context['visita_id'] : 0,
+                        $_SESSION['user']['id'] ?? null,
+                        $comentario_crm,
+                        $proximo_seguimiento,
+                    ]);
+                }
+            } catch (Exception $e) {
+                error_log('cotizacion_crear_crm: ' . $e->getMessage());
+            }
+
+            header("Location: crm.php?lead=" . (int)$crm_id . "&ok=" . urlencode("Cotización {$numero_cotizacion} creada y vinculada al CRM."));
+            exit;
+        }
         
         header("Location: cotizaciones.php?mensaje=creada");
         exit;
@@ -319,6 +421,81 @@ $listas_precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $stmt = $pdo->query("SELECT id, nombre, email, telefono, direccion, cuit, factura_a, es_empresa FROM ecommerce_cotizacion_clientes WHERE activo = 1 ORDER BY nombre");
 $clientes_cot = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$observacion_crm = '';
+if ($crm_context) {
+    $observaciones_crm_partes = [];
+    $observaciones_crm_partes[] = 'Origen CRM desde visita';
+    if (!empty($crm_context['fecha_visita'])) {
+        $observaciones_crm_partes[] = 'Fecha de visita: ' . date('d/m/Y', strtotime((string)$crm_context['fecha_visita']));
+    }
+    if (!empty($crm_context['titulo'])) {
+        $observaciones_crm_partes[] = 'Motivo: ' . trim((string)$crm_context['titulo']);
+    }
+    if (!empty($crm_context['visita_descripcion'])) {
+        $observaciones_crm_partes[] = 'Detalle visita: ' . trim((string)$crm_context['visita_descripcion']);
+    }
+    if (!empty($crm_context['notas_internas'])) {
+        $observaciones_crm_partes[] = 'Notas CRM: ' . trim((string)$crm_context['notas_internas']);
+    }
+    $observacion_crm = implode("\n", $observaciones_crm_partes);
+}
+
+$form_data = [
+    'crm_id' => $crm_id_context,
+    'cliente_id' => (int)($_POST['cliente_id'] ?? 0),
+    'nombre_cliente' => trim((string)($_POST['nombre_cliente'] ?? ($crm_context['cliente_nombre'] ?? ''))),
+    'email' => trim((string)($_POST['email'] ?? '')),
+    'telefono' => trim((string)($_POST['telefono'] ?? ($crm_context['telefono'] ?? ''))),
+    'direccion' => trim((string)($_POST['direccion'] ?? ($crm_context['direccion'] ?? ''))),
+    'observaciones' => (string)($_POST['observaciones'] ?? $observacion_crm),
+    'validez_dias' => (int)($_POST['validez_dias'] ?? 15),
+    'lista_precio_id' => trim((string)($_POST['lista_precio_id'] ?? '')),
+    'es_empresa' => !empty($_POST['es_empresa']),
+    'factura_a' => !empty($_POST['factura_a']),
+    'cuit' => trim((string)($_POST['cuit'] ?? '')),
+];
+
+if ($form_data['cliente_id'] <= 0 && !empty($clientes_cot)) {
+    foreach ($clientes_cot as $cli) {
+        $telefono_cli = trim((string)($cli['telefono'] ?? ''));
+        $nombre_cli = trim((string)($cli['nombre'] ?? ''));
+        if ($form_data['telefono'] !== '' && $telefono_cli !== '' && $telefono_cli === $form_data['telefono']) {
+            $form_data['cliente_id'] = (int)$cli['id'];
+            break;
+        }
+        if ($form_data['nombre_cliente'] !== '' && $nombre_cli !== '' && mb_strtolower($nombre_cli) === mb_strtolower($form_data['nombre_cliente'])) {
+            $form_data['cliente_id'] = (int)$cli['id'];
+            break;
+        }
+    }
+}
+
+if ($form_data['cliente_id'] > 0) {
+    foreach ($clientes_cot as $cli) {
+        if ((int)$cli['id'] === (int)$form_data['cliente_id']) {
+            if ($form_data['email'] === '' && !empty($cli['email'])) {
+                $form_data['email'] = (string)$cli['email'];
+            }
+            if ($form_data['telefono'] === '' && !empty($cli['telefono'])) {
+                $form_data['telefono'] = (string)$cli['telefono'];
+            }
+            if ($form_data['direccion'] === '' && !empty($cli['direccion'])) {
+                $form_data['direccion'] = (string)$cli['direccion'];
+            }
+            if ($form_data['cuit'] === '' && !empty($cli['cuit'])) {
+                $form_data['cuit'] = (string)$cli['cuit'];
+            }
+            if (!$form_data['es_empresa']) {
+                $form_data['es_empresa'] = !empty($cli['es_empresa']);
+            }
+            if (!$form_data['factura_a']) {
+                $form_data['factura_a'] = !empty($cli['factura_a']);
+            }
+            break;
+        }
+    }
+}
+
 $stmt = $pdo->query("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1");
 $lista_items_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $lista_items_map = [];
@@ -349,7 +526,22 @@ foreach ($lista_cat_rows as $row) {
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
+<?php if ($crm_context): ?>
+    <div class="alert alert-info border d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-center">
+        <div>
+            <strong>CRM vinculado:</strong>
+            <?= htmlspecialchars($crm_context['cliente_nombre'] ?: $crm_context['titulo'] ?: ('Lead #' . $crm_id_context)) ?>
+            <?php if (!empty($crm_context['fecha_visita'])): ?>
+                <span class="text-muted">· visita del <?= htmlspecialchars(date('d/m/Y', strtotime((string)$crm_context['fecha_visita']))) ?></span>
+            <?php endif; ?>
+            <div class="small text-muted">Al guardar, la cotización quedará registrada automáticamente en el historial del CRM.</div>
+        </div>
+        <a href="crm.php?lead=<?= (int)$crm_id_context ?>" class="btn btn-outline-primary btn-sm">← Volver al CRM</a>
+    </div>
+<?php endif; ?>
+
 <form method="POST" id="formCotizacion">
+    <input type="hidden" name="crm_id" value="<?= (int)($form_data['crm_id'] ?? 0) ?>">
     <style>
         .attr-option-item {
             border: 2px solid #ddd;
@@ -386,31 +578,31 @@ foreach ($lista_cat_rows as $row) {
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="nombre_cliente" class="form-label">Nombre Completo *</label>
-                        <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" required>
+                        <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente" value="<?= htmlspecialchars((string)($form_data['nombre_cliente'] ?? '')) ?>" required>
                     </div>
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email">
+                        <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars((string)($form_data['email'] ?? '')) ?>">
                     </div>
                     <div class="mb-3">
                         <label for="telefono" class="form-label">Teléfono</label>
-                        <input type="text" class="form-control" id="telefono" name="telefono">
+                        <input type="text" class="form-control" id="telefono" name="telefono" value="<?= htmlspecialchars((string)($form_data['telefono'] ?? '')) ?>">
                     </div>
                     <div class="mb-3">
                         <label for="direccion" class="form-label">Dirección</label>
-                        <input type="text" class="form-control" id="direccion" name="direccion">
+                        <input type="text" class="form-control" id="direccion" name="direccion" value="<?= htmlspecialchars((string)($form_data['direccion'] ?? '')) ?>">
                     </div>
                     <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" value="1" id="es_empresa" name="es_empresa" onchange="toggleEmpresaFields()">
+                        <input class="form-check-input" type="checkbox" value="1" id="es_empresa" name="es_empresa" onchange="toggleEmpresaFields()" <?= !empty($form_data['es_empresa']) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="es_empresa">Es empresa</label>
                     </div>
                     <div id="empresaFields" style="display:none;">
                         <div class="mb-3">
                             <label for="cuit" class="form-label">CUIT</label>
-                            <input type="text" class="form-control" id="cuit" name="cuit" maxlength="13" placeholder="Ej: 30-12345678-9">
+                            <input type="text" class="form-control" id="cuit" name="cuit" maxlength="13" value="<?= htmlspecialchars((string)($form_data['cuit'] ?? '')) ?>" placeholder="Ej: 30-12345678-9">
                         </div>
                         <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" value="1" id="factura_a" name="factura_a" onchange="toggleEmpresaFields()">
+                            <input class="form-check-input" type="checkbox" value="1" id="factura_a" name="factura_a" onchange="toggleEmpresaFields()" <?= !empty($form_data['factura_a']) ? 'checked' : '' ?>>
                             <label class="form-check-label" for="factura_a">Necesita Factura A</label>
                         </div>
                     </div>
@@ -427,7 +619,7 @@ foreach ($lista_cat_rows as $row) {
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="validez_dias" class="form-label">Validez (días)</label>
-                        <input type="number" class="form-control" id="validez_dias" name="validez_dias" value="15" min="1" max="90">
+                        <input type="number" class="form-control" id="validez_dias" name="validez_dias" value="<?= htmlspecialchars((string)($form_data['validez_dias'] ?? 15)) ?>" min="1" max="90">
                         <small class="text-muted">Días de validez del presupuesto</small>
                     </div>
                     <div class="mb-3">
@@ -435,7 +627,7 @@ foreach ($lista_cat_rows as $row) {
                         <select class="form-select" id="lista_precio_id" name="lista_precio_id" onchange="aplicarListaPrecios()">
                             <option value="">-- Sin lista --</option>
                             <?php foreach ($listas_precios as $lista): ?>
-                                <option value="<?= $lista['id'] ?>"><?= htmlspecialchars($lista['nombre']) ?></option>
+                                <option value="<?= $lista['id'] ?>" <?= (string)($form_data['lista_precio_id'] ?? '') === (string)$lista['id'] ? 'selected' : '' ?>><?= htmlspecialchars($lista['nombre']) ?></option>
                             <?php endforeach; ?>
                         </select>
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
@@ -450,7 +642,7 @@ foreach ($lista_cat_rows as $row) {
                         <select class="form-select" id="cliente_id" name="cliente_id" onchange="autocompletarCliente()">
                             <option value="">-- Seleccionar cliente --</option>
                             <?php foreach ($clientes_cot as $cli): ?>
-                                <option value="<?= $cli['id'] ?>">
+                                <option value="<?= $cli['id'] ?>" <?= (int)($form_data['cliente_id'] ?? 0) === (int)$cli['id'] ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($cli['nombre']) ?><?= !empty($cli['direccion']) ? ' - ' . htmlspecialchars($cli['direccion']) : '' ?>
                                 </option>
                             <?php endforeach; ?>
@@ -462,7 +654,7 @@ foreach ($lista_cat_rows as $row) {
                     </div>
                     <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
-                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas internas, condiciones especiales, etc."></textarea>
+                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas internas, condiciones especiales, etc."><?= htmlspecialchars((string)($form_data['observaciones'] ?? '')) ?></textarea>
                     </div>
                 </div>
             </div>
@@ -1591,6 +1783,10 @@ function toggleEmpresaFields() {
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
     toggleEmpresaFields();
+    const clienteSelect = document.getElementById('cliente_id');
+    if (clienteSelect && clienteSelect.value) {
+        autocompletarCliente();
+    }
     aplicarListaPrecios();
     const btnGuardar = document.getElementById('guardarItemBtn');
     if (btnGuardar) {
