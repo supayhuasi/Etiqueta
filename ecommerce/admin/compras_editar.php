@@ -1,5 +1,7 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/compras_workflow.php';
+ensureComprasWorkflowSchema($pdo);
 
 $compra_id = (int)($_GET['id'] ?? 0);
 $error = '';
@@ -10,6 +12,10 @@ $compra = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$compra) {
     die('Compra no encontrada');
+}
+
+if (($compra['recepcion_estado'] ?? 'pendiente') !== 'pendiente') {
+    $error = 'No se puede editar una compra con recepción parcial o total. Ajustá la recepción desde el detalle.';
 }
 
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo = 1 ORDER BY nombre");
@@ -58,7 +64,7 @@ function ajustar_stock_compra($pdo, $item, $signo, $tieneMatriz)
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
     try {
         $proveedor_id = (int)($_POST['proveedor_id'] ?? 0);
         $fecha_compra = $_POST['fecha_compra'] ?? '';
@@ -119,19 +125,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->beginTransaction();
 
-        $stmt = $pdo->prepare("SELECT ci.*, p.tipo_precio FROM ecommerce_compra_items ci JOIN ecommerce_productos p ON p.id = ci.producto_id WHERE ci.compra_id = ?");
-        $stmt->execute([$compra_id]);
-        $itemsActuales = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $tiene_matriz = $pdo->query("SHOW TABLES LIKE 'ecommerce_matriz_precios'")->rowCount() > 0;
-
-        foreach ($itemsActuales as $itemActual) {
-            ajustar_stock_compra($pdo, $itemActual, -1, $tiene_matriz);
-        }
-
-        $stmt = $pdo->prepare("DELETE FROM ecommerce_inventario_movimientos WHERE tipo = 'compra' AND referencia = ?");
-        $stmt->execute([$compra['numero_compra']]);
-
         $stmt = $pdo->prepare("DELETE FROM ecommerce_compra_items WHERE compra_id = ?");
         $stmt->execute([$compra_id]);
 
@@ -144,8 +137,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $stmtItem = $pdo->prepare("INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)");
         }
-
-        $stmtMov = $pdo->prepare("INSERT INTO ecommerce_inventario_movimientos (producto_id, tipo, cantidad, alto_cm, ancho_cm, referencia) VALUES (?, 'compra', ?, ?, ?, ?)");
 
         foreach ($nuevosItems as $ni) {
             if ($tiene_atributos_col) {
@@ -171,15 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
-            ajustar_stock_compra($pdo, $ni, 1, $tiene_matriz);
-
-            $stmtMov->execute([
-                $ni['producto_id'],
-                $ni['cantidad'],
-                $ni['alto_cm'],
-                $ni['ancho_cm'],
-                $compra['numero_compra']
-            ]);
         }
 
         $pdo->commit();
@@ -197,34 +179,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->prepare("SELECT ci.*, pr.nombre AS producto_nombre, pr.tipo_precio FROM ecommerce_compra_items ci LEFT JOIN ecommerce_productos pr ON pr.id = ci.producto_id WHERE ci.compra_id = ? ORDER BY ci.id");
 $stmt->execute([$compra_id]);
 $itemsCompra = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        $proveedor_id = (int)($_POST['proveedor_id'] ?? 0);
-        $fecha_compra = $_POST['fecha_compra'] ?? '';
-        $observaciones = trim($_POST['observaciones'] ?? '');
-
-        if ($proveedor_id <= 0) {
-            throw new Exception('Seleccione un proveedor');
-        }
-
-        if (empty($fecha_compra)) {
-            throw new Exception('Seleccione una fecha de compra');
-        }
-
-        $stmt = $pdo->prepare("
-            UPDATE ecommerce_compras
-            SET proveedor_id = ?, fecha_compra = ?, observaciones = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([$proveedor_id, $fecha_compra, $observaciones, $compra_id]);
-
-        header('Location: compras_detalle.php?id=' . $compra_id . '&mensaje=editada');
-        exit;
-    } catch (Exception $e) {
-        $error = $e->getMessage();
-    }
-}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">

@@ -1,5 +1,7 @@
 <?php
 require '../includes/header.php';
+require_once __DIR__ . '/gastos_budget_helper.php';
+ensureGastosBudgetSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -22,7 +24,7 @@ $stmt_meses = $pdo->query("SELECT DISTINCT DATE_FORMAT(fecha, '%Y-%m') as mes FR
 $meses_disponibles = $stmt_meses->fetchAll(PDO::FETCH_COLUMN);
 
 // Obtener tipos y estados para filtros
-$stmt_tipos = $pdo->query("SELECT id, nombre, color FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
+$stmt_tipos = $pdo->query("SELECT id, nombre, color, presupuesto_mensual, porcentaje_alerta, bloquear_exceso FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
 $tipos_gastos = $stmt_tipos->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt_estados = $pdo->query("SELECT id, nombre, color FROM estados_gastos WHERE activo = 1 ORDER BY nombre");
@@ -69,14 +71,15 @@ $stmt_total = $pdo->prepare("
 ");
 $stmt_total->execute([$mes_filtro]);
 $totales = $stmt_total->fetch(PDO::FETCH_ASSOC);
+$alertas_presupuesto = obtenerAlertasPresupuestoMes($pdo, $mes_filtro);
 
 // Gastos por tipo
 $stmt_por_tipo = $pdo->prepare("
-    SELECT t.nombre, t.color, COUNT(*) as cantidad, SUM(g.monto) as total
+    SELECT t.nombre, t.color, t.presupuesto_mensual, t.porcentaje_alerta, COUNT(*) as cantidad, SUM(g.monto) as total
     FROM gastos g
     LEFT JOIN tipos_gastos t ON g.tipo_gasto_id = t.id
     WHERE DATE_FORMAT(g.fecha, '%Y-%m') = ?
-    GROUP BY g.tipo_gasto_id
+    GROUP BY g.tipo_gasto_id, t.nombre, t.color, t.presupuesto_mensual, t.porcentaje_alerta
     ORDER BY total DESC
 ");
 $stmt_por_tipo->execute([$mes_filtro]);
@@ -172,6 +175,35 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <?php if (!empty($alertas_presupuesto)): ?>
+        <div class="alert alert-warning border-start border-4 border-warning mb-4" role="alert">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <strong>Alertas de presupuesto en <?= htmlspecialchars($mes_filtro) ?></strong><br>
+                    <small>Se detectaron tipos de gasto que ya alcanzaron o superaron el umbral configurado.</small>
+                </div>
+                <a href="tipos_gastos.php" class="btn btn-sm btn-outline-dark">Configurar presupuestos</a>
+            </div>
+            <div class="mt-3 d-flex flex-column gap-2">
+                <?php foreach ($alertas_presupuesto as $alerta): ?>
+                    <?php
+                        $esExcedido = ($alerta['estado'] ?? '') === 'excedido';
+                        $clase = $esExcedido ? 'danger' : 'warning';
+                    ?>
+                    <div class="p-2 rounded border border-<?= $clase ?> bg-<?= $clase ?> bg-opacity-10">
+                        <strong><?= htmlspecialchars($alerta['nombre']) ?></strong>
+                        <span class="badge bg-<?= $clase ?> ms-2"><?= $esExcedido ? 'Excedido' : 'En alerta' ?></span>
+                        <div class="small mt-1">
+                            Gastado: <strong>$<?= number_format((float)($alerta['gastado_actual'] ?? 0), 2, ',', '.') ?></strong>
+                            / Presupuesto: <strong>$<?= number_format((float)($alerta['presupuesto_mensual'] ?? 0), 2, ',', '.') ?></strong>
+                            · Uso: <strong><?= number_format((float)($alerta['porcentaje_usado'] ?? 0), 1, ',', '.') ?>%</strong>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="row mb-4">
         <div class="col-md-8">
             <!-- Tabla de gastos -->
@@ -249,6 +281,17 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                         <p class="text-muted text-center">Sin datos</p>
                     <?php else: ?>
                         <?php foreach ($gastos_por_tipo as $tipo): ?>
+                            <?php
+                                $presupuestoTipo = (float)($tipo['presupuesto_mensual'] ?? 0);
+                                $porcentajeUsadoTipo = $presupuestoTipo > 0 ? min(100, (($tipo['total'] ?? 0) / $presupuestoTipo) * 100) : 0;
+                                $claseBarra = 'bg-success';
+                                if ($presupuestoTipo > 0 && $porcentajeUsadoTipo >= (float)($tipo['porcentaje_alerta'] ?? 80)) {
+                                    $claseBarra = 'bg-warning';
+                                }
+                                if ($presupuestoTipo > 0 && ($tipo['total'] ?? 0) > $presupuestoTipo) {
+                                    $claseBarra = 'bg-danger';
+                                }
+                            ?>
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <span class="badge" style="background-color: <?= htmlspecialchars($tipo['color'] ?? '#999') ?>">
@@ -256,7 +299,15 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
                                     </span>
                                     <strong>$<?= number_format($tipo['total'] ?? 0, 0, ',', '.') ?></strong>
                                 </div>
-                                <small class="text-muted"><?= $tipo['cantidad'] ?> gasto(s)</small>
+                                <small class="text-muted d-block mb-1"><?= $tipo['cantidad'] ?> gasto(s)</small>
+                                <?php if ($presupuestoTipo > 0): ?>
+                                    <div class="progress" style="height: 8px;">
+                                        <div class="progress-bar <?= $claseBarra ?>" style="width: <?= min(100, max(0, $porcentajeUsadoTipo)) ?>%"></div>
+                                    </div>
+                                    <small class="text-muted">
+                                        Presupuesto: $<?= number_format($presupuestoTipo, 0, ',', '.') ?> · Uso: <?= number_format($porcentajeUsadoTipo, 1, ',', '.') ?>%
+                                    </small>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>

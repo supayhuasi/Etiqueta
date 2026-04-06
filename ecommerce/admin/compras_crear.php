@@ -1,5 +1,7 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/compras_workflow.php';
+ensureComprasWorkflowSchema($pdo);
 
 $mensaje = '';
 $error = '';
@@ -163,11 +165,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $pdo->query("SELECT MAX(id) as max_id FROM ecommerce_compras");
         $max_id = $stmt->fetch()['max_id'] ?? 0;
-        $numero_compra = 'COMP-' . date('Y') . '-' . str_pad($max_id + 1, 5, '0', STR_PAD_LEFT);
+        $numero_compra = 'OC-' . date('Y') . '-' . str_pad($max_id + 1, 5, '0', STR_PAD_LEFT);
 
         $stmt = $pdo->prepare("
-            INSERT INTO ecommerce_compras (numero_compra, proveedor_id, fecha_compra, subtotal, total, observaciones, creado_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ecommerce_compras (numero_compra, proveedor_id, fecha_compra, subtotal, total, estado, recepcion_estado, stock_actualizado, observaciones, creado_por)
+            VALUES (?, ?, ?, ?, ?, 'orden_pendiente', 'pendiente', 0, ?, ?)
         ");
         $stmt->execute([
             $numero_compra,
@@ -181,82 +183,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $compra_id = $pdo->lastInsertId();
 
-        if ($tiene_atributos_col) {
-            $stmtItem = $pdo->prepare("
-                INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal, atributos_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-        } else {
-            $stmtItem = $pdo->prepare("
-                INSERT INTO ecommerce_compra_items (compra_id, producto_id, cantidad, costo_unitario, alto_cm, ancho_cm, subtotal)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ");
-        }
-
-        $stmtMov = $pdo->prepare("
-            INSERT INTO ecommerce_inventario_movimientos (producto_id, tipo, cantidad, alto_cm, ancho_cm, referencia)
-            VALUES (?, 'compra', ?, ?, ?, ?)
+        $stmtItem = $pdo->prepare("
+            INSERT INTO ecommerce_compra_items (compra_id, producto_id, color_opcion_id, cantidad, cantidad_recibida, costo_unitario, alto_cm, ancho_cm, subtotal, atributos_json)
+            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
         ");
 
         foreach ($items as $item) {
-            if ($tiene_atributos_col) {
-                $stmtItem->execute([
-                    $compra_id,
-                    $item['producto_id'],
-                    $item['cantidad'],
-                    $item['costo_unitario'],
-                    $item['alto_cm'],
-                    $item['ancho_cm'],
-                    $item['subtotal'],
-                    !empty($item['atributos']) ? json_encode($item['atributos']) : null
-                ]);
-            } else {
-                $stmtItem->execute([
-                    $compra_id,
-                    $item['producto_id'],
-                    $item['cantidad'],
-                    $item['costo_unitario'],
-                    $item['alto_cm'],
-                    $item['ancho_cm'],
-                    $item['subtotal']
-                ]);
-            }
-
-            $producto = $productosById[$item['producto_id']] ?? null;
-            if ($producto && $producto['tipo_precio'] === 'variable' && $item['alto_cm'] && $item['ancho_cm']) {
-                $stmtCheck = $pdo->prepare("SELECT id FROM ecommerce_matriz_precios WHERE producto_id = ? AND alto_cm = ? AND ancho_cm = ?");
-                $stmtCheck->execute([$item['producto_id'], $item['alto_cm'], $item['ancho_cm']]);
-                $matriz = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-
-                if ($matriz) {
-                    $stmtUpd = $pdo->prepare("UPDATE ecommerce_matriz_precios SET stock = stock + ? WHERE id = ?");
-                    $stmtUpd->execute([$item['cantidad'], $matriz['id']]);
-                } else {
-                    $stmtIns = $pdo->prepare("INSERT INTO ecommerce_matriz_precios (producto_id, alto_cm, ancho_cm, precio, stock) VALUES (?, ?, ?, 0, ?)");
-                    $stmtIns->execute([$item['producto_id'], $item['alto_cm'], $item['ancho_cm'], $item['cantidad']]);
-                }
-            } else {
-                if (!empty($item['color_opcion_id'])) {
-                    $stmtUpd = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock + ? WHERE id = ?");
-                    $stmtUpd->execute([$item['cantidad'], $item['color_opcion_id']]);
-                } else {
-                    $stmtUpd = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock + ? WHERE id = ?");
-                    $stmtUpd->execute([$item['cantidad'], $item['producto_id']]);
-                }
-            }
-
-            $stmtMov->execute([
+            $stmtItem->execute([
+                $compra_id,
                 $item['producto_id'],
+                !empty($item['color_opcion_id']) ? $item['color_opcion_id'] : null,
                 $item['cantidad'],
+                $item['costo_unitario'],
                 $item['alto_cm'],
                 $item['ancho_cm'],
-                $numero_compra
+                $item['subtotal'],
+                !empty($item['atributos']) ? json_encode($item['atributos']) : null
             ]);
         }
 
         $pdo->commit();
 
-        header("Location: compras_detalle.php?id=" . $compra_id . "&mensaje=creada");
+        header("Location: compras_detalle.php?id=" . $compra_id . "&mensaje=orden_creada");
         exit;
     } catch (Exception $e) {
         if ($pdo->inTransaction()) {
@@ -269,8 +217,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1>🧾 Nueva Compra</h1>
-        <p class="text-muted">Registrar compras para actualizar inventario</p>
+        <h1>🧾 Nueva Orden de Compra</h1>
+        <p class="text-muted">Primero se registra la orden; el stock se actualiza recién al aprobar y recepcionar.</p>
     </div>
     <a href="compras.php" class="btn btn-secondary">← Volver</a>
 </div>

@@ -8,10 +8,24 @@ $pdo->exec("
         nombre VARCHAR(100) NOT NULL UNIQUE,
         descripcion TEXT,
         color VARCHAR(20),
+        presupuesto_mensual DECIMAL(12,2) NULL DEFAULT NULL,
+        porcentaje_alerta DECIMAL(5,2) NOT NULL DEFAULT 80,
+        bloquear_exceso TINYINT(1) NOT NULL DEFAULT 1,
         activo BOOLEAN DEFAULT 1,
         fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
     )
 ");
+
+$cols_tipos = $pdo->query("SHOW COLUMNS FROM tipos_gastos")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (!in_array('presupuesto_mensual', $cols_tipos, true)) {
+    $pdo->exec("ALTER TABLE tipos_gastos ADD COLUMN presupuesto_mensual DECIMAL(12,2) NULL DEFAULT NULL AFTER color");
+}
+if (!in_array('porcentaje_alerta', $cols_tipos, true)) {
+    $pdo->exec("ALTER TABLE tipos_gastos ADD COLUMN porcentaje_alerta DECIMAL(5,2) NOT NULL DEFAULT 80 AFTER presupuesto_mensual");
+}
+if (!in_array('bloquear_exceso', $cols_tipos, true)) {
+    $pdo->exec("ALTER TABLE tipos_gastos ADD COLUMN bloquear_exceso TINYINT(1) NOT NULL DEFAULT 1 AFTER porcentaje_alerta");
+}
 
 // Crear tabla estados_gastos
 $pdo->exec("
@@ -77,7 +91,9 @@ $tipos = [
     ['Insumos', 'Materiales e insumos', '#28A745'],
     ['Transporte', 'Gastos de transporte', '#FFC107'],
     ['Mantenimiento', 'Mantenimiento y reparaciones', '#DC3545'],
-    ['Utilidades', 'Servicios de utilidades', '#6F42C1']
+    ['Utilidades', 'Servicios de utilidades', '#6F42C1'],
+    ['Publicidad', 'Publicidad, marketing y difusión', '#E83E8C'],
+    ['Impuestos', 'Impuestos, tasas y percepciones', '#FD7E14']
 ];
 
 $stmt = $pdo->prepare("INSERT IGNORE INTO tipos_gastos (nombre, descripcion, color) VALUES (?, ?, ?)");

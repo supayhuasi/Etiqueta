@@ -1,5 +1,7 @@
 <?php
 require '../includes/header.php';
+require_once __DIR__ . '/gastos_budget_helper.php';
+ensureGastosBudgetSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -23,7 +25,7 @@ if (!$gasto) {
 }
 
 // Obtener tipos y estados
-$stmt_tipos = $pdo->query("SELECT id, nombre FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
+$stmt_tipos = $pdo->query("SELECT id, nombre, color, presupuesto_mensual, porcentaje_alerta, bloquear_exceso FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
 $tipos = $stmt_tipos->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt_estados = $pdo->query("SELECT id, nombre FROM estados_gastos WHERE activo = 1 ORDER BY nombre");
@@ -32,6 +34,8 @@ $estados = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 // Obtener empleados
 $stmt_empleados = $pdo->query("SELECT id, nombre FROM empleados WHERE activo = 1 ORDER BY nombre");
 $empleados = $stmt_empleados->fetchAll(PDO::FETCH_ASSOC);
+
+$alerta_presupuesto = null;
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -50,6 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($estado_gasto_id <= 0) $errores[] = "Debe seleccionar un estado";
     if (empty($descripcion)) $errores[] = "La descripción es obligatoria";
     if ($monto <= 0) $errores[] = "El monto debe ser mayor a 0";
+
+    $presupuesto_info = obtenerResumenPresupuestoGasto($pdo, (int)$tipo_gasto_id, (string)$fecha, (float)$monto, (int)$id);
+    if (($presupuesto_info['estado'] ?? '') === 'excedido' && !empty($presupuesto_info['bloquear_exceso'])) {
+        $errores[] = $presupuesto_info['mensaje'] . ' El tipo está configurado para no exceder el presupuesto.';
+    } elseif (in_array(($presupuesto_info['estado'] ?? ''), ['alerta', 'excedido'], true)) {
+        $alerta_presupuesto = $presupuesto_info['mensaje'];
+    }
     
     $archivo = $gasto['archivo'];
     
@@ -179,6 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             <?php endif; ?>
 
+            <?php if (!empty($alerta_presupuesto)): ?>
+                <div class="alert alert-warning" role="alert"><?= htmlspecialchars($alerta_presupuesto) ?></div>
+            <?php endif; ?>
+
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger" role="alert"><?= $error ?></div>
             <?php endif; ?>
@@ -212,6 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <small class="text-muted">La edición también controla el presupuesto mensual configurado.</small>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="estado_gasto_id" class="form-label">Estado *</label>
@@ -222,6 +238,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                            <div class="col-12">
+                                <div id="budgetAlertBox" class="alert d-none mb-3"></div>
                             </div>
                         </div>
 
@@ -266,5 +285,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 </div>
+
+<script>
+function formatMoneyAr(value) {
+    return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+async function actualizarAlertaPresupuesto() {
+    const tipo = document.getElementById('tipo_gasto_id');
+    const fecha = document.getElementById('fecha');
+    const monto = document.getElementById('monto');
+    const box = document.getElementById('budgetAlertBox');
+    if (!tipo || !fecha || !monto || !box) return;
+
+    try {
+        const url = `gastos_api.php?action=presupuesto_info&tipo_gasto_id=${encodeURIComponent(tipo.value || '0')}&fecha=${encodeURIComponent(fecha.value || '')}&monto=${encodeURIComponent(monto.value || '0')}&exclude_gasto_id=<?= (int)$id ?>`;
+        const response = await fetch(url, { credentials: 'same-origin' });
+        const data = await response.json();
+
+        if (!data.success || !data.info || Number(data.info.presupuesto_mensual || 0) <= 0) {
+            box.className = 'alert d-none mb-3';
+            box.innerHTML = '';
+            return;
+        }
+
+        const info = data.info;
+        let alertClass = 'alert-info';
+        if (info.estado === 'alerta') {
+            alertClass = 'alert-warning';
+        } else if (info.estado === 'excedido') {
+            alertClass = info.bloquear_exceso ? 'alert-danger' : 'alert-warning';
+        }
+
+        box.className = `alert ${alertClass} mb-3`;
+        box.innerHTML = `
+            <strong>${info.tipo_nombre}</strong><br>
+            ${info.mensaje}<br>
+            <small>
+                Mes: ${info.mes} · Gastado actual: $${formatMoneyAr(info.gastado_actual)} · Proyectado: $${formatMoneyAr(info.monto_proyectado)} · Presupuesto: $${formatMoneyAr(info.presupuesto_mensual)}
+            </small>
+        `;
+    } catch (error) {
+        box.className = 'alert d-none mb-3';
+        box.innerHTML = '';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    ['tipo_gasto_id', 'fecha', 'monto'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', actualizarAlertaPresupuesto);
+            el.addEventListener('input', actualizarAlertaPresupuesto);
+        }
+    });
+    actualizarAlertaPresupuesto();
+});
+</script>
 
 <?php require '../includes/footer.php'; ?>

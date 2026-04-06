@@ -33,6 +33,8 @@
  */
 
 require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/gastos_budget_helper.php';
+ensureGastosBudgetSchema($pdo);
 
 header('Content-Type: application/json');
 
@@ -41,11 +43,26 @@ session_start();
 // preferimos la constante/config de config.php si existe
 $apiKey = $robot_api_key ?? (getenv('GASTOS_API_KEY') ?: 'cambia_esta_clave');
 $provided = $_SERVER['HTTP_X_API_KEY'] ?? '';
-$hasSessionAccess = isset($_SESSION['user']) && isset($can_access) && $can_access('gastos');
+$hasSessionAccess = isset($_SESSION['user']) && (!isset($can_access) || $can_access('gastos'));
 
 if (!$hasSessionAccess && $provided !== $apiKey) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Acceso denegado']);
+    exit;
+}
+
+if (($_GET['action'] ?? '') === 'presupuesto_info') {
+    try {
+        $tipoId = (int)($_GET['tipo_gasto_id'] ?? 0);
+        $fecha = (string)($_GET['fecha'] ?? date('Y-m-d'));
+        $monto = (float)($_GET['monto'] ?? 0);
+        $excludeId = isset($_GET['exclude_gasto_id']) ? (int)$_GET['exclude_gasto_id'] : null;
+        $info = obtenerResumenPresupuestoGasto($pdo, $tipoId, $fecha, $monto, $excludeId);
+        echo json_encode(['success' => true, 'info' => $info]);
+    } catch (Exception $e) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
     exit;
 }
 
@@ -107,6 +124,11 @@ try {
     if ($estado_id <= 0) $errores[] = 'Debe indicar un estado válido';
     if ($descripcion === '') $errores[] = 'La descripción es obligatoria';
     if ($monto <= 0) $errores[] = 'El monto debe ser mayor que 0';
+
+    $presupuestoInfo = obtenerResumenPresupuestoGasto($pdo, (int)$tipo_id, (string)$fecha, (float)$monto);
+    if (($presupuestoInfo['estado'] ?? '') === 'excedido' && !empty($presupuestoInfo['bloquear_exceso'])) {
+        $errores[] = $presupuestoInfo['mensaje'] . ' El tipo está configurado para no exceder el presupuesto.';
+    }
 
     $archivoNombre = null;
     if (!empty($data['archivo']) && is_array($data['archivo'])) {
@@ -238,7 +260,14 @@ try {
         ]);
     }
 
-    echo json_encode(['success'=>true, 'gasto_id'=>$gasto_id]);
+    echo json_encode([
+        'success' => true,
+        'gasto_id' => $gasto_id,
+        'presupuesto' => [
+            'estado' => $presupuestoInfo['estado'] ?? 'sin_presupuesto',
+            'mensaje' => $presupuestoInfo['mensaje'] ?? ''
+        ]
+    ]);
 
 } catch (Exception $e) {
     http_response_code(400);
