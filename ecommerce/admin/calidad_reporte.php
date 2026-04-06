@@ -2,7 +2,12 @@
 require 'includes/header.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
-ensureCalidadSchema($pdo);
+$setupError = '';
+try {
+    ensureCalidadSchema($pdo);
+} catch (Throwable $e) {
+    $setupError = 'No se pudo inicializar el módulo de calidad: ' . $e->getMessage();
+}
 
 if (!isset($can_access) || !$can_access('calidad')) {
     die('Acceso denegado.');
@@ -20,8 +25,31 @@ if ($hasta < $desde) {
     $hasta = $desde;
 }
 
-$metricas = obtenerMetricasCalidad($pdo, $desde, $hasta);
-$eventos = obtenerEventosCalidad($pdo, $desde, $hasta, 300);
+$metricas = [
+    'pedidos_entregados' => 0,
+    'reclamos' => 0,
+    'productos_rehechos' => 0,
+    'demoras_entrega' => 0,
+    'demoras_promedio_dias' => 0,
+    'instalaciones_totales' => 0,
+    'instalaciones_con_reclamo' => 0,
+    'porcentaje_instalaciones_sin_reclamo' => 0,
+    'satisfaccion_media' => 0,
+    'satisfaccion_porcentaje' => 0,
+    'satisfaccion_respuestas' => 0,
+    'satisfaccion_escala' => 5,
+];
+$eventos = [];
+
+try {
+    $metricas = obtenerMetricasCalidad($pdo, $desde, $hasta);
+    $eventos = obtenerEventosCalidad($pdo, $desde, $hasta, 300);
+} catch (Throwable $e) {
+    if ($setupError === '') {
+        $setupError = 'No se pudieron cargar las métricas de calidad: ' . $e->getMessage();
+    }
+}
+
 $tasaReclamos = ($metricas['pedidos_entregados'] ?? 0) > 0 ? ((float)$metricas['reclamos'] / (float)$metricas['pedidos_entregados']) * 100 : 0;
 $tasaRehechos = ($metricas['pedidos_entregados'] ?? 0) > 0 ? ((float)$metricas['productos_rehechos'] / (float)$metricas['pedidos_entregados']) * 100 : 0;
 ?>
@@ -70,6 +98,9 @@ $tasaRehechos = ($metricas['pedidos_entregados'] ?? 0) > 0 ? ((float)$metricas['
             <h1 class="mb-1">📄 Reporte de Calidad</h1>
             <div>Período: <strong><?= htmlspecialchars(date('d/m/Y', strtotime((string)$desde))) ?></strong> al <strong><?= htmlspecialchars(date('d/m/Y', strtotime((string)$hasta))) ?></strong></div>
             <small>Generado: <?= htmlspecialchars(date('d/m/Y H:i')) ?></small>
+            <?php if ($setupError !== ''): ?>
+                <div class="mt-2 alert alert-warning mb-0 py-2 px-3"><?= htmlspecialchars($setupError) ?></div>
+            <?php endif; ?>
         </div>
         <div class="d-flex gap-2 no-print">
             <a href="calidad.php?desde=<?= urlencode((string)$desde) ?>&hasta=<?= urlencode((string)$hasta) ?>" class="btn btn-light">← Volver</a>

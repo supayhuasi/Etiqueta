@@ -2,7 +2,12 @@
 require 'includes/header.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
-ensureCalidadSchema($pdo);
+$setupError = '';
+try {
+    ensureCalidadSchema($pdo);
+} catch (Throwable $e) {
+    $setupError = 'No se pudo inicializar el módulo de calidad: ' . $e->getMessage();
+}
 
 if (!isset($can_access) || !$can_access('calidad')) {
     die('Acceso denegado.');
@@ -105,9 +110,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$metricas = obtenerMetricasCalidad($pdo, $desde, $hasta);
-$eventos = obtenerEventosCalidad($pdo, $desde, $hasta, 60);
-$serieMensual = obtenerSerieCalidadMensual($pdo, 6);
+$metricas = [
+    'pedidos_entregados' => 0,
+    'reclamos' => 0,
+    'reclamos_resueltos' => 0,
+    'productos_rehechos' => 0,
+    'demoras_entrega' => 0,
+    'demoras_promedio_dias' => 0,
+    'instalaciones_totales' => 0,
+    'instalaciones_con_reclamo' => 0,
+    'porcentaje_instalaciones_sin_reclamo' => 0,
+    'satisfaccion_media' => 0,
+    'satisfaccion_porcentaje' => 0,
+    'satisfaccion_respuestas' => 0,
+    'satisfaccion_escala' => 5,
+];
+$eventos = [];
+$serieMensual = ['labels' => [], 'series' => []];
+
+try {
+    $metricas = obtenerMetricasCalidad($pdo, $desde, $hasta);
+    $eventos = obtenerEventosCalidad($pdo, $desde, $hasta, 60);
+    $serieMensual = obtenerSerieCalidadMensual($pdo, 6);
+} catch (Throwable $e) {
+    if ($setupError === '') {
+        $setupError = 'No se pudieron cargar las métricas de calidad: ' . $e->getMessage();
+    }
+}
 ?>
 
 <style>
@@ -150,6 +179,15 @@ $serieMensual = obtenerSerieCalidadMensual($pdo, 6);
 
     <?php if ($mensaje !== ''): ?>
         <div class="alert alert-success" role="alert"><?= htmlspecialchars($mensaje) ?></div>
+    <?php endif; ?>
+
+    <?php if ($setupError !== ''): ?>
+        <div class="alert alert-warning" role="alert">
+            <?= htmlspecialchars($setupError) ?>
+            <div class="mt-2">
+                <a href="setup_calidad.php" class="btn btn-sm btn-outline-dark">Inicializar módulo</a>
+            </div>
+        </div>
     <?php endif; ?>
 
     <?php if ($error !== ''): ?>

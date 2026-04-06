@@ -4,9 +4,15 @@ if (!function_exists('calidad_table_exists')) {
     function calidad_table_exists(PDO $pdo, string $table): bool
     {
         try {
-            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
             $stmt->execute([$table]);
-            return (bool)$stmt->fetchColumn();
+            return (int)$stmt->fetchColumn() > 0;
+        } catch (Throwable $e) {
+        }
+
+        try {
+            $pdo->query("SELECT 1 FROM `{$table}` LIMIT 1");
+            return true;
         } catch (Throwable $e) {
             return false;
         }
@@ -16,12 +22,8 @@ if (!function_exists('calidad_table_exists')) {
 if (!function_exists('calidad_columns')) {
     function calidad_columns(PDO $pdo, string $table): array
     {
-        if (!calidad_table_exists($pdo, $table)) {
-            return [];
-        }
-
         try {
-            return $pdo->query("SHOW COLUMNS FROM {$table}")->fetchAll(PDO::FETCH_COLUMN, 0) ?: [];
+            return $pdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN, 0) ?: [];
         } catch (Throwable $e) {
             return [];
         }
@@ -59,42 +61,46 @@ if (!function_exists('calidad_scalar')) {
 if (!function_exists('ensureCalidadSchema')) {
     function ensureCalidadSchema(PDO $pdo): void
     {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_calidad_eventos (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            tipo ENUM('reclamo','rehecho','demora','satisfaccion') NOT NULL,
-            titulo VARCHAR(150) NOT NULL,
-            descripcion TEXT NULL,
-            pedido_id INT NULL,
-            instalacion_tipo VARCHAR(20) NULL,
-            instalacion_id INT NULL,
-            cliente_nombre VARCHAR(150) NULL,
-            cantidad INT NOT NULL DEFAULT 1,
-            dias_demora INT NOT NULL DEFAULT 0,
-            puntaje_satisfaccion DECIMAL(5,2) NULL,
-            fecha_evento DATE NOT NULL,
-            estado VARCHAR(20) NOT NULL DEFAULT 'abierto',
-            creado_por INT NULL,
-            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_tipo_fecha (tipo, fecha_evento),
-            INDEX idx_pedido (pedido_id),
-            INDEX idx_instalacion (instalacion_tipo, instalacion_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_calidad_eventos (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                tipo ENUM('reclamo','rehecho','demora','satisfaccion') NOT NULL,
+                titulo VARCHAR(150) NOT NULL,
+                descripcion TEXT NULL,
+                pedido_id INT NULL,
+                instalacion_tipo VARCHAR(20) NULL,
+                instalacion_id INT NULL,
+                cliente_nombre VARCHAR(150) NULL,
+                cantidad INT NOT NULL DEFAULT 1,
+                dias_demora INT NOT NULL DEFAULT 0,
+                puntaje_satisfaccion DECIMAL(5,2) NULL,
+                fecha_evento DATE NOT NULL,
+                estado VARCHAR(20) NOT NULL DEFAULT 'abierto',
+                creado_por INT NULL,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_tipo_fecha (tipo, fecha_evento),
+                INDEX idx_pedido (pedido_id),
+                INDEX idx_instalacion (instalacion_tipo, instalacion_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        $columns = calidad_columns($pdo, 'ecommerce_calidad_eventos');
-        if (!in_array('cliente_nombre', $columns, true)) {
-            $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN cliente_nombre VARCHAR(150) NULL AFTER instalacion_id");
-        }
-        if (!in_array('cantidad', $columns, true)) {
-            $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN cantidad INT NOT NULL DEFAULT 1 AFTER cliente_nombre");
-        }
-        if (!in_array('dias_demora', $columns, true)) {
-            $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN dias_demora INT NOT NULL DEFAULT 0 AFTER cantidad");
-        }
-        if (!in_array('puntaje_satisfaccion', $columns, true)) {
-            $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN puntaje_satisfaccion DECIMAL(5,2) NULL AFTER dias_demora");
-        }
-        if (!in_array('estado', $columns, true)) {
-            $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'abierto' AFTER fecha_evento");
+            $columns = calidad_columns($pdo, 'ecommerce_calidad_eventos');
+            if (!in_array('cliente_nombre', $columns, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN cliente_nombre VARCHAR(150) NULL AFTER instalacion_id");
+            }
+            if (!in_array('cantidad', $columns, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN cantidad INT NOT NULL DEFAULT 1 AFTER cliente_nombre");
+            }
+            if (!in_array('dias_demora', $columns, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN dias_demora INT NOT NULL DEFAULT 0 AFTER cantidad");
+            }
+            if (!in_array('puntaje_satisfaccion', $columns, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN puntaje_satisfaccion DECIMAL(5,2) NULL AFTER dias_demora");
+            }
+            if (!in_array('estado', $columns, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'abierto' AFTER fecha_evento");
+            }
+        } catch (Throwable $e) {
+            error_log('ensureCalidadSchema: ' . $e->getMessage());
         }
     }
 }
