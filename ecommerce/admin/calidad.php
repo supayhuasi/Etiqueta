@@ -516,7 +516,7 @@ try {
 
                     <div class="col-12 d-flex gap-2 flex-wrap">
                         <button type="submit" class="btn btn-primary">Guardar control de calidad</button>
-                        <a href="calidad_reporte_pedido.php?pedido_id=<?= (int)$pedidoCalidad['id'] ?>" class="btn btn-outline-primary" target="_blank">Ver reporte</a>
+                        <a href="calidad_reporte_pedido.php?pedido_id=<?= (int)$pedidoCalidad['id'] ?>" class="btn btn-outline-primary" target="_blank">Reporte PDF</a>
                         <?php if ($inspeccionPedido): ?>
                             <a href="calidad_inspeccion_pdf.php?pedido_id=<?= (int)$pedidoCalidad['id'] ?>" class="btn btn-outline-dark" target="_blank">Imprimir informe PDF</a>
                         <?php endif; ?>

@@ -253,12 +253,17 @@ $estado_filter = $_GET['estado'] ?? '';
 $fecha_desde = $_GET['fecha_desde'] ?? '';
 $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $cliente_busqueda = $_GET['cliente'] ?? '';
+$calidad_revision_filter = $_GET['calidad_revision'] ?? '';
+$calidad_observacion_filter = $_GET['calidad_observacion'] ?? '';
 
 $query = "
     SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
            COALESCE(pp.total_pagado, 0) AS total_pagado,
+           ci.id AS calidad_inspeccion_id,
            ci.estado_calidad,
            ci.prueba_aprobada,
+           ci.detalle_revision,
+           ci.observaciones,
            ci.fecha_revision AS calidad_fecha_revision
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
@@ -293,6 +298,29 @@ if (!empty($cliente_busqueda)) {
     $params[] = $busqueda_wildcard;
     $params[] = $busqueda_wildcard;
     $params[] = $busqueda_wildcard;
+}
+
+if ($calidad_revision_filter === 'chequeados') {
+    $query .= " AND ci.id IS NOT NULL";
+} elseif ($calidad_revision_filter === 'sin_chequear') {
+    $query .= " AND ci.id IS NULL";
+}
+
+if ($calidad_observacion_filter === 'con_observacion') {
+    $query .= " AND (
+        LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
+        OR NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NOT NULL
+    )";
+} elseif ($calidad_observacion_filter === 'sin_observacion') {
+    $query .= " AND (
+        ci.id IS NULL
+        OR (
+            LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
+            AND NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NULL
+            AND NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NULL
+        )
+    )";
 }
 
 $query .= " ORDER BY p.fecha_pedido DESC";
@@ -447,6 +475,22 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                 <input type="text" name="cliente" id="cliente" class="form-control" placeholder="Nombre, email o #pedido" value="<?= htmlspecialchars($cliente_busqueda) ?>">
             </div>
             <div class="col-6 col-md-2">
+                <label for="calidad_revision" class="form-label">Control calidad:</label>
+                <select name="calidad_revision" id="calidad_revision" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="chequeados" <?= $calidad_revision_filter === 'chequeados' ? 'selected' : '' ?>>Chequeados</option>
+                    <option value="sin_chequear" <?= $calidad_revision_filter === 'sin_chequear' ? 'selected' : '' ?>>Sin chequear</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="calidad_observacion" class="form-label">Observación calidad:</label>
+                <select name="calidad_observacion" id="calidad_observacion" class="form-select">
+                    <option value="">Todas</option>
+                    <option value="con_observacion" <?= $calidad_observacion_filter === 'con_observacion' ? 'selected' : '' ?>>Con observación</option>
+                    <option value="sin_observacion" <?= $calidad_observacion_filter === 'sin_observacion' ? 'selected' : '' ?>>Sin observación</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
                 <label for="fecha_desde" class="form-label">Desde:</label>
                 <input type="date" name="fecha_desde" id="fecha_desde" class="form-control" value="<?= $fecha_desde ?>">
             </div>
@@ -456,7 +500,7 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
             </div>
             <div class="col-12 col-md-3 d-flex flex-wrap gap-2">
                 <button type="submit" class="btn btn-primary">Filtrar</button>
-                <?php if (!empty($estado_filter) || !empty($fecha_desde) || !empty($fecha_hasta) || !empty($cliente_busqueda)): ?>
+                <?php if (!empty($estado_filter) || !empty($fecha_desde) || !empty($fecha_hasta) || !empty($cliente_busqueda) || !empty($calidad_revision_filter) || !empty($calidad_observacion_filter)): ?>
                     <a href="pedidos.php" class="btn btn-outline-secondary">Limpiar</a>
                 <?php endif; ?>
             </div>
