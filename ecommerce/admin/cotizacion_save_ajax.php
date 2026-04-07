@@ -6,12 +6,226 @@ header('Content-Type: application/json; charset=utf-8');
 
 function tabla_tiene_columna_ajax(PDO $pdo, string $tabla, string $columna): bool {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
-        $stmt->execute([$columna]);
-        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
+        $stmt->execute([$tabla, $columna]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Exception $e) {
         return false;
     }
+}
+
+function tabla_tiene_indice_ajax(PDO $pdo, string $tabla, string $indice): bool {
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?");
+        $stmt->execute([$tabla, $indice]);
+        return (int)$stmt->fetchColumn() > 0;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function normalizar_texto_cliente_ajax(string $valor): string {
+    $valor = trim((string)$valor);
+    $valor = preg_replace('/\s+/', ' ', $valor);
+    return function_exists('mb_strtolower') ? mb_strtolower($valor, 'UTF-8') : strtolower($valor);
+}
+
+function normalizar_telefono_cliente_ajax(string $valor): string {
+    return preg_replace('/\D+/', '', (string)$valor);
+}
+
+function asegurar_unicidad_clientes_ajax(PDO $pdo): void {
+    static $ejecutado = false;
+    if ($ejecutado) {
+        return;
+    }
+    $ejecutado = true;
+
+    $columnas = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizacion_clientes")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('email_normalizado', $columnas, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN email_normalizado VARCHAR(191) NULL AFTER email");
+    }
+    if (!in_array('telefono_normalizado', $columnas, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN telefono_normalizado VARCHAR(50) NULL AFTER telefono");
+    }
+    if (!in_array('cuit_normalizado', $columnas, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD COLUMN cuit_normalizado VARCHAR(20) NULL AFTER cuit");
+    }
+
+    $stmt = $pdo->query("SELECT id, email, telefono, cuit FROM ecommerce_cotizacion_clientes ORDER BY id DESC");
+    $update = $pdo->prepare("UPDATE ecommerce_cotizacion_clientes
+        SET email_normalizado = ?, telefono_normalizado = ?, cuit_normalizado = ?
+        WHERE id = ?");
+    $emails = [];
+    $telefonos = [];
+    $cuits = [];
+
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $emailNorm = !empty($row['email']) ? strtolower(trim((string)$row['email'])) : '';
+        if ($emailNorm !== '' && isset($emails[$emailNorm])) {
+            $emailNorm = '';
+        }
+        if ($emailNorm !== '') {
+            $emails[$emailNorm] = true;
+        }
+
+        $telefonoNorm = !empty($row['telefono']) ? normalizar_telefono_cliente_ajax((string)$row['telefono']) : '';
+        if ($telefonoNorm !== '' && isset($telefonos[$telefonoNorm])) {
+            $telefonoNorm = '';
+        }
+        if ($telefonoNorm !== '') {
+            $telefonos[$telefonoNorm] = true;
+        }
+
+        $cuitNorm = !empty($row['cuit']) ? preg_replace('/\D+/', '', (string)$row['cuit']) : '';
+        if ($cuitNorm !== '' && isset($cuits[$cuitNorm])) {
+            $cuitNorm = '';
+        }
+        if ($cuitNorm !== '') {
+            $cuits[$cuitNorm] = true;
+        }
+
+        $update->execute([
+            $emailNorm !== '' ? $emailNorm : null,
+            $telefonoNorm !== '' ? $telefonoNorm : null,
+            $cuitNorm !== '' ? $cuitNorm : null,
+            (int)$row['id'],
+        ]);
+    }
+
+    if (!tabla_tiene_indice_ajax($pdo, 'ecommerce_cotizacion_clientes', 'uniq_cot_cli_email_norm')) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD UNIQUE INDEX uniq_cot_cli_email_norm (email_normalizado)");
+    }
+    if (!tabla_tiene_indice_ajax($pdo, 'ecommerce_cotizacion_clientes', 'uniq_cot_cli_tel_norm')) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD UNIQUE INDEX uniq_cot_cli_tel_norm (telefono_normalizado)");
+    }
+    if (!tabla_tiene_indice_ajax($pdo, 'ecommerce_cotizacion_clientes', 'uniq_cot_cli_cuit_norm')) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizacion_clientes ADD UNIQUE INDEX uniq_cot_cli_cuit_norm (cuit_normalizado)");
+    }
+
+    try {
+        $pdo->exec("DROP TRIGGER IF EXISTS ecommerce_cot_cli_bi");
+        $pdo->exec("CREATE TRIGGER ecommerce_cot_cli_bi BEFORE INSERT ON ecommerce_cotizacion_clientes FOR EACH ROW SET
+            NEW.email_normalizado = NULLIF(LOWER(TRIM(COALESCE(NEW.email, ''))), ''),
+            NEW.telefono_normalizado = NULLIF(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NEW.telefono, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), ''),
+            NEW.cuit_normalizado = NULLIF(REPLACE(REPLACE(COALESCE(NEW.cuit, ''), '-', ''), ' ', ''), '')");
+    } catch (Exception $e) {
+        // No interrumpir la respuesta si el servidor no permite triggers.
+    }
+
+    try {
+        $pdo->exec("DROP TRIGGER IF EXISTS ecommerce_cot_cli_bu");
+        $pdo->exec("CREATE TRIGGER ecommerce_cot_cli_bu BEFORE UPDATE ON ecommerce_cotizacion_clientes FOR EACH ROW SET
+            NEW.email_normalizado = NULLIF(LOWER(TRIM(COALESCE(NEW.email, ''))), ''),
+            NEW.telefono_normalizado = NULLIF(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NEW.telefono, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), ''),
+            NEW.cuit_normalizado = NULLIF(REPLACE(REPLACE(COALESCE(NEW.cuit, ''), '-', ''), ' ', ''), '')");
+    } catch (Exception $e) {
+        // No interrumpir la respuesta si el servidor no permite triggers.
+    }
+}
+
+function guardar_cliente_unico_ajax(PDO $pdo, string $nombre_cliente, ?string $email = null, ?string $telefono = null, ?string $direccion = null, ?string $cuit = null, int $factura_a = 0, int $es_empresa = 0): int {
+    $emailLimpio = trim((string)$email);
+    $telefonoLimpio = trim((string)$telefono);
+    $direccionLimpia = trim((string)$direccion);
+    $cuitLimpio = preg_replace('/\D+/', '', (string)$cuit);
+    $emailNormalizado = $emailLimpio !== '' ? strtolower($emailLimpio) : null;
+    $telefonoNormalizado = $telefonoLimpio !== '' ? normalizar_telefono_cliente_ajax($telefonoLimpio) : null;
+    $cuitNormalizado = $cuitLimpio !== '' ? $cuitLimpio : null;
+
+    $stmt = $pdo->prepare("INSERT INTO ecommerce_cotizacion_clientes
+        (nombre, email, telefono, direccion, cuit, factura_a, es_empresa, email_normalizado, telefono_normalizado, cuit_normalizado, activo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ON DUPLICATE KEY UPDATE
+            id = LAST_INSERT_ID(id),
+            nombre = VALUES(nombre),
+            email = COALESCE(VALUES(email), email),
+            telefono = COALESCE(VALUES(telefono), telefono),
+            direccion = COALESCE(VALUES(direccion), direccion),
+            cuit = COALESCE(VALUES(cuit), cuit),
+            factura_a = VALUES(factura_a),
+            es_empresa = VALUES(es_empresa),
+            activo = 1");
+    $stmt->execute([
+        $nombre_cliente,
+        $emailNormalizado,
+        $telefonoLimpio !== '' ? $telefonoLimpio : null,
+        $direccionLimpia !== '' ? $direccionLimpia : null,
+        $cuitNormalizado,
+        $factura_a,
+        $es_empresa,
+        $emailNormalizado,
+        $telefonoNormalizado,
+        $cuitNormalizado,
+    ]);
+
+    return (int)$pdo->lastInsertId();
+}
+
+function resolver_cliente_existente_ajax(PDO $pdo, int $cliente_id, string $nombre_cliente, ?string $email = null, ?string $telefono = null, ?string $direccion = null, ?string $cuit = null): int {
+    if ($cliente_id > 0) {
+        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
+        $stmt->execute([$cliente_id]);
+        if ($stmt->fetch(PDO::FETCH_ASSOC)) {
+            return $cliente_id;
+        }
+    }
+
+    $cuit_norm = preg_replace('/\D+/', '', (string)$cuit);
+    if ($cuit_norm !== '') {
+        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE REPLACE(REPLACE(COALESCE(cuit, ''), '-', ''), ' ', '') = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$cuit_norm]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return (int)$row['id'];
+        }
+    }
+
+    $email_norm = !empty($email) ? strtolower(trim((string)$email)) : '';
+    if ($email_norm !== '') {
+        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE LOWER(TRIM(COALESCE(email, ''))) = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$email_norm]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return (int)$row['id'];
+        }
+    }
+
+    $telefono_norm = normalizar_telefono_cliente_ajax((string)$telefono);
+    if ($telefono_norm !== '') {
+        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefono, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '') = ?
+            ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$telefono_norm]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return (int)$row['id'];
+        }
+    }
+
+    $nombre_norm = normalizar_texto_cliente_ajax($nombre_cliente);
+    $direccion_norm = normalizar_texto_cliente_ajax((string)$direccion);
+    if ($nombre_norm !== '') {
+        if ($direccion_norm !== '') {
+            $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes
+                WHERE LOWER(TRIM(COALESCE(nombre, ''))) = ? AND LOWER(TRIM(COALESCE(direccion, ''))) = ?
+                ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$nombre_norm, $direccion_norm]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                return (int)$row['id'];
+            }
+        }
+
+        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE LOWER(TRIM(COALESCE(nombre, ''))) = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$nombre_norm]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return (int)$row['id'];
+        }
+    }
+
+    return 0;
 }
 
 try {
@@ -47,6 +261,8 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
     }
 
+    asegurar_unicidad_clientes_ajax($pdo);
+
     // decode items_json if present
     if (!empty($_POST['items_json'])) {
         $decoded = json_decode($_POST['items_json'], true);
@@ -81,48 +297,40 @@ try {
         throw new Exception('Si es empresa con Factura A, el CUIT debe tener 11 dígitos');
     }
 
-    // Resolver / crear cliente en agenda de cotizaciones
-    if ($cliente_id > 0) {
-        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE id = ? LIMIT 1");
-        $stmt->execute([$cliente_id]);
-        if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
-            $cliente_id = 0;
-        }
-    }
-
-    if ($cliente_id <= 0 && !empty($email)) {
-        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE email = ? LIMIT 1");
-        $stmt->execute([strtolower(trim((string)$email))]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $cliente_id = (int)$row['id'];
-        }
-    }
-
-    if ($cliente_id <= 0 && !empty($telefono)) {
-        $stmt = $pdo->prepare("SELECT id FROM ecommerce_cotizacion_clientes WHERE telefono = ? LIMIT 1");
-        $stmt->execute([trim((string)$telefono)]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $cliente_id = (int)$row['id'];
-        }
-    }
+    // Resolver / crear cliente en agenda de cotizaciones evitando duplicados
+    $cliente_id = resolver_cliente_existente_ajax(
+        $pdo,
+        $cliente_id,
+        $nombre_cliente,
+        $email,
+        $telefono,
+        $direccion,
+        $cuit
+    );
 
     if ($cliente_id <= 0) {
-        $stmt = $pdo->prepare("INSERT INTO ecommerce_cotizacion_clientes (nombre, email, telefono, direccion, cuit, factura_a, es_empresa, activo) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
-        $stmt->execute([
+        $cliente_id = guardar_cliente_unico_ajax(
+            $pdo,
             $nombre_cliente,
-            !empty($email) ? strtolower(trim((string)$email)) : null,
-            !empty($telefono) ? trim((string)$telefono) : null,
-            !empty($direccion) ? trim((string)$direccion) : null,
-            $cuit !== '' ? $cuit : null,
+            $email,
+            $telefono,
+            $direccion,
+            $cuit,
             $factura_a,
-            $es_empresa,
-        ]);
-        $cliente_id = (int)$pdo->lastInsertId();
+            $es_empresa
+        );
     }
 
-    $stmt = $pdo->prepare("UPDATE ecommerce_cotizacion_clientes SET nombre = ?, email = ?, telefono = ?, direccion = ?, cuit = ?, factura_a = ?, es_empresa = ?, activo = 1 WHERE id = ?");
+    $stmt = $pdo->prepare("UPDATE ecommerce_cotizacion_clientes
+        SET nombre = ?,
+            email = COALESCE(?, email),
+            telefono = COALESCE(?, telefono),
+            direccion = COALESCE(?, direccion),
+            cuit = COALESCE(?, cuit),
+            factura_a = ?,
+            es_empresa = ?,
+            activo = 1
+        WHERE id = ?");
     $stmt->execute([
         $nombre_cliente,
         !empty($email) ? strtolower(trim((string)$email)) : null,

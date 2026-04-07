@@ -13,6 +13,42 @@ $colores = [
     'pagado' => 'success'
 ];
 
+function pedidos_tabla_existe(PDO $pdo, string $tabla): bool {
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
+        $stmt->execute([$tabla]);
+        return (int)$stmt->fetchColumn() > 0;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function pedidos_asegurar_tablas_remitos(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remitos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pedido_id INT NOT NULL,
+        numero_remito VARCHAR(50) NOT NULL,
+        tipo ENUM('completo','parcial') NOT NULL DEFAULT 'completo',
+        observaciones TEXT NULL,
+        creado_por INT NULL,
+        fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_numero_remito (numero_remito),
+        KEY idx_pedido (pedido_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remito_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        remito_id INT NOT NULL,
+        pedido_item_id INT NOT NULL,
+        cantidad DECIMAL(10,2) NOT NULL DEFAULT 0,
+        KEY idx_remito_id (remito_id),
+        KEY idx_pedido_item_id (pedido_item_id),
+        UNIQUE KEY uniq_remito_item (remito_id, pedido_item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+pedidos_asegurar_tablas_remitos($pdo);
+
 // Procesar cambio de estado ANTES de consultar pedidos
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'cambiar_estado') {
     try {
@@ -286,6 +322,85 @@ foreach ($pedidos as &$pedido) {
     }
 }
 unset($pedido);
+
+$pedido_items_map = [];
+$pedido_remito_resumen = [];
+
+if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
+    $pedido_ids = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
+    if (!empty($pedido_ids)) {
+        $placeholders = implode(', ', array_fill(0, count($pedido_ids), '?'));
+        $sql_items_remito = "
+            SELECT pi.id, pi.pedido_id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos,
+                   COALESCE(pr.nombre, 'Producto') AS producto_nombre,
+                   COALESCE(rem.cantidad_remitida, 0) AS cantidad_remitida
+            FROM ecommerce_pedido_items pi
+            LEFT JOIN ecommerce_productos pr ON pr.id = pi.producto_id
+            LEFT JOIN (
+                SELECT pedido_item_id, SUM(cantidad) AS cantidad_remitida
+                FROM ecommerce_remito_items
+                GROUP BY pedido_item_id
+            ) rem ON rem.pedido_item_id = pi.id
+            WHERE pi.pedido_id IN ($placeholders)
+            ORDER BY pi.pedido_id ASC, pi.id ASC
+        ";
+        $stmt = $pdo->prepare($sql_items_remito);
+        $stmt->execute($pedido_ids);
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $item) {
+            $pedidoId = (int)$item['pedido_id'];
+            $cantidadTotal = (float)($item['cantidad'] ?? 0);
+            $cantidadRemitida = min($cantidadTotal, (float)($item['cantidad_remitida'] ?? 0));
+            $cantidadPendiente = max(0, $cantidadTotal - $cantidadRemitida);
+
+            $medidas = '';
+            if (!empty($item['ancho_cm']) || !empty($item['alto_cm'])) {
+                $medidas = ($item['ancho_cm'] !== null && $item['ancho_cm'] !== '' ? $item['ancho_cm'] : '-')
+                    . 'x'
+                    . ($item['alto_cm'] !== null && $item['alto_cm'] !== '' ? $item['alto_cm'] : '-')
+                    . ' cm';
+            }
+
+            $atributosTexto = '';
+            if (!empty($item['atributos'])) {
+                $atributos = json_decode((string)$item['atributos'], true);
+                if (is_array($atributos)) {
+                    $partes = [];
+                    foreach ($atributos as $attr) {
+                        $nombreAttr = trim((string)($attr['nombre'] ?? ''));
+                        $valorAttr = trim((string)($attr['valor'] ?? ''));
+                        if ($nombreAttr !== '' || $valorAttr !== '') {
+                            $partes[] = trim($nombreAttr . ': ' . $valorAttr, ': ');
+                        }
+                    }
+                    $atributosTexto = implode(' · ', $partes);
+                }
+            }
+
+            $pedido_items_map[$pedidoId][] = [
+                'id' => (int)$item['id'],
+                'producto' => (string)$item['producto_nombre'],
+                'cantidad' => $cantidadTotal,
+                'remitida' => $cantidadRemitida,
+                'pendiente' => $cantidadPendiente,
+                'medidas' => $medidas,
+                'atributos' => $atributosTexto,
+            ];
+
+            if (!isset($pedido_remito_resumen[$pedidoId])) {
+                $pedido_remito_resumen[$pedidoId] = [
+                    'cantidad_total' => 0,
+                    'cantidad_remitida' => 0,
+                    'cantidad_pendiente' => 0,
+                ];
+            }
+
+            $pedido_remito_resumen[$pedidoId]['cantidad_total'] += $cantidadTotal;
+            $pedido_remito_resumen[$pedidoId]['cantidad_remitida'] += $cantidadRemitida;
+            $pedido_remito_resumen[$pedidoId]['cantidad_pendiente'] += $cantidadPendiente;
+        }
+    }
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -374,15 +489,24 @@ unset($pedido);
                             </span>
                         </td>
                         <td>
+                            <?php $remito_resumen = $pedido_remito_resumen[(int)$pedido['id']] ?? ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0]; ?>
                             <div class="d-flex flex-wrap gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>">Ver detalle</a>
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="pedido_remito.php?id=<?= $pedido['id'] ?>" target="_blank">Remito</a>
+                            <a class="btn btn-sm btn-outline-secondary btn-remito-parcial" href="pedido_remito.php?id=<?= $pedido['id'] ?>" data-pedido-id="<?= (int)$pedido['id'] ?>" data-pedido-numero="<?= htmlspecialchars($pedido['numero_pedido']) ?>">
+                                <?= ($remito_resumen['cantidad_remitida'] > 0 && $remito_resumen['cantidad_pendiente'] > 0) ? 'Remito parcial' : 'Remito' ?>
+                            </a>
                             <?php if (!empty($pedido['public_token'])): ?>
                                 <a class="btn btn-sm btn-outline-info" href="<?= htmlspecialchars($base_url . '/pedido_publico.php?token=' . urlencode($pedido['public_token'])) ?>" target="_blank" rel="noopener">Link público</a>
                             <?php endif; ?>
                             </div>
+                            <?php if (!empty($pedido_items_map[(int)$pedido['id']])): ?>
+                                <small class="text-muted d-block mt-1">
+                                    Pendiente remito: <?= number_format((float)$remito_resumen['cantidad_pendiente'], 2, ',', '.') ?>
+                                    · Ya remitido: <?= number_format((float)$remito_resumen['cantidad_remitida'], 2, ',', '.') ?>
+                                </small>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -392,5 +516,177 @@ unset($pedido);
         </div>
     </div>
 <?php endif; ?>
+
+<div class="modal fade" id="modalRemitoParcial" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="POST" action="pedido_remito.php" target="_blank" id="formRemitoParcial">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-1">📦 Generar remito parcial</h5>
+                        <div class="small text-muted">Pedido <span id="remitoPedidoNumero">-</span></div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="remitoPedidoId" value="0">
+                    <div id="remitoResumen" class="mb-3"></div>
+                    <div class="d-flex justify-content-end gap-2 mb-3">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="limpiarCantidadesBtn">Limpiar</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="completarPendientesBtn">Cargar pendientes</button>
+                    </div>
+                    <div id="remitoItemsContainer"></div>
+                    <div class="mt-3">
+                        <label for="remitoObservaciones" class="form-label">Observaciones del remito</label>
+                        <textarea class="form-control" id="remitoObservaciones" name="observaciones" rows="2" placeholder="Ej: Primera entrega / entrega parcial"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="remitoSubmitBtn">Imprimir remito</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const remitoPedidos = <?= json_encode($pedido_items_map, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const remitoModalElement = document.getElementById('modalRemitoParcial');
+const remitoItemsContainer = document.getElementById('remitoItemsContainer');
+const remitoResumen = document.getElementById('remitoResumen');
+const remitoPedidoId = document.getElementById('remitoPedidoId');
+const remitoPedidoNumero = document.getElementById('remitoPedidoNumero');
+const remitoSubmitBtn = document.getElementById('remitoSubmitBtn');
+
+function obtenerRemitoModal() {
+    if (!remitoModalElement || !window.bootstrap || !window.bootstrap.Modal) {
+        return null;
+    }
+    return window.bootstrap.Modal.getOrCreateInstance(remitoModalElement);
+}
+function formatCantidadRemito(valor) {
+    const numero = Number(valor || 0);
+    return numero.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function renderRemitoModal(pedidoId, numeroPedido) {
+    const items = remitoPedidos[String(pedidoId)] || remitoPedidos[pedidoId] || [];
+    if (remitoPedidoId) remitoPedidoId.value = pedidoId;
+    if (remitoPedidoNumero) remitoPedidoNumero.textContent = numeroPedido || ('#' + pedidoId);
+
+    if (!items.length) {
+        remitoItemsContainer.innerHTML = '<div class="alert alert-warning mb-0">Este pedido no tiene ítems para remitir.</div>';
+        remitoResumen.innerHTML = '';
+        if (remitoSubmitBtn) remitoSubmitBtn.disabled = true;
+        return;
+    }
+
+    let pendienteTotal = 0;
+    let remitidoTotal = 0;
+    let html = '';
+
+    items.forEach((item) => {
+        const pendiente = Number(item.pendiente || 0);
+        const remitida = Number(item.remitida || 0);
+        const cantidad = Number(item.cantidad || 0);
+        pendienteTotal += pendiente;
+        remitidoTotal += remitida;
+
+        html += `
+            <div class="border rounded p-3 mb-2 ${pendiente <= 0 ? 'bg-light' : ''}">
+                <div class="d-flex justify-content-between gap-2 flex-wrap">
+                    <div>
+                        <div class="fw-semibold">${item.producto || 'Producto'}</div>
+                        ${item.medidas ? `<div class="small text-muted">Medidas: ${item.medidas}</div>` : ''}
+                        ${item.atributos ? `<div class="small text-muted">${item.atributos}</div>` : ''}
+                    </div>
+                    <div class="text-md-end small">
+                        <div>Total: <strong>${formatCantidadRemito(cantidad)}</strong></div>
+                        <div>Ya remitido: <strong>${formatCantidadRemito(remitida)}</strong></div>
+                        <div>Pendiente: <strong>${formatCantidadRemito(pendiente)}</strong></div>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="form-label mb-1">Cantidad a incluir en este remito</label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        name="cantidades[${item.id}]"
+                        value="${pendiente > 0 ? pendiente : 0}"
+                        min="0"
+                        max="${pendiente}"
+                        step="0.01"
+                        data-remito-cantidad="1"
+                        data-pendiente="${pendiente}"
+                        ${pendiente <= 0 ? 'disabled' : ''}
+                    >
+                </div>
+            </div>`;
+    });
+
+    remitoItemsContainer.innerHTML = html;
+
+    if (pendienteTotal <= 0) {
+        remitoResumen.innerHTML = '<div class="alert alert-success mb-0">Este pedido ya fue remitido completamente.</div>';
+        if (remitoSubmitBtn) remitoSubmitBtn.disabled = true;
+    } else {
+        remitoResumen.innerHTML = `<div class="alert alert-info mb-0">Pendiente a remitir: <strong>${formatCantidadRemito(pendienteTotal)}</strong> · Ya remitido: <strong>${formatCantidadRemito(remitidoTotal)}</strong></div>`;
+        if (remitoSubmitBtn) remitoSubmitBtn.disabled = false;
+    }
+}
+
+document.querySelectorAll('.btn-remito-parcial').forEach((btn) => {
+    btn.addEventListener('click', function(e) {
+        const remitoModal = obtenerRemitoModal();
+        if (!remitoModal) {
+            return;
+        }
+        e.preventDefault();
+        renderRemitoModal(this.dataset.pedidoId, this.dataset.pedidoNumero);
+        remitoModal.show();
+    });
+});
+
+document.getElementById('completarPendientesBtn')?.addEventListener('click', function() {
+    remitoItemsContainer.querySelectorAll('input[data-remito-cantidad]').forEach((input) => {
+        if (!input.disabled) {
+            input.value = input.dataset.pendiente || 0;
+        }
+    });
+});
+
+document.getElementById('limpiarCantidadesBtn')?.addEventListener('click', function() {
+    remitoItemsContainer.querySelectorAll('input[data-remito-cantidad]').forEach((input) => {
+        if (!input.disabled) {
+            input.value = 0;
+        }
+    });
+});
+
+remitoItemsContainer?.addEventListener('input', function(e) {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('input[data-remito-cantidad]')) {
+        return;
+    }
+    const max = Number(input.dataset.pendiente || 0);
+    let valor = Number(input.value || 0);
+    if (Number.isNaN(valor) || valor < 0) {
+        valor = 0;
+    }
+    if (valor > max) {
+        valor = max;
+    }
+    input.value = valor;
+});
+
+document.getElementById('formRemitoParcial')?.addEventListener('submit', function(e) {
+    const hayCantidad = Array.from(this.querySelectorAll('input[data-remito-cantidad]')).some((input) => Number(input.value || 0) > 0);
+    if (!hayCantidad) {
+        e.preventDefault();
+        alert('Indicá al menos una cantidad a incluir en el remito.');
+    }
+});
+</script>
 
 <?php require 'includes/footer.php'; ?>
