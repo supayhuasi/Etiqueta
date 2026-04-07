@@ -517,10 +517,53 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
     </div>
 <?php endif; ?>
 
+<style>
+    #modalRemitoParcial .modal-dialog {
+        max-width: min(980px, calc(100vw - 1rem));
+        margin: 0.75rem auto;
+    }
+    #modalRemitoParcial .modal-content {
+        max-height: calc(100vh - 1.5rem);
+        overflow: hidden;
+    }
+    #modalRemitoParcial .remito-modal-form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+    }
+    #modalRemitoParcial .modal-header,
+    #modalRemitoParcial .modal-footer {
+        flex: 0 0 auto;
+        background: #fff;
+        z-index: 2;
+    }
+    #modalRemitoParcial .modal-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        max-height: calc(100vh - 220px);
+    }
+    #remitoItemsContainer {
+        max-height: 46vh;
+        overflow-y: auto;
+        padding-right: .25rem;
+    }
+    #remitoItemsContainer::-webkit-scrollbar,
+    #modalRemitoParcial .modal-body::-webkit-scrollbar {
+        width: 10px;
+    }
+    #remitoItemsContainer::-webkit-scrollbar-thumb,
+    #modalRemitoParcial .modal-body::-webkit-scrollbar-thumb {
+        background: #c8d4ea;
+        border-radius: 999px;
+    }
+</style>
+
 <div class="modal fade" id="modalRemitoParcial" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <form method="POST" action="pedido_remito.php" target="_blank" id="formRemitoParcial">
+            <form method="POST" action="pedido_remito.php" target="_blank" id="formRemitoParcial" class="remito-modal-form">
                 <div class="modal-header">
                     <div>
                         <h5 class="modal-title mb-1">📦 Generar remito parcial</h5>

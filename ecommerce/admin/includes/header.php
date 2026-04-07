@@ -150,7 +150,18 @@ if (!isset($_SESSION['rol'])) {
 
 // Permisos de menú por rol
 // Ajustar según tus necesidades
-$role = $_SESSION['rol'] ?? 'usuario';
+$role = strtolower(trim((string)($_SESSION['rol'] ?? 'usuario')));
+$role_aliases = [
+    'vendedor' => 'ventas',
+    'vendedores' => 'ventas',
+    'venta' => 'ventas',
+    'comercial' => 'ventas',
+    'asesor_comercial' => 'ventas'
+];
+if (isset($role_aliases[$role])) {
+    $role = $role_aliases[$role];
+}
+
 $role_permissions = [
     'admin' => ['*'],
     'usuario' => [
@@ -190,6 +201,20 @@ $role_permissions = [
         'encuestas',
         'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+    ],
+    'vendedor' => [
+        'dashboard',
+        'pedidos',
+        'ordenes_produccion',
+        'instalaciones',
+        'recordatorios',
+        'crm',
+        'cotizaciones',
+        'cotizacion_clientes',
+        'clientes_web',
+        'encuestas',
+        'calidad',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ]
 ];
 
@@ -199,6 +224,9 @@ if (isset($role_permissions['usuario']) && !in_array('faq', $role_permissions['u
 }
 if (isset($role_permissions['ventas']) && !in_array('faq', $role_permissions['ventas'], true)) {
     $role_permissions['ventas'][] = 'faq';
+}
+if (isset($role_permissions['vendedor']) && !in_array('faq', $role_permissions['vendedor'], true)) {
+    $role_permissions['vendedor'][] = 'faq';
 }
 
 $can_access = function (string $key) use ($role_permissions, $role): bool {
