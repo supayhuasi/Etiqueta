@@ -58,6 +58,67 @@ if (!function_exists('calidad_scalar')) {
     }
 }
 
+if (!function_exists('calidad_formatear_atributos_pedido')) {
+    function calidad_formatear_atributos_pedido(PDO $pdo, $atributosRaw): string
+    {
+        $atributosRaw = trim((string)$atributosRaw);
+        if ($atributosRaw === '') {
+            return '';
+        }
+
+        $atributos = json_decode($atributosRaw, true);
+        if (!is_array($atributos)) {
+            return $atributosRaw;
+        }
+
+        $partes = [];
+        $opcionesCache = [];
+        $puedeBuscarOpciones = calidad_table_exists($pdo, 'ecommerce_atributo_opciones');
+
+        foreach ($atributos as $attr) {
+            if (!is_array($attr)) {
+                continue;
+            }
+
+            $nombre = trim((string)($attr['nombre'] ?? ''));
+            $valor = trim((string)($attr['valor'] ?? ''));
+
+            if ($valor !== '' && ctype_digit($valor) && $puedeBuscarOpciones) {
+                $opcionId = (int)$valor;
+                if ($opcionId > 0) {
+                    if (!array_key_exists($opcionId, $opcionesCache)) {
+                        try {
+                            $stmtOpcion = $pdo->prepare("SELECT nombre FROM ecommerce_atributo_opciones WHERE id = ? LIMIT 1");
+                            $stmtOpcion->execute([$opcionId]);
+                            $opcionesCache[$opcionId] = (string)($stmtOpcion->fetchColumn() ?: '');
+                        } catch (Throwable $e) {
+                            $opcionesCache[$opcionId] = '';
+                        }
+                    }
+
+                    if ($opcionesCache[$opcionId] !== '') {
+                        $valor = $opcionesCache[$opcionId];
+                    }
+                }
+            }
+
+            if ($nombre === '' && $valor === '') {
+                continue;
+            }
+
+            $parte = $nombre !== '' ? ($nombre . ': ' . $valor) : $valor;
+            $costoAdicional = isset($attr['costo_adicional']) ? (float)$attr['costo_adicional'] : 0.0;
+            if ($costoAdicional > 0) {
+                $parte .= ' (+$' . number_format($costoAdicional, 0, ',', '.') . ')';
+            }
+
+            $partes[] = trim($parte, ': ');
+        }
+
+        return implode(' · ', $partes);
+    }
+}
+
 if (!function_exists('ensureCalidadSchema')) {
     function ensureCalidadSchema(PDO $pdo): void
     {
