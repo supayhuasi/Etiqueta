@@ -49,6 +49,113 @@ try {
 } catch (Exception $e) {
 }
 
+if (!function_exists('cotizacion_detalle_table_exists')) {
+    function cotizacion_detalle_table_exists(PDO $pdo, string $table): bool
+    {
+        try {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
+            $stmt->execute([$table]);
+            return (int)$stmt->fetchColumn() > 0;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('cotizacion_detalle_column_exists')) {
+    function cotizacion_detalle_column_exists(PDO $pdo, string $table, string $column): bool
+    {
+        try {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
+            $stmt->execute([$table, $column]);
+            return (int)$stmt->fetchColumn() > 0;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('cotizacion_sync_crm_estado')) {
+    function cotizacion_sync_crm_estado(PDO $pdo, array $cotizacion, string $nuevoEstado, ?int $pedidoId = null): void
+    {
+        $crmId = (int)($cotizacion['crm_id'] ?? 0);
+        if ($crmId <= 0 || !cotizacion_detalle_table_exists($pdo, 'ecommerce_crm_visitas')) {
+            return;
+        }
+
+        $mapEstado = [
+            'convertida' => 'ganado',
+            'rechazada' => 'perdido',
+            'aceptada' => 'negociacion',
+            'enviada' => 'propuesta',
+            'pendiente' => 'propuesta',
+        ];
+
+        if (!isset($mapEstado[$nuevoEstado])) {
+            return;
+        }
+
+        $estadoCrm = $mapEstado[$nuevoEstado];
+        $set = ['estado = ?'];
+        $params = [$estadoCrm];
+
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_gestion')) {
+            $set[] = 'ultima_gestion = NOW()';
+        }
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'fecha_cierre')) {
+            $set[] = 'fecha_cierre = ?';
+            $params[] = in_array($estadoCrm, ['ganado', 'perdido'], true) ? date('Y-m-d') : null;
+        }
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_id')) {
+            $set[] = 'ultima_cotizacion_id = ?';
+            $params[] = (int)($cotizacion['id'] ?? 0);
+        }
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_cotizacion_numero')) {
+            $set[] = 'ultima_cotizacion_numero = ?';
+            $params[] = (string)($cotizacion['numero_cotizacion'] ?? ('COT-' . (int)($cotizacion['id'] ?? 0)));
+        }
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'fecha_ultima_cotizacion')) {
+            $set[] = 'fecha_ultima_cotizacion = NOW()';
+        }
+        if (cotizacion_detalle_column_exists($pdo, 'ecommerce_crm_visitas', 'monto_estimado')) {
+            $set[] = 'monto_estimado = CASE WHEN ? > 0 THEN ? ELSE monto_estimado END';
+            $params[] = (float)($cotizacion['total'] ?? 0);
+            $params[] = (float)($cotizacion['total'] ?? 0);
+        }
+
+        $params[] = $crmId;
+        $stmt = $pdo->prepare('UPDATE ecommerce_crm_visitas SET ' . implode(', ', $set) . ' WHERE id = ?');
+        $stmt->execute($params);
+
+        if (($nuevoEstado === 'convertida' || $nuevoEstado === 'rechazada') && cotizacion_detalle_table_exists($pdo, 'ecommerce_crm_seguimientos')) {
+            $stmt = $pdo->prepare('SELECT visita_id FROM ecommerce_crm_visitas WHERE id = ? LIMIT 1');
+            $stmt->execute([$crmId]);
+            $visitaId = (int)$stmt->fetchColumn();
+
+            $resultado = $nuevoEstado === 'convertida' ? 'cerrado' : 'descartado';
+            $comentario = $nuevoEstado === 'convertida'
+                ? 'Cotización ' . (string)($cotizacion['numero_cotizacion'] ?? ('COT-' . (int)($cotizacion['id'] ?? 0))) . ' convertida a pedido' . ($pedidoId ? ' #' . $pedidoId : '') . '.'
+                : 'Cotización ' . (string)($cotizacion['numero_cotizacion'] ?? ('COT-' . (int)($cotizacion['id'] ?? 0))) . ' marcada como rechazada.';
+
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_crm_seguimientos WHERE crm_id = ? AND canal = 'cotizacion' AND resultado = ? AND comentario = ?");
+            $stmt->execute([$crmId, $resultado, $comentario]);
+            $existe = (int)$stmt->fetchColumn() > 0;
+
+            if (!$existe) {
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_crm_seguimientos (crm_id, visita_id, usuario_id, canal, resultado, comentario, proximo_contacto)
+                    VALUES (?, ?, ?, 'cotizacion', ?, ?, NULL)");
+                $stmt->execute([
+                    $crmId,
+                    $visitaId > 0 ? $visitaId : 0,
+                    !empty($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null,
+                    $resultado,
+                    $comentario,
+                ]);
+            }
+        }
+    }
+}
+
 $id = intval($_GET['id'] ?? 0);
 
 // Obtener cotización (compatible con empresa o direccion)
@@ -354,6 +461,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = 'convertida' WHERE id = ?");
                 $stmt->execute([$id]);
+                cotizacion_sync_crm_estado($pdo, $cotizacion, 'convertida', $pedido_id);
 
                 $pdo->commit();
 
@@ -363,6 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nuevo_estado = $_POST['estado'];
             $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = ? WHERE id = ?");
             $stmt->execute([$nuevo_estado, $id]);
+            cotizacion_sync_crm_estado($pdo, $cotizacion, (string)$nuevo_estado);
             
             if ($nuevo_estado === 'enviada') {
                 $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET fecha_envio = NOW() WHERE id = ?");
