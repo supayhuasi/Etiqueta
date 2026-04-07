@@ -708,6 +708,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             crm_redirect_with_flash('ok', 'Lead movido correctamente en el Kanban.', ['lead' => $crm_id]);
         }
 
+        if ($accion === 'cerrar_lead') {
+            $crm_id = (int)($_POST['crm_id'] ?? 0);
+            $estado_cierre = trim((string)($_POST['estado_cierre'] ?? ''));
+
+            if ($crm_id <= 0 || !in_array($estado_cierre, ['ganado', 'perdido'], true)) {
+                throw new Exception('No se pudo cerrar el lead seleccionado.');
+            }
+
+            $stmt = $pdo->prepare('SELECT visita_id FROM ecommerce_crm_visitas WHERE id = ? LIMIT 1');
+            $stmt->execute([$crm_id]);
+            $visita_id = (int)$stmt->fetchColumn();
+
+            $fecha_cierre = date('Y-m-d');
+            $stmt = $pdo->prepare("UPDATE ecommerce_crm_visitas
+                SET estado = ?, proximo_contacto = NULL, ultima_gestion = NOW(), fecha_cierre = ?
+                WHERE id = ?");
+            $stmt->execute([$estado_cierre, $fecha_cierre, $crm_id]);
+
+            if (crm_table_exists($pdo, 'ecommerce_crm_seguimientos')) {
+                $resultado_cierre = $estado_cierre === 'ganado' ? 'cerrado' : 'descartado';
+                $comentario_cierre = $estado_cierre === 'ganado'
+                    ? 'Lead cerrado como ganado desde el CRM.'
+                    : 'Lead cerrado como perdido desde el CRM.';
+
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_crm_seguimientos
+                    (crm_id, visita_id, usuario_id, canal, resultado, comentario, proximo_contacto)
+                    VALUES (?, ?, ?, 'otro', ?, ?, NULL)");
+                $stmt->execute([
+                    $crm_id,
+                    $visita_id > 0 ? $visita_id : 0,
+                    $usuario_actual_id > 0 ? $usuario_actual_id : null,
+                    $resultado_cierre,
+                    $comentario_cierre,
+                ]);
+            }
+
+            $mensaje_cierre = $estado_cierre === 'ganado'
+                ? 'Lead cerrado como ganado.'
+                : 'Lead cerrado como perdido.';
+            crm_redirect_with_flash('ok', $mensaje_cierre, ['lead' => $crm_id]);
+        }
+
         if ($accion === 'guardar_oportunidad') {
             $crm_id = (int)($_POST['crm_id'] ?? 0);
             $estado = trim((string)($_POST['estado'] ?? 'nuevo'));
@@ -841,6 +883,8 @@ $prioridad_filtro = trim((string)($_GET['prioridad'] ?? ''));
 $usuario_filtro = (int)($_GET['usuario_id'] ?? 0);
 $solo_vencidos = isset($_GET['vencidos']) && (string)$_GET['vencidos'] !== '0';
 $lead_id = (int)($_GET['lead'] ?? 0);
+$lead_link_query = $_GET;
+unset($lead_link_query['ok'], $lead_link_query['error']);
 
 $where = ['1=1'];
 $params = [];
@@ -1451,7 +1495,7 @@ if ($lead_actual) {
                                         <?php endif; ?>
                                     </div>
                                     <div class="mt-2">
-                                        <a href="crm.php?<?= htmlspecialchars(http_build_query(array_merge($_GET, ['lead' => (int)$kanban['id']])), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-primary w-100">Abrir</a>
+                                        <a href="crm.php?<?= htmlspecialchars(http_build_query(array_merge($lead_link_query, ['lead' => (int)$kanban['id']])), ENT_QUOTES, 'UTF-8') ?>#crmLeadDetail" class="btn btn-sm btn-outline-primary w-100 crm-open-link" draggable="false">Abrir</a>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -1524,7 +1568,7 @@ if ($lead_actual) {
                                             <?php endif; ?>
                                         </td>
                                         <td class="text-end">
-                                            <a href="crm.php?<?= htmlspecialchars(http_build_query(array_merge($_GET, ['lead' => (int)$lead['id']])), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-primary">Abrir</a>
+                                            <a href="crm.php?<?= htmlspecialchars(http_build_query(array_merge($lead_link_query, ['lead' => (int)$lead['id']])), ENT_QUOTES, 'UTF-8') ?>#crmLeadDetail" class="btn btn-sm btn-outline-primary crm-open-link" draggable="false">Abrir</a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -1537,7 +1581,7 @@ if ($lead_actual) {
     </div>
 
     <div class="col-xl-5">
-        <div class="crm-sticky">
+        <div class="crm-sticky" id="crmLeadDetail">
             <div class="card crm-detail-card mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Ficha del lead</h5>
@@ -1611,6 +1655,33 @@ if ($lead_actual) {
                                 <a href="cotizacion_detalle.php?id=<?= (int)$lead_actual['ultima_cotizacion_id'] ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-up-right"></i> Ver cotización</a>
                             <?php endif; ?>
                         </div>
+
+                        <?php if (!in_array((string)$lead_actual['estado'], ['ganado', 'perdido'], true)): ?>
+                            <div class="border-top mt-3 pt-3">
+                                <div class="small text-muted mb-2">Cierre rápido del lead</div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <form method="POST" class="m-0">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                                        <input type="hidden" name="accion" value="cerrar_lead">
+                                        <input type="hidden" name="crm_id" value="<?= (int)$lead_actual['id'] ?>">
+                                        <input type="hidden" name="estado_cierre" value="ganado">
+                                        <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-circle"></i> Cerrar como ganado</button>
+                                    </form>
+                                    <form method="POST" class="m-0" onsubmit="return confirm('¿Cerrar este lead como perdido?');">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                                        <input type="hidden" name="accion" value="cerrar_lead">
+                                        <input type="hidden" name="crm_id" value="<?= (int)$lead_actual['id'] ?>">
+                                        <input type="hidden" name="estado_cierre" value="perdido">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-circle"></i> Cerrar como perdido</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php elseif (!empty($lead_actual['fecha_cierre'])): ?>
+                            <div class="alert alert-light border mt-3 mb-0">
+                                <strong>Lead cerrado:</strong>
+                                <?= htmlspecialchars($estado_options[$lead_actual['estado']] ?? $lead_actual['estado']) ?> · <?= htmlspecialchars(crm_format_date($lead_actual['fecha_cierre'])) ?>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1818,10 +1889,24 @@ if ($lead_actual) {
 (function() {
     const cards = document.querySelectorAll('.crm-kanban-card[draggable="true"]');
     const dropzones = document.querySelectorAll('.crm-kanban-body[data-drop-estado]');
+    const openLinks = document.querySelectorAll('.crm-open-link');
     const moveForm = document.getElementById('crmKanbanMoveForm');
     const moveIdInput = document.getElementById('crmKanbanMoveId');
     const moveEstadoInput = document.getElementById('crmKanbanMoveEstado');
     let draggedCard = null;
+
+    openLinks.forEach(link => {
+        link.addEventListener('mousedown', event => event.stopPropagation());
+        link.addEventListener('touchstart', event => event.stopPropagation(), { passive: true });
+        link.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const href = link.getAttribute('href');
+            if (href) {
+                window.location.href = href;
+            }
+        });
+    });
 
     cards.forEach(card => {
         card.addEventListener('dragstart', () => {

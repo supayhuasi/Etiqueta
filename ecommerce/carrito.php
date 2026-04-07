@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/descuentos.php';
 require 'includes/envio.php';
 
@@ -8,28 +7,43 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$carrito = $_SESSION['carrito'] ?? [];
 $mensaje_descuento = '';
 $error_descuento = '';
 
 // Procesar eliminación de item
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['eliminar'])) {
-    $item_key = $_POST['eliminar'];
-    unset($_SESSION['carrito'][$item_key]);
-    header("Location: carrito.php");
+    $item_key = (string)($_POST['eliminar'] ?? '');
+
+    if (isset($_SESSION['carrito'][$item_key])) {
+        unset($_SESSION['carrito'][$item_key]);
+
+        if (!empty($_SESSION['carrito']) && is_array($_SESSION['carrito'])) {
+            $_SESSION['carrito'] = array_values($_SESSION['carrito']);
+        } else {
+            unset($_SESSION['carrito'], $_SESSION['descuento_codigo']);
+        }
+    }
+
+    header('Location: carrito.php', true, 303);
     exit;
 }
 
 // Procesar actualización de cantidad
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actualizar_cantidad'])) {
-    foreach ($_POST['cantidades'] as $item_key => $cantidad) {
-        if (isset($_SESSION['carrito'][$item_key])) {
-            $_SESSION['carrito'][$item_key]['cantidad'] = max(1, intval($cantidad));
+    $cantidades = $_POST['cantidades'] ?? [];
+    if (is_array($cantidades)) {
+        foreach ($cantidades as $item_key => $cantidad) {
+            if (isset($_SESSION['carrito'][$item_key])) {
+                $_SESSION['carrito'][$item_key]['cantidad'] = max(1, (int)$cantidad);
+            }
         }
     }
-    header("Location: carrito.php");
+
+    header('Location: carrito.php', true, 303);
     exit;
 }
+
+$carrito = $_SESSION['carrito'] ?? [];
 
 // Calcular totales
 $subtotal = 0;
@@ -84,6 +98,8 @@ $descuento_monto = $descuento_info['monto'] ?? 0.0;
 $codigo_descuento = $descuento_info['codigo'] ?? '';
 
 $total = max(0, $subtotal + $envio - $descuento_monto);
+
+require 'includes/header.php';
 ?>
 
 <div class="container py-5">
