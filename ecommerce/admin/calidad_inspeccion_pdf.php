@@ -51,18 +51,23 @@ class PDFCalidad extends FPDF
 
     public function Header()
     {
+        $logoPrinted = false;
         if (!empty($this->empresa['logo'])) {
             $logoLocal = '../../ecommerce/uploads/' . $this->empresa['logo'];
             $logoRoot = '../../uploads/' . $this->empresa['logo'];
             if (file_exists($logoLocal)) {
-                $this->Image($logoLocal, 10, 6, 28);
+                $this->Image($logoLocal, 10, 5, 36);
+                $logoPrinted = true;
             } elseif (file_exists($logoRoot)) {
-                $this->Image($logoRoot, 10, 6, 28);
+                $this->Image($logoRoot, 10, 5, 36);
+                $logoPrinted = true;
             }
         }
 
-        $this->SetFont('Arial', 'B', 15);
+        $this->SetFont('Arial', 'B', 16);
         $this->Cell(0, 8, utf8_decode($this->empresa['nombre'] ?? 'Tucu Roller'), 0, 1, 'C');
+        $this->SetFont('Arial', 'I', 9);
+        $this->Cell(0, 5, utf8_decode('Informe interno de control de calidad'), 0, 1, 'C');
         $this->SetFont('Arial', '', 9);
         if (!empty($this->empresa['direccion']) || !empty($this->empresa['telefono']) || !empty($this->empresa['email'])) {
             $linea = trim((string)($this->empresa['direccion'] ?? ''));
@@ -75,7 +80,7 @@ class PDFCalidad extends FPDF
             $this->Cell(0, 5, utf8_decode($linea), 0, 1, 'C');
         }
 
-        $this->Ln(2);
+        $this->Ln($logoPrinted ? 3 : 2);
         $this->SetDrawColor(200, 200, 200);
         $this->Line(10, $this->GetY(), 200, $this->GetY());
         $this->Ln(4);
@@ -111,6 +116,9 @@ if ($estadoCalidadKey === 'aprobado') {
 
 $pruebaFill = $pasoPruebaBool ? [25, 135, 84] : [220, 53, 69];
 $pruebaText = [255, 255, 255];
+$responsableFirma = trim((string)($inspeccion['revisor_nombre'] ?? 'Responsable de calidad'));
+$fechaEmisionDoc = date('d/m/Y H:i');
+$codigoValidacion = 'QC-' . str_pad((string)$pedidoId, 6, '0', STR_PAD_LEFT) . '-' . date('YmdHi');
 
 $pdf->SetFont('Arial', 'B', 14);
 $pdf->Cell(0, 9, utf8_decode('INFORME DE CONTROL DE CALIDAD'), 0, 1, 'C');
@@ -226,6 +234,13 @@ if (empty($itemsPedido)) {
 
 $pdf->Ln(8);
 $pdf->SetFont('Arial', 'B', 10);
+$pdf->SetFillColor(232, 245, 233);
+$pdf->Cell(0, 7, utf8_decode('VALIDACION DIGITAL AUTOMATICA'), 1, 1, 'C', true);
+$pdf->SetFont('Arial', '', 9);
+$pdf->MultiCell(0, 6, utf8_decode('Responsable: ' . $responsableFirma . ' · Emitido: ' . $fechaEmisionDoc . ' · Código: ' . $codigoValidacion), 1);
+
+$pdf->Ln(6);
+$pdf->SetFont('Arial', 'B', 10);
 $pdf->Cell(85, 6, utf8_decode('Firma responsable de calidad'), 0, 0, 'C');
 $pdf->Cell(20, 6, '', 0, 0, 'C');
 $pdf->Cell(85, 6, utf8_decode('Conformidad cliente / supervisor'), 0, 1, 'C');
@@ -235,13 +250,16 @@ $pdf->Line(20, $yFirma, 85, $yFirma);
 $pdf->Line(125, $yFirma, 190, $yFirma);
 $pdf->Ln(2);
 $pdf->SetFont('Arial', '', 9);
-$pdf->Cell(85, 5, utf8_decode((string)($inspeccion['revisor_nombre'] ?? 'Responsable de calidad')), 0, 0, 'C');
+$pdf->Cell(85, 5, utf8_decode($responsableFirma), 0, 0, 'C');
 $pdf->Cell(20, 5, '', 0, 0, 'C');
 $pdf->Cell(85, 5, utf8_decode('Firma y aclaración'), 0, 1, 'C');
+$pdf->Cell(85, 5, utf8_decode('Documento emitido digitalmente'), 0, 0, 'C');
+$pdf->Cell(20, 5, '', 0, 0, 'C');
+$pdf->Cell(85, 5, utf8_decode('Recepción / conformidad'), 0, 1, 'C');
 
 $pdf->Ln(5);
 $pdf->SetFont('Arial', 'I', 9);
-$pdf->MultiCell(0, 5, utf8_decode('Este informe resume el control de calidad realizado sobre el pedido y deja constancia del resultado de la prueba, observaciones detectadas y estado final.'));
+$pdf->MultiCell(0, 5, utf8_decode('Este informe resume el control de calidad realizado sobre el pedido y deja constancia del resultado de la prueba, observaciones detectadas, firma digital automática y estado final.'));
 
 $nombreArchivo = 'Calidad_Pedido_' . preg_replace('/[^A-Za-z0-9_-]/', '_', (string)($pedido['numero_pedido'] ?? $pedidoId)) . '.pdf';
 $pdf->Output('I', $nombreArchivo);

@@ -13,6 +13,67 @@ if (!isset($can_access) || !$can_access('calidad')) {
     die('Acceso denegado.');
 }
 
+if (!function_exists('calidad_formatear_atributos_pedido')) {
+    function calidad_formatear_atributos_pedido(PDO $pdo, $atributosRaw): string
+    {
+        $atributosRaw = trim((string)$atributosRaw);
+        if ($atributosRaw === '') {
+            return '';
+        }
+
+        $atributos = json_decode($atributosRaw, true);
+        if (!is_array($atributos)) {
+            return $atributosRaw;
+        }
+
+        $partes = [];
+        $opcionesCache = [];
+        $puedeBuscarOpciones = calidad_table_exists($pdo, 'ecommerce_atributo_opciones');
+
+        foreach ($atributos as $attr) {
+            if (!is_array($attr)) {
+                continue;
+            }
+
+            $nombre = trim((string)($attr['nombre'] ?? ''));
+            $valor = trim((string)($attr['valor'] ?? ''));
+
+            if ($valor !== '' && ctype_digit($valor) && $puedeBuscarOpciones) {
+                $opcionId = (int)$valor;
+                if ($opcionId > 0) {
+                    if (!array_key_exists($opcionId, $opcionesCache)) {
+                        try {
+                            $stmtOpcion = $pdo->prepare("SELECT nombre FROM ecommerce_atributo_opciones WHERE id = ? LIMIT 1");
+                            $stmtOpcion->execute([$opcionId]);
+                            $opcionesCache[$opcionId] = (string)($stmtOpcion->fetchColumn() ?: '');
+                        } catch (Throwable $e) {
+                            $opcionesCache[$opcionId] = '';
+                        }
+                    }
+
+                    if ($opcionesCache[$opcionId] !== '') {
+                        $valor = $opcionesCache[$opcionId];
+                    }
+                }
+            }
+
+            if ($nombre === '' && $valor === '') {
+                continue;
+            }
+
+            $parte = $nombre !== '' ? ($nombre . ': ' . $valor) : $valor;
+            $costoAdicional = isset($attr['costo_adicional']) ? (float)$attr['costo_adicional'] : 0.0;
+            if ($costoAdicional > 0) {
+                $parte .= ' (+$' . number_format($costoAdicional, 0, ',', '.') . ')';
+            }
+
+            $partes[] = trim($parte, ': ');
+        }
+
+        return implode(' · ', $partes);
+    }
+}
+
 $desde = $_GET['desde'] ?? date('Y-m-01');
 $hasta = $_GET['hasta'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$desde)) {
@@ -234,6 +295,11 @@ if ($pedidoCalidadId > 0) {
                 $stmtItemsCalidad = $pdo->prepare("SELECT pi.id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos, COALESCE(pr.nombre, 'Producto') AS producto_nombre FROM ecommerce_pedido_items pi LEFT JOIN ecommerce_productos pr ON pr.id = pi.producto_id WHERE pi.pedido_id = ? ORDER BY pi.id ASC");
                 $stmtItemsCalidad->execute([$pedidoCalidadId]);
                 $pedidoCalidadItems = $stmtItemsCalidad->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                foreach ($pedidoCalidadItems as &$pedidoCalidadItem) {
+                    $pedidoCalidadItem['atributos_legibles'] = calidad_formatear_atributos_pedido($pdo, $pedidoCalidadItem['atributos'] ?? '');
+                }
+                unset($pedidoCalidadItem);
             }
 
             $inspeccionPedido = obtenerInspeccionCalidadPedido($pdo, $pedidoCalidadId);
@@ -419,8 +485,8 @@ try {
                                                     <div class="col-lg-5">
                                                         <div class="fw-semibold"><?= htmlspecialchars((string)($itemCalidad['producto_nombre'] ?? 'Producto')) ?></div>
                                                         <div class="small text-muted">Cantidad: <?= htmlspecialchars((string)($itemCalidad['cantidad'] ?? '1')) ?><?= $medidasCalidad !== '' ? ' · ' . htmlspecialchars($medidasCalidad) : '' ?></div>
-                                                        <?php if (!empty($itemCalidad['atributos'])): ?>
-                                                            <div class="small text-muted">Atributos: <?= htmlspecialchars((string)$itemCalidad['atributos']) ?></div>
+                                                        <?php if (!empty($itemCalidad['atributos_legibles'])): ?>
+                                                            <div class="small text-muted">Atributos: <?= htmlspecialchars((string)$itemCalidad['atributos_legibles']) ?></div>
                                                         <?php endif; ?>
                                                     </div>
                                                     <div class="col-lg-3">
