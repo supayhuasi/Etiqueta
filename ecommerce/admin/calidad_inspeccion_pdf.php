@@ -196,7 +196,7 @@ if (empty($itemsPedido)) {
         }
 
         $resultadoItemKey = strtolower(trim((string)($revision['estado'] ?? 'ok')));
-        $resultadoItem = ucfirst($resultadoItemKey);
+        $resultadoItem = ucfirst(str_replace('_', ' ', $resultadoItemKey));
         $observacionItem = trim((string)($revision['observacion'] ?? ''));
         if ($observacionItem === '') {
             $observacionItem = '-';
@@ -211,6 +211,8 @@ if (empty($itemsPedido)) {
             $textResultado = [33, 37, 41];
         } elseif ($resultadoItemKey === 'rechazado') {
             $fillResultado = [220, 53, 69];
+        } elseif ($resultadoItemKey === 'no_terminada') {
+            $fillResultado = [253, 126, 20];
         }
 
         $y = $pdf->GetY();

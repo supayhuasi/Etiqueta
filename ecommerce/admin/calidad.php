@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 foreach ($itemNombres as $itemId => $itemNombre) {
                     $itemId = (int)$itemId;
                     $estadoItem = (string)($itemEstados[$itemId] ?? 'ok');
-                    if (!in_array($estadoItem, ['ok', 'observado', 'rechazado'], true)) {
+                    if (!in_array($estadoItem, ['ok', 'observado', 'rechazado', 'no_terminada'], true)) {
                         $estadoItem = 'ok';
                     }
 
@@ -465,7 +465,7 @@ try {
                         <div class="border rounded-3 p-3 bg-light-subtle">
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                                 <h6 class="mb-0">Detalle del pedido a revisar</h6>
-                                <small class="text-muted">Marcá cada ítem como OK, observado o rechazado.</small>
+                                <small class="text-muted">Marcá cada ítem como OK, observado, rechazado o no terminada.</small>
                             </div>
                             <?php if (empty($pedidoCalidadItems)): ?>
                                 <div class="text-muted">No se encontraron ítems cargados para este pedido.</div>
@@ -497,6 +497,7 @@ try {
                                                             <option value="ok" <?= $estadoItemActual === 'ok' ? 'selected' : '' ?>>OK</option>
                                                             <option value="observado" <?= $estadoItemActual === 'observado' ? 'selected' : '' ?>>Observado</option>
                                                             <option value="rechazado" <?= $estadoItemActual === 'rechazado' ? 'selected' : '' ?>>Rechazado</option>
+                                                            <option value="no_terminada" <?= $estadoItemActual === 'no_terminada' ? 'selected' : '' ?>>No terminada</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-lg-4">
