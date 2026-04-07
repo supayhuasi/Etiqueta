@@ -7,19 +7,24 @@ $error = '';
 
 function cotizacion_tabla_existe(PDO $pdo, string $tabla): bool {
     try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
         $stmt->execute([$tabla]);
-        return (bool)$stmt->fetchColumn();
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Exception $e) {
-        return false;
+        try {
+            $pdo->query("SELECT 1 FROM {$tabla} LIMIT 1");
+            return true;
+        } catch (Exception $ex) {
+            return false;
+        }
     }
 }
 
 function tabla_tiene_columna(PDO $pdo, string $tabla, string $columna): bool {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
-        $stmt->execute([$columna]);
-        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
+        $stmt->execute([$tabla, $columna]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Exception $e) {
         return false;
     }

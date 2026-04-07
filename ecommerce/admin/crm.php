@@ -4,20 +4,25 @@ require 'includes/header.php';
 function crm_table_exists(PDO $pdo, string $table): bool
 {
     try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
         $stmt->execute([$table]);
-        return (bool)$stmt->fetchColumn();
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
-        return false;
+        try {
+            $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
+            return true;
+        } catch (Throwable $ex) {
+            return false;
+        }
     }
 }
 
 function crm_column_exists(PDO $pdo, string $table, string $column): bool
 {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-        $stmt->execute([$column]);
-        return (bool)$stmt->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
+        $stmt->execute([$table, $column]);
+        return (int)$stmt->fetchColumn() > 0;
     } catch (Throwable $e) {
         return false;
     }
@@ -115,14 +120,29 @@ function crm_ensure_schema(PDO $pdo): array
     return $warnings;
 }
 
-function crm_sync_from_visits(PDO $pdo): void
+function crm_count_rows(PDO $pdo, string $table): int
 {
-    if (!crm_table_exists($pdo, 'ecommerce_visitas') || !crm_table_exists($pdo, 'ecommerce_crm_visitas')) {
-        return;
+    if (!crm_table_exists($pdo, $table)) {
+        return 0;
     }
 
     try {
-        $pdo->exec("INSERT IGNORE INTO ecommerce_crm_visitas (visita_id, estado, prioridad, origen, proximo_contacto, asignado_a, fecha_creacion, fecha_actualizacion)
+        return (int)$pdo->query("SELECT COUNT(*) FROM {$table}")->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+function crm_sync_from_visits(PDO $pdo): array
+{
+    $result = ['inserted' => 0, 'warnings' => []];
+
+    if (!crm_table_exists($pdo, 'ecommerce_visitas') || !crm_table_exists($pdo, 'ecommerce_crm_visitas')) {
+        return $result;
+    }
+
+    try {
+        $result['inserted'] = (int)$pdo->exec("INSERT IGNORE INTO ecommerce_crm_visitas (visita_id, estado, prioridad, origen, proximo_contacto, asignado_a, fecha_creacion, fecha_actualizacion)
             SELECT
                 v.id,
                 CASE
@@ -138,7 +158,38 @@ function crm_sync_from_visits(PDO $pdo): void
                 NOW()
             FROM ecommerce_visitas v");
     } catch (Throwable $e) {
+        $result['warnings'][] = 'No se pudieron sincronizar visitas automáticamente.';
         error_log('crm_sync_from_visits: ' . $e->getMessage());
+    }
+
+    return $result;
+}
+
+function crm_sync_linked_quotes(PDO $pdo): int
+{
+    if (!crm_table_exists($pdo, 'ecommerce_crm_visitas') || !crm_table_exists($pdo, 'ecommerce_cotizaciones')) {
+        return 0;
+    }
+    if (!crm_column_exists($pdo, 'ecommerce_cotizaciones', 'crm_id')) {
+        return 0;
+    }
+
+    try {
+        return (int)$pdo->exec("UPDATE ecommerce_crm_visitas c
+            INNER JOIN (
+                SELECT q.crm_id, MAX(q.id) AS cotizacion_id
+                FROM ecommerce_cotizaciones q
+                WHERE q.crm_id IS NOT NULL
+                GROUP BY q.crm_id
+            ) ult ON ult.crm_id = c.id
+            INNER JOIN ecommerce_cotizaciones q2 ON q2.id = ult.cotizacion_id
+            SET
+                c.ultima_cotizacion_id = q2.id,
+                c.ultima_cotizacion_numero = COALESCE(NULLIF(q2.numero_cotizacion, ''), CONCAT('COT-', q2.id)),
+                c.fecha_ultima_cotizacion = COALESCE(q2.fecha_creacion, NOW())");
+    } catch (Throwable $e) {
+        error_log('crm_sync_linked_quotes: ' . $e->getMessage());
+        return 0;
     }
 }
 
@@ -290,7 +341,8 @@ function crm_whatsapp_link(?string $telefono): string
 }
 
 $crm_schema_warnings = crm_ensure_schema($pdo);
-crm_sync_from_visits($pdo);
+$crm_sync_result = crm_sync_from_visits($pdo);
+$crm_sync_quotes = crm_sync_linked_quotes($pdo);
 
 $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
 $is_admin = (($role ?? '') === 'admin');
@@ -315,6 +367,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = trim((string)($_POST['accion'] ?? ''));
 
     try {
+        if ($accion === 'resincronizar') {
+            $sync_result_post = crm_sync_from_visits($pdo);
+            $quotes_sync_post = crm_sync_linked_quotes($pdo);
+            $mensaje_sync = 'CRM resincronizado correctamente.';
+            if (($sync_result_post['inserted'] ?? 0) > 0) {
+                $mensaje_sync .= ' Se agregaron ' . (int)$sync_result_post['inserted'] . ' visitas al listado.';
+            }
+            if ($quotes_sync_post > 0) {
+                $mensaje_sync .= ' También se actualizaron cotizaciones vinculadas.';
+            }
+            crm_redirect_with_flash('ok', $mensaje_sync);
+        }
+
         if ($accion === 'guardar_oportunidad') {
             $crm_id = (int)($_POST['crm_id'] ?? 0);
             $estado = trim((string)($_POST['estado'] ?? 'nuevo'));
@@ -696,9 +761,14 @@ if ($lead_actual) {
         <h1 class="h3 mb-1">📞 CRM de visitas</h1>
         <p class="mb-0 opacity-75">Cada visita queda convertida en una oportunidad para hacer seguimiento, cotizar y cerrar.</p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
         <a href="instalaciones.php" class="btn btn-light"><i class="bi bi-calendar-check"></i> Ver visitas</a>
         <a href="cotizaciones.php" class="btn btn-outline-light"><i class="bi bi-file-earmark-richtext"></i> Cotizaciones</a>
+        <form method="POST" class="m-0">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion" value="resincronizar">
+            <button type="submit" class="btn btn-outline-light"><i class="bi bi-arrow-repeat"></i> Re-sincronizar</button>
+        </form>
     </div>
 </div>
 
@@ -751,6 +821,9 @@ if ($lead_actual) {
 
 <?php if ($mensaje !== ''): ?>
     <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+<?php endif; ?>
+<?php if (($crm_sync_result['inserted'] ?? 0) > 0): ?>
+    <div class="alert alert-info">Se sincronizaron automáticamente <?= (int)$crm_sync_result['inserted'] ?> visitas al CRM.</div>
 <?php endif; ?>
 <?php if (!empty($crm_schema_warnings)): ?>
     <div class="alert alert-warning">
@@ -850,6 +923,9 @@ if ($lead_actual) {
                                                 <div class="small text-muted"><i class="bi bi-telephone"></i> <?= htmlspecialchars($lead['telefono']) ?></div>
                                             <?php endif; ?>
                                             <div class="small text-muted">Visita: <?= htmlspecialchars(crm_format_date($lead['fecha_visita'] ?? null)) ?></div>
+                                            <?php if (!empty($lead['ultima_cotizacion_numero'])): ?>
+                                                <div class="small"><span class="badge bg-primary-subtle text-primary border">Cotización: <?= htmlspecialchars($lead['ultima_cotizacion_numero']) ?></span></div>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <div class="mb-1"><span class="badge <?= crm_estado_badge((string)$lead['estado']) ?>"><?= htmlspecialchars($estado_options[$lead['estado']] ?? ucfirst((string)$lead['estado'])) ?></span></div>
