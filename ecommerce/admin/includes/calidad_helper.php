@@ -99,8 +99,78 @@ if (!function_exists('ensureCalidadSchema')) {
             if (!in_array('estado', $columns, true)) {
                 $pdo->exec("ALTER TABLE ecommerce_calidad_eventos ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'abierto' AFTER fecha_evento");
             }
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_calidad_inspecciones (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                pedido_id INT NOT NULL,
+                cliente_nombre VARCHAR(150) NULL,
+                estado_calidad VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+                prueba_aprobada TINYINT(1) NOT NULL DEFAULT 0,
+                detalle_revision TEXT NULL,
+                observaciones TEXT NULL,
+                items_json LONGTEXT NULL,
+                revisado_por INT NULL,
+                fecha_revision DATETIME NULL,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+                fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_pedido_calidad (pedido_id),
+                INDEX idx_estado_calidad (estado_calidad),
+                INDEX idx_fecha_revision (fecha_revision)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $inspeccionCols = calidad_columns($pdo, 'ecommerce_calidad_inspecciones');
+            if (!in_array('cliente_nombre', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN cliente_nombre VARCHAR(150) NULL AFTER pedido_id");
+            }
+            if (!in_array('estado_calidad', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN estado_calidad VARCHAR(20) NOT NULL DEFAULT 'pendiente' AFTER cliente_nombre");
+            }
+            if (!in_array('prueba_aprobada', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN prueba_aprobada TINYINT(1) NOT NULL DEFAULT 0 AFTER estado_calidad");
+            }
+            if (!in_array('detalle_revision', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN detalle_revision TEXT NULL AFTER prueba_aprobada");
+            }
+            if (!in_array('observaciones', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN observaciones TEXT NULL AFTER detalle_revision");
+            }
+            if (!in_array('items_json', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN items_json LONGTEXT NULL AFTER observaciones");
+            }
+            if (!in_array('revisado_por', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN revisado_por INT NULL AFTER items_json");
+            }
+            if (!in_array('fecha_revision', $inspeccionCols, true)) {
+                $pdo->exec("ALTER TABLE ecommerce_calidad_inspecciones ADD COLUMN fecha_revision DATETIME NULL AFTER revisado_por");
+            }
         } catch (Throwable $e) {
             error_log('ensureCalidadSchema: ' . $e->getMessage());
+        }
+    }
+}
+
+if (!function_exists('obtenerInspeccionCalidadPedido')) {
+    function obtenerInspeccionCalidadPedido(PDO $pdo, int $pedidoId): ?array
+    {
+        if ($pedidoId <= 0) {
+            return null;
+        }
+
+        ensureCalidadSchema($pdo);
+
+        try {
+            $stmt = $pdo->prepare("SELECT ci.*, COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS revisor_nombre FROM ecommerce_calidad_inspecciones ci LEFT JOIN usuarios u ON u.id = ci.revisado_por WHERE ci.pedido_id = ? LIMIT 1");
+            $stmt->execute([$pedidoId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            if (!$row) {
+                return null;
+            }
+
+            $items = json_decode((string)($row['items_json'] ?? '[]'), true);
+            $row['items_revision'] = is_array($items) ? $items : [];
+            return $row;
+        } catch (Throwable $e) {
+            return null;
         }
     }
 }

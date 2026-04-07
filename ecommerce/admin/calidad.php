@@ -27,6 +27,11 @@ if ($hasta < $desde) {
 
 $mensaje = '';
 $error = '';
+$pedidoCalidadId = max(0, (int)($_GET['pedido_id'] ?? ($_POST['pedido_id'] ?? 0)));
+$pedidoCalidad = null;
+$pedidoCalidadItems = [];
+$inspeccionPedido = null;
+$inspeccionItemsMap = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? 'crear_evento');
@@ -44,6 +49,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("UPDATE ecommerce_calidad_eventos SET estado = ? WHERE id = ?");
             $stmt->execute([$nuevoEstado, $id]);
             $mensaje = 'Estado de calidad actualizado correctamente.';
+        } elseif ($action === 'guardar_inspeccion_pedido') {
+            $pedidoId = (int)($_POST['pedido_id'] ?? 0);
+            $clienteNombre = trim((string)($_POST['cliente_nombre'] ?? ''));
+            $estadoCalidad = (string)($_POST['estado_calidad'] ?? 'pendiente');
+            $pruebaAprobada = (int)($_POST['prueba_aprobada'] ?? 0) === 1 ? 1 : 0;
+            $detalleRevision = trim((string)($_POST['detalle_revision'] ?? ''));
+            $observaciones = trim((string)($_POST['observaciones'] ?? ''));
+            $fechaRevisionInput = trim((string)($_POST['fecha_revision'] ?? ''));
+
+            if ($pedidoId <= 0) {
+                throw new Exception('Pedido inválido para el control de calidad.');
+            }
+            if (!in_array($estadoCalidad, ['pendiente', 'aprobado', 'observado', 'rechazado'], true)) {
+                $estadoCalidad = 'pendiente';
+            }
+
+            $fechaRevision = date('Y-m-d H:i:s');
+            if ($fechaRevisionInput !== '') {
+                $fechaRevisionNormalizada = str_replace('T', ' ', $fechaRevisionInput);
+                $tsRevision = strtotime($fechaRevisionNormalizada);
+                if ($tsRevision !== false) {
+                    $fechaRevision = date('Y-m-d H:i:s', $tsRevision);
+                }
+            }
+
+            $itemEstados = $_POST['item_estado'] ?? [];
+            $itemObservaciones = $_POST['item_observacion'] ?? [];
+            $itemNombres = $_POST['item_nombre'] ?? [];
+            $itemCantidades = $_POST['item_cantidad'] ?? [];
+            $itemsRevision = [];
+
+            if (is_array($itemNombres)) {
+                foreach ($itemNombres as $itemId => $itemNombre) {
+                    $itemId = (int)$itemId;
+                    $estadoItem = (string)($itemEstados[$itemId] ?? 'ok');
+                    if (!in_array($estadoItem, ['ok', 'observado', 'rechazado'], true)) {
+                        $estadoItem = 'ok';
+                    }
+
+                    $itemsRevision[] = [
+                        'item_id' => $itemId,
+                        'producto' => trim((string)$itemNombre),
+                        'cantidad' => (string)($itemCantidades[$itemId] ?? ''),
+                        'estado' => $estadoItem,
+                        'observacion' => trim((string)($itemObservaciones[$itemId] ?? '')),
+                    ];
+                }
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_calidad_inspecciones
+                (pedido_id, cliente_nombre, estado_calidad, prueba_aprobada, detalle_revision, observaciones, items_json, revisado_por, fecha_revision)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    cliente_nombre = VALUES(cliente_nombre),
+                    estado_calidad = VALUES(estado_calidad),
+                    prueba_aprobada = VALUES(prueba_aprobada),
+                    detalle_revision = VALUES(detalle_revision),
+                    observaciones = VALUES(observaciones),
+                    items_json = VALUES(items_json),
+                    revisado_por = VALUES(revisado_por),
+                    fecha_revision = VALUES(fecha_revision)");
+            $stmt->execute([
+                $pedidoId,
+                $clienteNombre !== '' ? $clienteNombre : null,
+                $estadoCalidad,
+                $pruebaAprobada,
+                $detalleRevision !== '' ? $detalleRevision : null,
+                $observaciones !== '' ? $observaciones : null,
+                !empty($itemsRevision) ? json_encode($itemsRevision, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+                $_SESSION['user']['id'] ?? null,
+                $fechaRevision,
+            ]);
+
+            if (($estadoCalidad === 'observado' || $estadoCalidad === 'rechazado' || $pruebaAprobada === 0) && ($detalleRevision !== '' || $observaciones !== '')) {
+                $tituloEvento = 'Control de calidad pedido #' . $pedidoId;
+                $descripcionEvento = trim($detalleRevision . "\n" . $observaciones);
+                $estadoEvento = $estadoCalidad === 'aprobado' ? 'resuelto' : 'abierto';
+                $fechaEvento = date('Y-m-d', strtotime($fechaRevision));
+
+                $stmtExiste = $pdo->prepare("SELECT id FROM ecommerce_calidad_eventos WHERE pedido_id = ? AND tipo = 'reclamo' AND titulo = ? LIMIT 1");
+                $stmtExiste->execute([$pedidoId, $tituloEvento]);
+                $eventoExistenteId = (int)$stmtExiste->fetchColumn();
+
+                if ($eventoExistenteId > 0) {
+                    $stmtEvento = $pdo->prepare("UPDATE ecommerce_calidad_eventos SET descripcion = ?, cliente_nombre = ?, fecha_evento = ?, estado = ? WHERE id = ?");
+                    $stmtEvento->execute([
+                        $descripcionEvento !== '' ? $descripcionEvento : null,
+                        $clienteNombre !== '' ? $clienteNombre : null,
+                        $fechaEvento,
+                        $estadoEvento,
+                        $eventoExistenteId,
+                    ]);
+                } else {
+                    $stmtEvento = $pdo->prepare("INSERT INTO ecommerce_calidad_eventos (tipo, titulo, descripcion, pedido_id, cliente_nombre, cantidad, fecha_evento, estado, creado_por) VALUES ('reclamo', ?, ?, ?, ?, 1, ?, ?, ?)");
+                    $stmtEvento->execute([
+                        $tituloEvento,
+                        $descripcionEvento !== '' ? $descripcionEvento : null,
+                        $pedidoId,
+                        $clienteNombre !== '' ? $clienteNombre : null,
+                        $fechaEvento,
+                        $estadoEvento,
+                        $_SESSION['user']['id'] ?? null,
+                    ]);
+                }
+            }
+
+            $pedidoCalidadId = $pedidoId;
+            $mensaje = 'Control de calidad del pedido guardado correctamente.';
         } else {
             $tipo = (string)($_POST['tipo'] ?? 'reclamo');
             $tiposValidos = ['reclamo', 'rehecho', 'demora', 'satisfaccion'];
@@ -107,6 +220,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         $error = 'Error: ' . $e->getMessage();
+    }
+}
+
+if ($pedidoCalidadId > 0) {
+    try {
+        $stmtPedidoCalidad = $pdo->prepare("SELECT p.*, c.nombre AS cliente_nombre, c.email AS cliente_email FROM ecommerce_pedidos p LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id WHERE p.id = ? LIMIT 1");
+        $stmtPedidoCalidad->execute([$pedidoCalidadId]);
+        $pedidoCalidad = $stmtPedidoCalidad->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        if ($pedidoCalidad) {
+            if (calidad_table_exists($pdo, 'ecommerce_pedido_items')) {
+                $stmtItemsCalidad = $pdo->prepare("SELECT pi.id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos, COALESCE(pr.nombre, 'Producto') AS producto_nombre FROM ecommerce_pedido_items pi LEFT JOIN ecommerce_productos pr ON pr.id = pi.producto_id WHERE pi.pedido_id = ? ORDER BY pi.id ASC");
+                $stmtItemsCalidad->execute([$pedidoCalidadId]);
+                $pedidoCalidadItems = $stmtItemsCalidad->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+
+            $inspeccionPedido = obtenerInspeccionCalidadPedido($pdo, $pedidoCalidadId);
+            if (!empty($inspeccionPedido['items_revision']) && is_array($inspeccionPedido['items_revision'])) {
+                foreach ($inspeccionPedido['items_revision'] as $itemRevision) {
+                    $inspeccionItemsMap[(int)($itemRevision['item_id'] ?? 0)] = $itemRevision;
+                }
+            }
+        } elseif ($error === '') {
+            $error = 'No se encontró el pedido seleccionado para calidad.';
+        }
+    } catch (Throwable $e) {
+        if ($error === '') {
+            $error = 'No se pudo cargar el pedido para control de calidad: ' . $e->getMessage();
+        }
     }
 }
 
@@ -192,6 +334,128 @@ try {
 
     <?php if ($error !== ''): ?>
         <div class="alert alert-danger" role="alert"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+
+    <?php if ($pedidoCalidad): ?>
+        <div class="card quality-card mb-4 border-primary">
+            <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0">🔎 Control de calidad del pedido <?= htmlspecialchars((string)($pedidoCalidad['numero_pedido'] ?? ('#' . (int)$pedidoCalidadId))) ?></h5>
+                    <small class="text-muted">Revisá el detalle del pedido, marcá si pasó la prueba y dejá el informe listo para imprimir.</small>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="pedidos.php" class="btn btn-sm btn-outline-secondary">Volver a pedidos</a>
+                    <?php if ($inspeccionPedido): ?>
+                        <a href="calidad_inspeccion_pdf.php?pedido_id=<?= (int)$pedidoCalidad['id'] ?>" class="btn btn-sm btn-primary" target="_blank">🖨️ PDF calidad</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3"><div class="small text-muted">Cliente</div><div class="fw-semibold"><?= htmlspecialchars((string)($pedidoCalidad['cliente_nombre'] ?? 'Sin cliente')) ?></div></div>
+                    <div class="col-md-3"><div class="small text-muted">Estado pedido</div><div class="fw-semibold"><?= htmlspecialchars(ucfirst(str_replace('_', ' ', (string)($pedidoCalidad['estado'] ?? '-')))) ?></div></div>
+                    <div class="col-md-3"><div class="small text-muted">Fecha</div><div class="fw-semibold"><?= !empty($pedidoCalidad['fecha_pedido']) ? htmlspecialchars(date('d/m/Y H:i', strtotime((string)$pedidoCalidad['fecha_pedido']))) : '-' ?></div></div>
+                    <div class="col-md-3"><div class="small text-muted">Total</div><div class="fw-semibold">$<?= number_format((float)($pedidoCalidad['total'] ?? 0), 2, ',', '.') ?></div></div>
+                </div>
+
+                <form method="POST" class="row g-3">
+                    <input type="hidden" name="action" value="guardar_inspeccion_pedido">
+                    <input type="hidden" name="pedido_id" value="<?= (int)$pedidoCalidad['id'] ?>">
+                    <input type="hidden" name="cliente_nombre" value="<?= htmlspecialchars((string)($pedidoCalidad['cliente_nombre'] ?? '')) ?>">
+
+                    <div class="col-md-4">
+                        <label class="form-label">Estado del control</label>
+                        <select name="estado_calidad" class="form-select">
+                            <?php $estadoControlActual = (string)($inspeccionPedido['estado_calidad'] ?? 'pendiente'); ?>
+                            <option value="pendiente" <?= $estadoControlActual === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                            <option value="aprobado" <?= $estadoControlActual === 'aprobado' ? 'selected' : '' ?>>Aprobado</option>
+                            <option value="observado" <?= $estadoControlActual === 'observado' ? 'selected' : '' ?>>Observado</option>
+                            <option value="rechazado" <?= $estadoControlActual === 'rechazado' ? 'selected' : '' ?>>Rechazado</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">¿Pasó la prueba de calidad?</label>
+                        <?php $pasoPrueba = (int)($inspeccionPedido['prueba_aprobada'] ?? 0); ?>
+                        <select name="prueba_aprobada" class="form-select">
+                            <option value="1" <?= $pasoPrueba === 1 ? 'selected' : '' ?>>Sí</option>
+                            <option value="0" <?= $pasoPrueba !== 1 ? 'selected' : '' ?>>No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha de revisión</label>
+                        <input type="datetime-local" name="fecha_revision" class="form-control" value="<?= htmlspecialchars(!empty($inspeccionPedido['fecha_revision']) ? date('Y-m-d\TH:i', strtotime((string)$inspeccionPedido['fecha_revision'])) : date('Y-m-d\TH:i')) ?>">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Detalle detectado en el pedido</label>
+                        <textarea name="detalle_revision" class="form-control" rows="3" placeholder="Ej: control de medidas, terminación, embalaje, herrajes, limpieza final"><?= htmlspecialchars((string)($inspeccionPedido['detalle_revision'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observaciones finales</label>
+                        <textarea name="observaciones" class="form-control" rows="3" placeholder="Conclusión del control de calidad y acciones a tomar"><?= htmlspecialchars((string)($inspeccionPedido['observaciones'] ?? '')) ?></textarea>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="border rounded-3 p-3 bg-light-subtle">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <h6 class="mb-0">Detalle del pedido a revisar</h6>
+                                <small class="text-muted">Marcá cada ítem como OK, observado o rechazado.</small>
+                            </div>
+                            <?php if (empty($pedidoCalidadItems)): ?>
+                                <div class="text-muted">No se encontraron ítems cargados para este pedido.</div>
+                            <?php else: ?>
+                                <div class="row g-3">
+                                    <?php foreach ($pedidoCalidadItems as $itemCalidad): ?>
+                                        <?php
+                                            $itemIdCalidad = (int)($itemCalidad['id'] ?? 0);
+                                            $itemRevision = $inspeccionItemsMap[$itemIdCalidad] ?? [];
+                                            $medidasCalidad = '';
+                                            if (!empty($itemCalidad['ancho_cm']) || !empty($itemCalidad['alto_cm'])) {
+                                                $medidasCalidad = ($itemCalidad['ancho_cm'] !== null && $itemCalidad['ancho_cm'] !== '' ? $itemCalidad['ancho_cm'] : '-') . 'x' . ($itemCalidad['alto_cm'] !== null && $itemCalidad['alto_cm'] !== '' ? $itemCalidad['alto_cm'] : '-') . ' cm';
+                                            }
+                                        ?>
+                                        <div class="col-12">
+                                            <div class="border rounded p-3 bg-white">
+                                                <div class="row g-2 align-items-end">
+                                                    <div class="col-lg-5">
+                                                        <div class="fw-semibold"><?= htmlspecialchars((string)($itemCalidad['producto_nombre'] ?? 'Producto')) ?></div>
+                                                        <div class="small text-muted">Cantidad: <?= htmlspecialchars((string)($itemCalidad['cantidad'] ?? '1')) ?><?= $medidasCalidad !== '' ? ' · ' . htmlspecialchars($medidasCalidad) : '' ?></div>
+                                                        <?php if (!empty($itemCalidad['atributos'])): ?>
+                                                            <div class="small text-muted">Atributos: <?= htmlspecialchars((string)$itemCalidad['atributos']) ?></div>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="col-lg-3">
+                                                        <label class="form-label">Resultado ítem</label>
+                                                        <select name="item_estado[<?= $itemIdCalidad ?>]" class="form-select">
+                                                            <?php $estadoItemActual = (string)($itemRevision['estado'] ?? 'ok'); ?>
+                                                            <option value="ok" <?= $estadoItemActual === 'ok' ? 'selected' : '' ?>>OK</option>
+                                                            <option value="observado" <?= $estadoItemActual === 'observado' ? 'selected' : '' ?>>Observado</option>
+                                                            <option value="rechazado" <?= $estadoItemActual === 'rechazado' ? 'selected' : '' ?>>Rechazado</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-lg-4">
+                                                        <label class="form-label">Observación del ítem</label>
+                                                        <input type="text" name="item_observacion[<?= $itemIdCalidad ?>]" class="form-control" value="<?= htmlspecialchars((string)($itemRevision['observacion'] ?? '')) ?>" placeholder="Detalle puntual si hubo problema">
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" name="item_nombre[<?= $itemIdCalidad ?>]" value="<?= htmlspecialchars((string)($itemCalidad['producto_nombre'] ?? 'Producto')) ?>">
+                                                <input type="hidden" name="item_cantidad[<?= $itemIdCalidad ?>]" value="<?= htmlspecialchars((string)($itemCalidad['cantidad'] ?? '1')) ?>">
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="col-12 d-flex gap-2 flex-wrap">
+                        <button type="submit" class="btn btn-primary">Guardar control de calidad</button>
+                        <?php if ($inspeccionPedido): ?>
+                            <a href="calidad_inspeccion_pdf.php?pedido_id=<?= (int)$pedidoCalidad['id'] ?>" class="btn btn-outline-dark" target="_blank">Imprimir informe PDF</a>
+                        <?php endif; ?>
+                    </div>
+                </form>
+            </div>
+        </div>
     <?php endif; ?>
 
     <div class="card quality-card mb-4">
@@ -349,11 +613,11 @@ try {
                         </div>
                         <div class="col-12">
                             <label class="form-label">Cliente</label>
-                            <input type="text" name="cliente_nombre" class="form-control" placeholder="Nombre del cliente">
+                            <input type="text" name="cliente_nombre" class="form-control" placeholder="Nombre del cliente" value="<?= htmlspecialchars((string)($pedidoCalidad['cliente_nombre'] ?? '')) ?>">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Pedido ID</label>
-                            <input type="number" name="pedido_id" class="form-control" min="1" placeholder="Opcional">
+                            <input type="number" name="pedido_id" class="form-control" min="1" placeholder="Opcional" value="<?= $pedidoCalidad ? (int)$pedidoCalidad['id'] : '' ?>">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Cantidad</label>

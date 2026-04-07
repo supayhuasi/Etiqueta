@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require '../includes/funciones_recetas.php';
+require_once __DIR__ . '/includes/calidad_helper.php';
 
 $estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'pagado'];
 $colores = [
@@ -48,6 +49,11 @@ function pedidos_asegurar_tablas_remitos(PDO $pdo): void {
 }
 
 pedidos_asegurar_tablas_remitos($pdo);
+try {
+    ensureCalidadSchema($pdo);
+} catch (Throwable $e) {
+    // Continuar aunque la tabla de calidad no pueda inicializarse.
+}
 
 // Procesar cambio de estado ANTES de consultar pedidos
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'cambiar_estado') {
@@ -250,7 +256,10 @@ $cliente_busqueda = $_GET['cliente'] ?? '';
 
 $query = "
     SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
-           COALESCE(pp.total_pagado, 0) AS total_pagado
+           COALESCE(pp.total_pagado, 0) AS total_pagado,
+           ci.estado_calidad,
+           ci.prueba_aprobada,
+           ci.fecha_revision AS calidad_fecha_revision
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
     LEFT JOIN (
@@ -258,6 +267,7 @@ $query = "
         FROM ecommerce_pedido_pagos
         GROUP BY pedido_id
     ) pp ON pp.pedido_id = p.id
+    LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
@@ -489,17 +499,45 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                             </span>
                         </td>
                         <td>
-                            <?php $remito_resumen = $pedido_remito_resumen[(int)$pedido['id']] ?? ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0]; ?>
+                            <?php
+                                $remito_resumen = $pedido_remito_resumen[(int)$pedido['id']] ?? ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0];
+                                $calidadEstado = strtolower(trim((string)($pedido['estado_calidad'] ?? '')));
+                                $calidadBadge = 'secondary';
+                                $calidadTexto = 'Sin control';
+                                if ($calidadEstado === 'aprobado') {
+                                    $calidadBadge = 'success';
+                                    $calidadTexto = ((int)($pedido['prueba_aprobada'] ?? 0) === 1) ? 'Calidad OK' : 'Aprobado';
+                                } elseif ($calidadEstado === 'observado') {
+                                    $calidadBadge = 'warning text-dark';
+                                    $calidadTexto = 'Observado';
+                                } elseif ($calidadEstado === 'rechazado') {
+                                    $calidadBadge = 'danger';
+                                    $calidadTexto = 'Rechazado';
+                                } elseif ($calidadEstado === 'pendiente') {
+                                    $calidadBadge = 'secondary';
+                                    $calidadTexto = 'Pendiente';
+                                }
+                            ?>
                             <div class="d-flex flex-wrap gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>">Ver detalle</a>
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>#pagos">Pagos</a>
+                            <a class="btn btn-sm btn-outline-warning" href="calidad.php?pedido_id=<?= $pedido['id'] ?>">Calidad</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
+                            <?php if ($calidadEstado !== ''): ?>
+                                <a class="btn btn-sm btn-outline-secondary" href="calidad_inspeccion_pdf.php?pedido_id=<?= $pedido['id'] ?>" target="_blank">PDF calidad</a>
+                            <?php endif; ?>
                             <a class="btn btn-sm btn-outline-secondary btn-remito-parcial" href="pedido_remito.php?id=<?= $pedido['id'] ?>" data-pedido-id="<?= (int)$pedido['id'] ?>" data-pedido-numero="<?= htmlspecialchars($pedido['numero_pedido']) ?>">
                                 <?= ($remito_resumen['cantidad_remitida'] > 0 && $remito_resumen['cantidad_pendiente'] > 0) ? 'Remito parcial' : 'Remito' ?>
                             </a>
                             <?php if (!empty($pedido['public_token'])): ?>
                                 <a class="btn btn-sm btn-outline-info" href="<?= htmlspecialchars($base_url . '/pedido_publico.php?token=' . urlencode($pedido['public_token'])) ?>" target="_blank" rel="noopener">Link público</a>
                             <?php endif; ?>
+                            </div>
+                            <div class="mt-1">
+                                <span class="badge bg-<?= $calidadBadge ?>"><?= htmlspecialchars($calidadTexto) ?></span>
+                                <?php if (!empty($pedido['calidad_fecha_revision'])): ?>
+                                    <small class="text-muted ms-1">Revisado: <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$pedido['calidad_fecha_revision']))) ?></small>
+                                <?php endif; ?>
                             </div>
                             <?php if (!empty($pedido_items_map[(int)$pedido['id']])): ?>
                                 <small class="text-muted d-block mt-1">

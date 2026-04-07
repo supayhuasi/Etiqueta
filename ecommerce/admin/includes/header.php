@@ -361,6 +361,18 @@ if (!function_exists('admin_column_exists')) {
     }
 }
 
+if (!function_exists('admin_pick_date_column')) {
+    function admin_pick_date_column(PDO $pdo, string $table, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (admin_column_exists($pdo, $table, $candidate)) {
+                return $candidate;
+            }
+        }
+        return null;
+    }
+}
+
 $notificaciones_atrasos = [];
 $notificaciones_atrasos_total = 0;
 $notificaciones_tardanzas = [];
@@ -372,6 +384,13 @@ $notificaciones_tareas_vencidas_total = 0;
 $notificaciones_tareas_vencidas_criticas_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
+$notificaciones_pedidos_recientes = [];
+$notificaciones_pedidos_recientes_total = 0;
+$notificaciones_pagos_recientes = [];
+$notificaciones_pagos_recientes_total = 0;
+$notificaciones_cotizaciones_altas = [];
+$notificaciones_cotizaciones_altas_total = 0;
+$notificaciones_cotizacion_alta_monto = 500000.0;
 $notificaciones_total = 0;
 $notificaciones_atrasos_clientes_texto = '';
 
@@ -628,14 +647,118 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         }
 
+        if (
+            $notificaciones_permiso_admin
+            && admin_table_exists($pdo, 'ecommerce_pedidos')
+            && admin_column_exists($pdo, 'ecommerce_pedidos', 'id')
+            && admin_column_exists($pdo, 'ecommerce_pedidos', 'numero_pedido')
+        ) {
+            $fechaPedidoCol = admin_pick_date_column($pdo, 'ecommerce_pedidos', ['fecha_pedido', 'fecha_creacion']);
+            if ($fechaPedidoCol !== null) {
+                $sqlPedidosCount = "
+                    SELECT COUNT(*)
+                    FROM ecommerce_pedidos p
+                    WHERE p.{$fechaPedidoCol} IS NOT NULL
+                      AND DATE(p.{$fechaPedidoCol}) = CURDATE()
+                      AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+                ";
+                $notificaciones_pedidos_recientes_total = (int)$pdo->query($sqlPedidosCount)->fetchColumn();
+
+                if ($notificaciones_pedidos_recientes_total > 0) {
+                    $sqlPedidosLista = "
+                        SELECT
+                            p.id,
+                            p.numero_pedido,
+                            p.total,
+                            p.estado,
+                            p.{$fechaPedidoCol} AS fecha_evento,
+                            COALESCE(NULLIF(TRIM(c.nombre), ''), 'Cliente sin nombre') AS cliente_nombre
+                        FROM ecommerce_pedidos p
+                        LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
+                        WHERE p.{$fechaPedidoCol} IS NOT NULL
+                          AND DATE(p.{$fechaPedidoCol}) = CURDATE()
+                          AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+                        ORDER BY p.{$fechaPedidoCol} DESC, p.id DESC
+                        LIMIT 6
+                    ";
+                    $notificaciones_pedidos_recientes = $pdo->query($sqlPedidosLista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
+            }
+        }
+
+        if ($notificaciones_permiso_admin && admin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
+            if (!admin_column_exists($pdo, 'ecommerce_pedido_pagos', 'fecha_creacion')) {
+                try {
+                    $pdo->exec("ALTER TABLE ecommerce_pedido_pagos ADD COLUMN fecha_creacion DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER creado_por");
+                    $pdo->exec("UPDATE ecommerce_pedido_pagos SET fecha_creacion = COALESCE(fecha_pago, NOW()) WHERE fecha_creacion IS NULL");
+                } catch (Throwable $e) {
+                    // Continuar con fecha_pago si la migración no aplica.
+                }
+            }
+
+            $fechaPagoNotifCol = admin_pick_date_column($pdo, 'ecommerce_pedido_pagos', ['fecha_creacion', 'fecha_pago']);
+            if ($fechaPagoNotifCol !== null) {
+                $sqlPagosCount = "
+                    SELECT COUNT(*)
+                    FROM ecommerce_pedido_pagos pp
+                    WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
+                      AND DATE(pp.{$fechaPagoNotifCol}) = CURDATE()
+                      AND COALESCE(pp.monto, 0) > 0
+                ";
+                $notificaciones_pagos_recientes_total = (int)$pdo->query($sqlPagosCount)->fetchColumn();
+
+                if ($notificaciones_pagos_recientes_total > 0) {
+                    $sqlPagosLista = "
+                        SELECT
+                            pp.id,
+                            pp.pedido_id,
+                            pp.monto,
+                            pp.metodo,
+                            pp.referencia,
+                            pp.{$fechaPagoNotifCol} AS fecha_evento,
+                            p.numero_pedido,
+                            COALESCE(NULLIF(TRIM(c.nombre), ''), 'Cliente sin nombre') AS cliente_nombre
+                        FROM ecommerce_pedido_pagos pp
+                        LEFT JOIN ecommerce_pedidos p ON p.id = pp.pedido_id
+                        LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
+                        WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
+                          AND DATE(pp.{$fechaPagoNotifCol}) = CURDATE()
+                          AND COALESCE(pp.monto, 0) > 0
+                        ORDER BY pp.{$fechaPagoNotifCol} DESC, pp.id DESC
+                        LIMIT 6
+                    ";
+                    $notificaciones_pagos_recientes = $pdo->query($sqlPagosLista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
+            }
+        }
+
+        if (
+            $notificaciones_permiso_admin
+            && admin_table_exists($pdo, 'ecommerce_cotizaciones')
+            && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+            && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total')
+        ) {
+            $stmtCotCount = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_cotizaciones WHERE DATE(fecha_creacion) = CURDATE() AND COALESCE(total, 0) >= ?");
+            $stmtCotCount->execute([$notificaciones_cotizacion_alta_monto]);
+            $notificaciones_cotizaciones_altas_total = (int)$stmtCotCount->fetchColumn();
+
+            if ($notificaciones_cotizaciones_altas_total > 0) {
+                $stmtCotLista = $pdo->prepare("\n                    SELECT\n                        c.id,\n                        c.numero_cotizacion,\n                        c.nombre_cliente,\n                        c.total,\n                        c.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin vendedor') AS vendedor_nombre\n                    FROM ecommerce_cotizaciones c\n                    LEFT JOIN usuarios u ON u.id = c.creado_por\n                    WHERE DATE(c.fecha_creacion) = CURDATE()\n                      AND COALESCE(c.total, 0) >= ?\n                    ORDER BY c.total DESC, c.fecha_creacion DESC\n                    LIMIT 6\n                ");
+                $stmtCotLista->execute([$notificaciones_cotizacion_alta_monto]);
+                $notificaciones_cotizaciones_altas = $stmtCotLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        }
+
         $notificaciones_total = (int)$notificaciones_atrasos_total;
         if ($notificaciones_permiso_admin) {
             $notificaciones_total +=
                 (int)$notificaciones_tareas_vencidas_total
-                +
-                (int)$notificaciones_tardanzas_total
+                + (int)$notificaciones_tardanzas_total
                 + (int)$notificaciones_sin_tareas_total
-                + (int)$notificaciones_mensajes_total;
+                + (int)$notificaciones_mensajes_total
+                + (int)$notificaciones_pedidos_recientes_total
+                + (int)$notificaciones_pagos_recientes_total
+                + (int)$notificaciones_cotizaciones_altas_total;
         }
     } catch (Throwable $e) {
         if (!is_array($notificaciones_atrasos)) {
@@ -658,15 +781,29 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             $notificaciones_mensajes = [];
             $notificaciones_mensajes_total = 0;
         }
+        if (!is_array($notificaciones_pedidos_recientes)) {
+            $notificaciones_pedidos_recientes = [];
+            $notificaciones_pedidos_recientes_total = 0;
+        }
+        if (!is_array($notificaciones_pagos_recientes)) {
+            $notificaciones_pagos_recientes = [];
+            $notificaciones_pagos_recientes_total = 0;
+        }
+        if (!is_array($notificaciones_cotizaciones_altas)) {
+            $notificaciones_cotizaciones_altas = [];
+            $notificaciones_cotizaciones_altas_total = 0;
+        }
 
         $notificaciones_total = (int)$notificaciones_atrasos_total;
         if ($notificaciones_permiso_admin) {
             $notificaciones_total +=
                 (int)$notificaciones_tareas_vencidas_total
-                +
-                (int)$notificaciones_tardanzas_total
+                + (int)$notificaciones_tardanzas_total
                 + (int)$notificaciones_sin_tareas_total
-                + (int)$notificaciones_mensajes_total;
+                + (int)$notificaciones_mensajes_total
+                + (int)$notificaciones_pedidos_recientes_total
+                + (int)$notificaciones_pagos_recientes_total
+                + (int)$notificaciones_cotizaciones_altas_total;
         }
 
         error_log('Header notificaciones warning: ' . $e->getMessage());
@@ -1024,6 +1161,52 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>admin_mensajes.php">Abrir mensajería</a>
                         <?php endif; ?>
 
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0): ?>
+                            <div class="notif-section-title">Pedidos nuevos hoy (<?= (int)$notificaciones_pedidos_recientes_total ?>)</div>
+                            <?php foreach ($notificaciones_pedidos_recientes as $pedidoNotif): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>pedidos_detalle.php?pedido_id=<?= (int)($pedidoNotif['id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($pedidoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pedidoNotif['id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($pedidoNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
+                                    <div class="small text-success">
+                                        Total: $<?= number_format((float)($pedidoNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        · <?= !empty($pedidoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pedidoNotif['fecha_evento']))) : '-' ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pedidos</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
+                            <div class="notif-section-title">Pagos cargados hoy (<?= (int)$notificaciones_pagos_recientes_total ?>)</div>
+                            <?php foreach ($notificaciones_pagos_recientes as $pagoNotif): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>pedidos_detalle.php?pedido_id=<?= (int)($pagoNotif['pedido_id'] ?? 0) ?>#pagos">
+                                    <div class="fw-semibold"><?= htmlspecialchars($pagoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pagoNotif['pedido_id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($pagoNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
+                                    <div class="small text-success">
+                                        Pago: $<?= number_format((float)($pagoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        · <?= htmlspecialchars($pagoNotif['metodo'] ?? 'Método no informado') ?>
+                                        · <?= !empty($pagoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pagoNotif['fecha_evento']))) : '-' ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pagos de pedidos</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
+                            <div class="notif-section-title">Cotizaciones grandes hoy (<?= (int)$notificaciones_cotizaciones_altas_total ?>)</div>
+                            <?php foreach ($notificaciones_cotizaciones_altas as $cotNotif): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>cotizacion_detalle.php?id=<?= (int)($cotNotif['id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($cotNotif['numero_cotizacion'] ?? ('Cotización #' . (int)($cotNotif['id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($cotNotif['nombre_cliente'] ?? 'Cliente sin nombre') ?></div>
+                                    <div class="small text-warning fw-semibold">
+                                        Monto: $<?= number_format((float)($cotNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        · Vendedor: <?= htmlspecialchars($cotNotif['vendedor_nombre'] ?? 'Sin vendedor') ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>cotizaciones.php">Ver cotizaciones</a>
+                        <?php endif; ?>
+
                         <?php if ($notificaciones_atrasos_total > 0): ?>
                             <div class="notif-section-title">Órdenes de producción atrasadas (<?= (int)$notificaciones_atrasos_total ?>)</div>
                             <?php foreach ($notificaciones_atrasos as $notif): ?>
@@ -1115,26 +1298,38 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     </div>
 </div>
 
-<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
+<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_mensajes_total > 0): ?>
+            <?= (int)$notificaciones_mensajes_total ?> mensaje(s) sin leer
+        <?php endif; ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0): ?>
+            <?= $notificaciones_mensajes_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_pedidos_recientes_total ?> pedido(s) nuevo(s) hoy
+        <?php endif; ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_pagos_recientes_total ?> pago(s) cargado(s) hoy
+        <?php endif; ?>
+        <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_cotizaciones_altas_total ?> cotización(es) alta(s) (>$<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)
+        <?php endif; ?>
         <?php if ($notificaciones_atrasos_total > 0): ?>
-            <?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
             <?php if ($notificaciones_atrasos_clientes_texto !== ''): ?>
                 · Clientes: <?= htmlspecialchars($notificaciones_atrasos_clientes_texto) ?>
             <?php endif; ?>
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
-            <?= $notificaciones_atrasos_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_tareas_vencidas_total ?> tarea(s) manual(es) vencida(s)
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tareas_vencidas_total ?> tarea(s) manual(es) vencida(s)
             <?php if ($notificaciones_tareas_vencidas_criticas_total > 0): ?>
                 (<?= (int)$notificaciones_tareas_vencidas_criticas_total ?> crítica(s))
             <?php endif; ?>
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
-            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0): ?>
-            <?= ($notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
         <?php endif; ?>
     </div>
 <?php endif; ?>
