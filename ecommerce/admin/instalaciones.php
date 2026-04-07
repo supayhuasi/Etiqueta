@@ -1,10 +1,11 @@
 <?php
-// Detectar si es una solicitud JSON antes de incluir el header
+// Detectar solicitudes AJAX/JSON reales antes de incluir el header
 $es_json_request = (
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false ||
-     strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/x-www-form-urlencoded') !== false ||
-     isset($_POST['action']))
+    (
+        strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest' ||
+        strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
+    )
 );
 
 if ($es_json_request) {
@@ -344,8 +345,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     if ($action === 'crear_instalacion_manual') {
-        ob_clean();
-        header('Content-Type: application/json; charset=utf-8');
+        if ($es_json_request) {
+            ob_clean();
+            header('Content-Type: application/json; charset=utf-8');
+        }
         $titulo = trim($_POST['titulo'] ?? '');
         $cliente = trim($_POST['cliente'] ?? '');
         $telefono = trim($_POST['telefono'] ?? '');
@@ -387,15 +390,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        ob_clean();
-        header('Content-Type: application/json; charset=utf-8');
-        if ($ok_msg === 'Instalación manual creada correctamente.') {
-            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
-        } else {
-            http_response_code(500);
-            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        if ($es_json_request) {
+            ob_clean();
+            header('Content-Type: application/json; charset=utf-8');
+            if ($ok_msg === 'Instalación manual creada correctamente.') {
+                echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+            }
+            exit;
         }
-        exit;
     }
 
     if ($action === 'crear_visita') {
@@ -444,15 +449,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        ob_clean();
-        header('Content-Type: application/json; charset=utf-8');
-        if ($ok_msg === 'Visita cargada correctamente.') {
-            echo json_encode(['ok' => true, 'msg' => $ok_msg]);
-        } else {
-            http_response_code(500);
-            echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+        if ($es_json_request) {
+            ob_clean();
+            header('Content-Type: application/json; charset=utf-8');
+            if ($ok_msg === 'Visita cargada correctamente.') {
+                echo json_encode(['ok' => true, 'msg' => $ok_msg]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => $ok_msg]);
+            }
+            exit;
         }
-        exit;
     }
 
     if ($action === 'mover_instalacion') {
@@ -1351,7 +1358,7 @@ function render_tarjeta_instalacion($item) {
         <div class="card h-100">
             <div class="card-header"><h5 class="mb-0">Nueva instalación manual</h5></div>
             <div class="card-body">
-                <form method="POST" class="row g-2">
+                <form method="POST" class="row g-2" id="form-crear-instalacion-manual">
                     <input type="hidden" name="action" value="crear_instalacion_manual">
                     <div class="col-12">
                         <label class="form-label mb-1">Título *</label>
@@ -1401,7 +1408,7 @@ function render_tarjeta_instalacion($item) {
         <div class="card h-100">
             <div class="card-header"><h5 class="mb-0">Nueva visita</h5></div>
             <div class="card-body">
-                <form method="POST" class="row g-2">
+                <form method="POST" class="row g-2" id="form-crear-visita">
                     <input type="hidden" name="action" value="crear_visita">
                     <div class="col-12">
                         <label class="form-label mb-1">Título *</label>
@@ -1798,6 +1805,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var formEditarOrden = document.getElementById('form-editar-orden');
     var ordenModal     = (ordenModalEl && window.bootstrap) ? new bootstrap.Modal(ordenModalEl) : null;
     var activeOrdenId  = null;
+    var formCrearManual = document.getElementById('form-crear-instalacion-manual');
+    var formCrearVisitaNueva = document.getElementById('form-crear-visita');
 
     // Performance: throttle drag events
     var dragThrottle = false;
@@ -1845,6 +1854,61 @@ document.addEventListener('DOMContentLoaded', function () {
             return card.getAttribute('data-tipo') + ':' + card.getAttribute('data-id');
         });
     }
+
+    function enviarFormularioAlta(form, onBeforeReload) {
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var submitBtn = form.querySelector('button[type="submit"]');
+            var originalText = submitBtn ? submitBtn.textContent : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Guardando...';
+            }
+
+            fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+                method: 'POST',
+                body: new FormData(form),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok) {
+                    throw new Error((res && res.msg) ? res.msg : 'No se pudo guardar');
+                }
+
+                form.reset();
+                if (typeof onBeforeReload === 'function') {
+                    onBeforeReload(form, res);
+                }
+                location.reload();
+            })
+            .catch(function (err) {
+                alert(err.message || 'No se pudo guardar');
+            })
+            .finally(function () {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+            });
+        });
+    }
+
+    enviarFormularioAlta(formCrearManual);
+    enviarFormularioAlta(formCrearVisitaNueva, function (form) {
+        var fechaInput = form.querySelector('input[name="fecha_visita"]');
+        if (fechaInput) {
+            fechaInput.value = '<?= htmlspecialchars($hoy) ?>';
+        }
+    });
 
     function guardarOrdenColumna(dropzone, onRollback) {
         if (!dropzone) {
@@ -2213,7 +2277,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnEliminar = card.querySelector('.inst-btn-eliminar');
         if (btnEliminar) {
-            btnEliminar.addEventListener('click', function () {
+            btnEliminar.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
                 var tipo = card.getAttribute('data-tipo');
                 var itemId = card.getAttribute('data-id');
                 if (!itemId) {
@@ -2240,15 +2307,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Accept': 'application/json'
                     }
                 })
-                .then(function (r) {
-                    try { return r.json(); } catch (e) { throw new Error('Respuesta inválida del servidor'); }
-                })
+                .then(function (r) { return r.json(); })
                 .then(function (res) {
                     if (!res || !res.ok) {
                         throw new Error((res && res.msg) ? res.msg : 'No se pudo eliminar');
                     }
+
+                    if (tipo === 'manual') {
+                        eliminarManualUI(String(res.item_id || itemId));
+                        return;
+                    }
+
+                    var parentZone = card.parentNode;
                     card.remove();
-                    actualizarBadgeColumna(card.parentNode);
+                    if (parentZone && parentZone.classList.contains('inst-dropzone')) {
+                        actualizarBadgeColumna(parentZone);
+                    }
                     actualizarResumenInstalaciones();
                 })
                 .catch(function (err) {
@@ -2557,4 +2631,7 @@ window.setFechaRapida = function(dias) {
         var form = document.querySelector('form');
         if (form) form.submit();
     }
-};\n</script>\n\n<?php require 'includes/footer.php'; ?>
+};
+</script>
+
+<?php require 'includes/footer.php'; ?>
