@@ -133,6 +133,161 @@ function crm_count_rows(PDO $pdo, string $table): int
     }
 }
 
+function crm_normalize_text(string $value): string
+{
+    $value = trim(preg_replace('/\s+/', ' ', $value));
+    return function_exists('mb_strtolower') ? mb_strtolower($value, 'UTF-8') : strtolower($value);
+}
+
+function crm_normalize_phone(?string $value): string
+{
+    return preg_replace('/\D+/', '', (string)$value);
+}
+
+function crm_match_lead_id(PDO $pdo, string $nombre = '', string $telefono = '', string $direccion = ''): int
+{
+    if (!crm_table_exists($pdo, 'ecommerce_crm_visitas') || !crm_table_exists($pdo, 'ecommerce_visitas')) {
+        return 0;
+    }
+
+    $telefonoNorm = crm_normalize_phone($telefono);
+    if ($telefonoNorm !== '') {
+        try {
+            $stmt = $pdo->prepare("SELECT c.id
+                FROM ecommerce_crm_visitas c
+                INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
+                WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(v.telefono,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '') = ?
+                ORDER BY c.id DESC
+                LIMIT 1");
+            $stmt->execute([$telefonoNorm]);
+            $crmId = (int)$stmt->fetchColumn();
+            if ($crmId > 0) {
+                return $crmId;
+            }
+        } catch (Throwable $e) {
+        }
+    }
+
+    $nombreNorm = crm_normalize_text($nombre);
+    $direccionNorm = crm_normalize_text($direccion);
+    if ($nombreNorm !== '') {
+        try {
+            $sql = "SELECT c.id
+                FROM ecommerce_crm_visitas c
+                INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
+                WHERE LOWER(TRIM(COALESCE(v.cliente_nombre, ''))) = ?";
+            $params = [$nombreNorm];
+            if ($direccionNorm !== '') {
+                $sql .= " AND LOWER(TRIM(COALESCE(v.direccion, ''))) = ?";
+                $params[] = $direccionNorm;
+            }
+            $sql .= " ORDER BY c.id DESC LIMIT 1";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $crmId = (int)$stmt->fetchColumn();
+            if ($crmId > 0) {
+                return $crmId;
+            }
+        } catch (Throwable $e) {
+        }
+    }
+
+    return 0;
+}
+
+function crm_create_lead_record(PDO $pdo, array $data, int $fallbackUserId = 0): int
+{
+    $clienteNombre = trim((string)($data['cliente_nombre'] ?? ''));
+    $titulo = trim((string)($data['titulo'] ?? ''));
+    $descripcion = trim((string)($data['descripcion'] ?? ''));
+    $telefono = trim((string)($data['telefono'] ?? ''));
+    $direccion = trim((string)($data['direccion'] ?? ''));
+    $fechaVisita = trim((string)($data['fecha_visita'] ?? $data['fecha'] ?? date('Y-m-d')));
+    $proximoContacto = trim((string)($data['proximo_contacto'] ?? $fechaVisita));
+    $prioridad = trim((string)($data['prioridad'] ?? 'media'));
+    $estadoCrm = trim((string)($data['estado'] ?? 'nuevo'));
+    $origen = trim((string)($data['origen'] ?? 'manual'));
+    $montoEstimado = (float)($data['monto_estimado'] ?? 0);
+    $asignadoA = (int)($data['asignado_a'] ?? $fallbackUserId);
+    $creadoPor = (int)($data['creado_por'] ?? $fallbackUserId);
+    $notasInternas = trim((string)($data['notas_internas'] ?? ''));
+
+    if ($titulo === '') {
+        $titulo = $clienteNombre !== '' ? $clienteNombre : 'Lead CRM';
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaVisita)) {
+        $fechaVisita = date('Y-m-d');
+    }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $proximoContacto)) {
+        $proximoContacto = $fechaVisita;
+    }
+    if (!in_array($prioridad, ['baja', 'media', 'alta', 'urgente'], true)) {
+        $prioridad = 'media';
+    }
+    if (!in_array($estadoCrm, ['nuevo', 'contactado', 'propuesta', 'negociacion', 'ganado', 'perdido'], true)) {
+        $estadoCrm = 'nuevo';
+    }
+    if ($origen === '') {
+        $origen = 'manual';
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $ordenVisual = 10;
+        try {
+            $stmtOrden = $pdo->prepare("SELECT COALESCE(MAX(orden_visual), 0) + 10 FROM ecommerce_visitas WHERE fecha_visita = ?");
+            $stmtOrden->execute([$fechaVisita]);
+            $ordenVisual = (int)$stmtOrden->fetchColumn();
+            if ($ordenVisual <= 0) {
+                $ordenVisual = 10;
+            }
+        } catch (Throwable $e) {
+            $ordenVisual = 10;
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO ecommerce_visitas
+            (titulo, descripcion, cliente_nombre, telefono, direccion, fecha_visita, hora_visita, estado, orden_visual, creado_por)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 'pendiente', ?, ?)");
+        $stmt->execute([
+            $titulo,
+            $descripcion !== '' ? $descripcion : null,
+            $clienteNombre !== '' ? $clienteNombre : null,
+            $telefono !== '' ? $telefono : null,
+            $direccion !== '' ? $direccion : null,
+            $fechaVisita,
+            $ordenVisual,
+            $creadoPor > 0 ? $creadoPor : null,
+        ]);
+
+        $visitaId = (int)$pdo->lastInsertId();
+        $fechaCierre = in_array($estadoCrm, ['ganado', 'perdido'], true) ? date('Y-m-d') : null;
+
+        $stmt = $pdo->prepare("INSERT INTO ecommerce_crm_visitas
+            (visita_id, estado, prioridad, origen, proximo_contacto, asignado_a, monto_estimado, notas_internas, fecha_cierre)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $visitaId,
+            $estadoCrm,
+            $prioridad,
+            $origen,
+            $proximoContacto !== '' ? $proximoContacto : null,
+            $asignadoA > 0 ? $asignadoA : null,
+            $montoEstimado,
+            $notasInternas !== '' ? $notasInternas : null,
+            $fechaCierre,
+        ]);
+
+        $crmId = (int)$pdo->lastInsertId();
+        $pdo->commit();
+        return $crmId;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
 function crm_sync_from_visits(PDO $pdo): array
 {
     $result = ['inserted' => 0, 'warnings' => []];
@@ -165,17 +320,102 @@ function crm_sync_from_visits(PDO $pdo): array
     return $result;
 }
 
-function crm_sync_linked_quotes(PDO $pdo): int
+function crm_sync_linked_quotes(PDO $pdo): array
 {
+    $result = ['linked' => 0, 'created' => 0, 'updated' => 0, 'warnings' => []];
+
     if (!crm_table_exists($pdo, 'ecommerce_crm_visitas') || !crm_table_exists($pdo, 'ecommerce_cotizaciones')) {
-        return 0;
+        return $result;
     }
     if (!crm_column_exists($pdo, 'ecommerce_cotizaciones', 'crm_id')) {
-        return 0;
+        return $result;
     }
 
     try {
-        return (int)$pdo->exec("UPDATE ecommerce_crm_visitas c
+        $direccionExpr = crm_column_exists($pdo, 'ecommerce_cotizaciones', 'direccion')
+            ? "COALESCE(q.direccion, '')"
+            : (crm_column_exists($pdo, 'ecommerce_cotizaciones', 'empresa') ? "COALESCE(q.empresa, '')" : "''");
+
+        $stmt = $pdo->query("SELECT
+                q.id,
+                q.numero_cotizacion,
+                COALESCE(q.nombre_cliente, '') AS nombre_cliente,
+                COALESCE(q.telefono, '') AS telefono,
+                {$direccionExpr} AS direccion,
+                COALESCE(q.observaciones, '') AS observaciones,
+                COALESCE(q.total, 0) AS total,
+                COALESCE(q.estado, 'pendiente') AS estado,
+                q.fecha_creacion,
+                COALESCE(q.creado_por, 0) AS creado_por,
+                COALESCE(q.crm_id, 0) AS crm_id_actual
+            FROM ecommerce_cotizaciones q
+            WHERE q.crm_id IS NULL OR q.crm_id = 0
+            ORDER BY q.fecha_creacion ASC, q.id ASC");
+        $cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($cotizaciones as $cotizacion) {
+            $crmId = crm_match_lead_id(
+                $pdo,
+                (string)($cotizacion['nombre_cliente'] ?? ''),
+                (string)($cotizacion['telefono'] ?? ''),
+                (string)($cotizacion['direccion'] ?? '')
+            );
+
+            if ($crmId <= 0) {
+                $estadoMapa = [
+                    'rechazada' => 'perdido',
+                    'convertida' => 'ganado',
+                    'aceptada' => 'negociacion',
+                    'pendiente' => 'propuesta',
+                    'enviada' => 'propuesta',
+                ];
+                $estadoCrm = $estadoMapa[$cotizacion['estado']] ?? 'propuesta';
+                $crmId = crm_create_lead_record($pdo, [
+                    'titulo' => trim((string)($cotizacion['numero_cotizacion'] ?? '')) !== '' ? 'Cotización ' . trim((string)$cotizacion['numero_cotizacion']) : 'Cotización web',
+                    'descripcion' => trim((string)($cotizacion['observaciones'] ?? '')),
+                    'cliente_nombre' => (string)($cotizacion['nombre_cliente'] ?? ''),
+                    'telefono' => (string)($cotizacion['telefono'] ?? ''),
+                    'direccion' => (string)($cotizacion['direccion'] ?? ''),
+                    'fecha_visita' => !empty($cotizacion['fecha_creacion']) ? date('Y-m-d', strtotime((string)$cotizacion['fecha_creacion'])) : date('Y-m-d'),
+                    'proximo_contacto' => !empty($cotizacion['fecha_creacion']) ? date('Y-m-d', strtotime((string)$cotizacion['fecha_creacion'])) : date('Y-m-d'),
+                    'prioridad' => 'media',
+                    'estado' => $estadoCrm,
+                    'origen' => 'cotizacion',
+                    'monto_estimado' => (float)($cotizacion['total'] ?? 0),
+                    'asignado_a' => (int)($cotizacion['creado_por'] ?? 0),
+                    'creado_por' => (int)($cotizacion['creado_por'] ?? 0),
+                    'notas_internas' => trim((string)($cotizacion['observaciones'] ?? '')),
+                ], (int)($cotizacion['creado_por'] ?? 0));
+                $result['created']++;
+            } else {
+                $result['linked']++;
+            }
+
+            if ($crmId > 0) {
+                $visitaId = null;
+                try {
+                    $stmtLead = $pdo->prepare("SELECT visita_id FROM ecommerce_crm_visitas WHERE id = ? LIMIT 1");
+                    $stmtLead->execute([$crmId]);
+                    $visitaId = $stmtLead->fetchColumn();
+                } catch (Throwable $e) {
+                    $visitaId = null;
+                }
+
+                $updateSql = "UPDATE ecommerce_cotizaciones SET crm_id = ?";
+                $updateParams = [$crmId];
+                if (crm_column_exists($pdo, 'ecommerce_cotizaciones', 'visita_id')) {
+                    $updateSql .= ", visita_id = ?";
+                    $updateParams[] = $visitaId ?: null;
+                }
+                $updateSql .= " WHERE id = ?";
+                $updateParams[] = (int)$cotizacion['id'];
+
+                $stmtUpdate = $pdo->prepare($updateSql);
+                $stmtUpdate->execute($updateParams);
+            }
+        }
+
+        $result['updated'] = (int)$pdo->exec("UPDATE ecommerce_crm_visitas c
             INNER JOIN (
                 SELECT q.crm_id, MAX(q.id) AS cotizacion_id
                 FROM ecommerce_cotizaciones q
@@ -186,16 +426,26 @@ function crm_sync_linked_quotes(PDO $pdo): int
             SET
                 c.ultima_cotizacion_id = q2.id,
                 c.ultima_cotizacion_numero = COALESCE(NULLIF(q2.numero_cotizacion, ''), CONCAT('COT-', q2.id)),
-                c.fecha_ultima_cotizacion = COALESCE(q2.fecha_creacion, NOW())");
+                c.fecha_ultima_cotizacion = COALESCE(q2.fecha_creacion, NOW()),
+                c.monto_estimado = CASE WHEN COALESCE(q2.total, 0) > 0 THEN q2.total ELSE c.monto_estimado END,
+                c.estado = CASE
+                    WHEN q2.estado = 'convertida' THEN 'ganado'
+                    WHEN q2.estado = 'aceptada' AND c.estado NOT IN ('ganado', 'perdido') THEN 'negociacion'
+                    WHEN q2.estado = 'rechazada' THEN 'perdido'
+                    WHEN q2.estado IN ('pendiente', 'enviada') AND c.estado NOT IN ('ganado', 'perdido') THEN 'propuesta'
+                    ELSE c.estado
+                END");
     } catch (Throwable $e) {
+        $result['warnings'][] = 'No se pudieron vincular cotizaciones automáticamente.';
         error_log('crm_sync_linked_quotes: ' . $e->getMessage());
-        return 0;
     }
+
+    return $result;
 }
 
-function crm_redirect_with_flash(string $type, string $message): void
+function crm_redirect_with_flash(string $type, string $message, array $extraQuery = []): void
 {
-    $query = $_GET;
+    $query = array_merge($_GET, $extraQuery);
     unset($query['ok'], $query['error']);
     $query[$type] = $message;
 
@@ -374,10 +624,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (($sync_result_post['inserted'] ?? 0) > 0) {
                 $mensaje_sync .= ' Se agregaron ' . (int)$sync_result_post['inserted'] . ' visitas al listado.';
             }
-            if ($quotes_sync_post > 0) {
-                $mensaje_sync .= ' También se actualizaron cotizaciones vinculadas.';
+            if ((($quotes_sync_post['linked'] ?? 0) + ($quotes_sync_post['created'] ?? 0)) > 0) {
+                $mensaje_sync .= ' Se vincularon ' . (int)(($quotes_sync_post['linked'] ?? 0) + ($quotes_sync_post['created'] ?? 0)) . ' cotizaciones al CRM.';
             }
             crm_redirect_with_flash('ok', $mensaje_sync);
+        }
+
+        if ($accion === 'crear_lead_manual') {
+            $titulo = trim((string)($_POST['titulo'] ?? ''));
+            $cliente_nombre = trim((string)($_POST['cliente_nombre'] ?? ''));
+            $telefono = trim((string)($_POST['telefono'] ?? ''));
+            $direccion = trim((string)($_POST['direccion'] ?? ''));
+            $descripcion = trim((string)($_POST['descripcion'] ?? ''));
+            $prioridad = trim((string)($_POST['prioridad'] ?? 'media'));
+            $proximo_contacto = trim((string)($_POST['proximo_contacto'] ?? date('Y-m-d')));
+            $monto_estimado_raw = str_replace(',', '.', trim((string)($_POST['monto_estimado'] ?? '0')));
+            $asignado_a = (int)($_POST['asignado_a'] ?? 0);
+
+            if ($cliente_nombre === '' && $titulo === '') {
+                throw new Exception('Ingresá al menos un nombre de cliente o motivo para crear el lead.');
+            }
+            if (!isset($prioridad_options[$prioridad])) {
+                $prioridad = 'media';
+            }
+            if ($proximo_contacto !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $proximo_contacto)) {
+                throw new Exception('La fecha de próximo contacto no es válida.');
+            }
+            if ($monto_estimado_raw === '' || !is_numeric($monto_estimado_raw)) {
+                $monto_estimado_raw = '0';
+            }
+            if (!$is_admin) {
+                $asignado_a = $usuario_actual_id > 0 ? $usuario_actual_id : 0;
+            }
+
+            $crmIdNuevo = crm_create_lead_record($pdo, [
+                'titulo' => $titulo,
+                'descripcion' => $descripcion,
+                'cliente_nombre' => $cliente_nombre,
+                'telefono' => $telefono,
+                'direccion' => $direccion,
+                'fecha_visita' => date('Y-m-d'),
+                'proximo_contacto' => $proximo_contacto !== '' ? $proximo_contacto : date('Y-m-d'),
+                'prioridad' => $prioridad,
+                'estado' => 'nuevo',
+                'origen' => 'manual',
+                'monto_estimado' => (float)$monto_estimado_raw,
+                'asignado_a' => $asignado_a,
+                'creado_por' => $usuario_actual_id,
+                'notas_internas' => $descripcion,
+            ], $usuario_actual_id);
+
+            if ($crmIdNuevo > 0 && crm_table_exists($pdo, 'ecommerce_crm_seguimientos')) {
+                $stmt = $pdo->prepare('SELECT visita_id FROM ecommerce_crm_visitas WHERE id = ? LIMIT 1');
+                $stmt->execute([$crmIdNuevo]);
+                $visitaIdNuevo = (int)$stmt->fetchColumn();
+
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_crm_seguimientos (crm_id, visita_id, usuario_id, canal, resultado, comentario, proximo_contacto)
+                    VALUES (?, ?, ?, 'otro', 'pendiente', ?, ?)");
+                $stmt->execute([
+                    $crmIdNuevo,
+                    $visitaIdNuevo,
+                    $usuario_actual_id > 0 ? $usuario_actual_id : null,
+                    'Lead creado manualmente desde el CRM.',
+                    $proximo_contacto !== '' ? $proximo_contacto : date('Y-m-d'),
+                ]);
+            }
+
+            crm_redirect_with_flash('ok', 'Lead creado correctamente.', ['lead' => $crmIdNuevo]);
+        }
+
+        if ($accion === 'mover_kanban') {
+            $crm_id = (int)($_POST['crm_id'] ?? 0);
+            $nuevo_estado = trim((string)($_POST['nuevo_estado'] ?? ''));
+
+            if ($crm_id <= 0 || !isset($estado_options[$nuevo_estado])) {
+                throw new Exception('No se pudo mover el lead en el Kanban.');
+            }
+
+            $fecha_cierre = in_array($nuevo_estado, ['ganado', 'perdido'], true) ? date('Y-m-d') : null;
+            $stmt = $pdo->prepare("UPDATE ecommerce_crm_visitas SET estado = ?, ultima_gestion = NOW(), fecha_cierre = ? WHERE id = ?");
+            $stmt->execute([$nuevo_estado, $fecha_cierre, $crm_id]);
+
+            crm_redirect_with_flash('ok', 'Lead movido correctamente en el Kanban.', ['lead' => $crm_id]);
         }
 
         if ($accion === 'guardar_oportunidad') {
@@ -517,8 +845,9 @@ $lead_id = (int)($_GET['lead'] ?? 0);
 $where = ['1=1'];
 $params = [];
 if ($busqueda !== '') {
-    $where[] = '(v.titulo LIKE ? OR COALESCE(v.cliente_nombre, "") LIKE ? OR COALESCE(v.telefono, "") LIKE ? OR COALESCE(v.direccion, "") LIKE ?)';
+    $where[] = '(v.titulo LIKE ? OR COALESCE(v.cliente_nombre, "") LIKE ? OR COALESCE(v.telefono, "") LIKE ? OR COALESCE(v.direccion, "") LIKE ? OR COALESCE(c.ultima_cotizacion_numero, "") LIKE ?)';
     $like = '%' . $busqueda . '%';
+    $params[] = $like;
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
@@ -582,6 +911,8 @@ try {
         v.hora_visita,
         v.estado AS visita_estado,
         COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin asignar') AS asignado_nombre,
+        (SELECT COUNT(*) FROM ecommerce_cotizaciones q WHERE q.crm_id = c.id) AS total_cotizaciones,
+        (SELECT q.estado FROM ecommerce_cotizaciones q WHERE q.crm_id = c.id ORDER BY q.fecha_creacion DESC, q.id DESC LIMIT 1) AS ultima_cotizacion_estado,
         (SELECT COUNT(*) FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id) AS total_seguimientos,
         (SELECT s.fecha_contacto FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id ORDER BY s.fecha_contacto DESC, s.id DESC LIMIT 1) AS ultima_fecha_contacto,
         (SELECT s.resultado FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id ORDER BY s.fecha_contacto DESC, s.id DESC LIMIT 1) AS ultimo_resultado,
@@ -633,6 +964,8 @@ if (!$lead_actual && $lead_id > 0) {
             v.hora_visita,
             v.estado AS visita_estado,
             COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin asignar') AS asignado_nombre,
+            (SELECT COUNT(*) FROM ecommerce_cotizaciones q WHERE q.crm_id = c.id) AS total_cotizaciones,
+            (SELECT q.estado FROM ecommerce_cotizaciones q WHERE q.crm_id = c.id ORDER BY q.fecha_creacion DESC, q.id DESC LIMIT 1) AS ultima_cotizacion_estado,
             (SELECT COUNT(*) FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id) AS total_seguimientos,
             (SELECT s.fecha_contacto FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id ORDER BY s.fecha_contacto DESC, s.id DESC LIMIT 1) AS ultima_fecha_contacto,
             (SELECT s.resultado FROM ecommerce_crm_seguimientos s WHERE s.crm_id = c.id ORDER BY s.fecha_contacto DESC, s.id DESC LIMIT 1) AS ultimo_resultado,
@@ -650,7 +983,20 @@ if (!$lead_actual && $lead_id > 0) {
     }
 }
 
+$kanban_leads = [];
+foreach (array_keys($estado_options) as $estado_key) {
+    $kanban_leads[$estado_key] = [];
+}
+foreach ($leads as $lead_item) {
+    $estado_key = (string)($lead_item['estado'] ?? 'nuevo');
+    if (!isset($kanban_leads[$estado_key])) {
+        $kanban_leads[$estado_key] = [];
+    }
+    $kanban_leads[$estado_key][] = $lead_item;
+}
+
 $seguimientos = [];
+$cotizaciones_relacionadas = [];
 if ($lead_actual) {
     try {
         $stmt = $pdo->prepare("SELECT s.*, COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sistema') AS usuario_nombre
@@ -663,6 +1009,20 @@ if ($lead_actual) {
         $seguimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         $seguimientos = [];
+    }
+
+    if (crm_table_exists($pdo, 'ecommerce_cotizaciones') && crm_column_exists($pdo, 'ecommerce_cotizaciones', 'crm_id')) {
+        try {
+            $stmt = $pdo->prepare("SELECT id, numero_cotizacion, total, estado, fecha_creacion
+                FROM ecommerce_cotizaciones
+                WHERE crm_id = ?
+                ORDER BY fecha_creacion DESC, id DESC
+                LIMIT 20");
+            $stmt->execute([(int)$lead_actual['id']]);
+            $cotizaciones_relacionadas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $cotizaciones_relacionadas = [];
+        }
     }
 }
 ?>
@@ -745,9 +1105,101 @@ if ($lead_actual) {
         position: sticky;
         top: 1rem;
     }
+    .crm-kanban-board {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(220px, 1fr));
+        gap: 1rem;
+        align-items: start;
+    }
+    .crm-kanban-col {
+        background: #f8fafc;
+        border: 1px solid #e5edf7;
+        border-radius: 16px;
+        overflow: hidden;
+        min-height: 220px;
+    }
+    .crm-kanban-header {
+        padding: .85rem 1rem;
+        font-weight: 700;
+        border-bottom: 1px solid #e5edf7;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .crm-kanban-body {
+        padding: .8rem;
+        display: grid;
+        gap: .75rem;
+    }
+    .crm-kanban-card {
+        background: #fff;
+        border: 1px solid #e6ecf5;
+        border-radius: 12px;
+        padding: .75rem;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+        cursor: grab;
+        border-left: 5px solid #94a3b8;
+    }
+    .crm-kanban-card.prio-baja { border-left-color: #94a3b8; }
+    .crm-kanban-card.prio-media { border-left-color: #64748b; }
+    .crm-kanban-card.prio-alta { border-left-color: #f59e0b; }
+    .crm-kanban-card.prio-urgente { border-left-color: #dc2626; }
+    .crm-kanban-card.is-overdue {
+        background: #fff7ed;
+        border-color: #fdba74;
+    }
+    .crm-kanban-card.is-today {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+    .crm-kanban-card.dragging {
+        opacity: .65;
+        transform: rotate(1deg);
+    }
+    .crm-kanban-body.drag-over {
+        background: #eef5ff;
+        border-radius: 12px;
+        outline: 2px dashed #2563eb;
+    }
+    .crm-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .35rem;
+        margin-top: .45rem;
+    }
+    .crm-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .2rem;
+        border-radius: 999px;
+        padding: .15rem .45rem;
+        font-size: .72rem;
+        font-weight: 600;
+    }
+    .crm-chip.priority-low { background: #e2e8f0; color: #334155; }
+    .crm-chip.priority-medium { background: #dbe4f0; color: #334155; }
+    .crm-chip.priority-high { background: #fef3c7; color: #92400e; }
+    .crm-chip.priority-urgent { background: #fee2e2; color: #991b1b; }
+    .crm-chip.due-overdue { background: #ffedd5; color: #9a3412; }
+    .crm-chip.due-today { background: #dbeafe; color: #1d4ed8; }
+    .crm-kanban-card .title {
+        font-weight: 700;
+    }
+    .crm-kanban-card .meta {
+        font-size: .85rem;
+        color: #64748b;
+    }
+    @media (max-width: 1400px) {
+        .crm-kanban-board {
+            grid-template-columns: repeat(3, minmax(220px, 1fr));
+        }
+    }
     @media (max-width: 991px) {
         .crm-sticky {
             position: static;
+        }
+        .crm-kanban-board {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -825,6 +1277,9 @@ if ($lead_actual) {
 <?php if (($crm_sync_result['inserted'] ?? 0) > 0): ?>
     <div class="alert alert-info">Se sincronizaron automáticamente <?= (int)$crm_sync_result['inserted'] ?> visitas al CRM.</div>
 <?php endif; ?>
+<?php if ((($crm_sync_quotes['linked'] ?? 0) + ($crm_sync_quotes['created'] ?? 0)) > 0): ?>
+    <div class="alert alert-info">Se integraron <?= (int)(($crm_sync_quotes['linked'] ?? 0) + ($crm_sync_quotes['created'] ?? 0)) ?> cotizaciones al CRM para seguirlas desde el mismo lugar.</div>
+<?php endif; ?>
 <?php if (!empty($crm_schema_warnings)): ?>
     <div class="alert alert-warning">
         El CRM cargó con advertencias de estructura, pero la pantalla sigue operativa. Si algo puntual no aparece, avisame y lo ajusto.
@@ -833,6 +1288,69 @@ if ($lead_actual) {
 <?php if ($error !== ''): ?>
     <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
+
+<div class="card crm-panel mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">➕ Nuevo lead manual</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="row g-3 align-items-end">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion" value="crear_lead_manual">
+            <div class="col-md-3">
+                <label class="form-label">Cliente</label>
+                <input type="text" name="cliente_nombre" class="form-control" placeholder="Nombre del cliente">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Motivo / lead</label>
+                <input type="text" name="titulo" class="form-control" placeholder="Ej: Consulta por toldo" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Teléfono</label>
+                <input type="text" name="telefono" class="form-control" placeholder="381...">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Próximo contacto</label>
+                <input type="date" name="proximo_contacto" class="form-control" value="<?= htmlspecialchars(date('Y-m-d')) ?>">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Prioridad</label>
+                <select name="prioridad" class="form-select">
+                    <?php foreach ($prioridad_options as $value => $label): ?>
+                        <option value="<?= htmlspecialchars($value) ?>" <?= $value === 'media' ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Dirección</label>
+                <input type="text" name="direccion" class="form-control" placeholder="Dirección o zona">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Descripción</label>
+                <input type="text" name="descripcion" class="form-control" placeholder="Detalle rápido del lead">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Monto estimado</label>
+                <input type="number" step="0.01" min="0" name="monto_estimado" class="form-control" value="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Responsable</label>
+                <select name="asignado_a" class="form-select" <?= !$is_admin ? 'disabled' : '' ?>>
+                    <option value="0">Sin asignar</option>
+                    <?php foreach ($usuarios as $usuario): ?>
+                        <option value="<?= (int)$usuario['id'] ?>" <?= (!$is_admin && $usuario_actual_id === (int)$usuario['id']) ? 'selected' : '' ?>><?= htmlspecialchars($usuario['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if (!$is_admin): ?>
+                    <input type="hidden" name="asignado_a" value="<?= (int)$usuario_actual_id ?>">
+                <?php endif; ?>
+            </div>
+            <div class="col-md-12 d-grid d-md-flex justify-content-md-end">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-person-plus"></i> Crear lead</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <div class="card crm-panel mb-4">
     <div class="card-header bg-light">
@@ -885,17 +1403,80 @@ if ($lead_actual) {
     </div>
 </div>
 
+<div class="card crm-panel mb-4">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">📌 Pipeline comercial</h5>
+        <span class="badge bg-dark">Vista Kanban</span>
+    </div>
+    <div class="card-body">
+        <div class="crm-kanban-board">
+            <?php foreach ($estado_options as $estado_key => $estado_label): ?>
+                <div class="crm-kanban-col">
+                    <div class="crm-kanban-header">
+                        <span><?= htmlspecialchars($estado_label) ?></span>
+                        <span class="badge <?= crm_estado_badge($estado_key) ?>"><?= count($kanban_leads[$estado_key] ?? []) ?></span>
+                    </div>
+                    <div class="crm-kanban-body" data-drop-estado="<?= htmlspecialchars($estado_key) ?>">
+                        <?php if (empty($kanban_leads[$estado_key] ?? [])): ?>
+                            <div class="text-muted small">Sin registros</div>
+                        <?php else: ?>
+                            <?php foreach (array_slice($kanban_leads[$estado_key], 0, 8) as $kanban): ?>
+                                <?php
+                                $prioridadClase = 'prio-' . preg_replace('/[^a-z]/', '', strtolower((string)($kanban['prioridad'] ?? 'media')));
+                                $prioridadChipClase = [
+                                    'baja' => 'priority-low',
+                                    'media' => 'priority-medium',
+                                    'alta' => 'priority-high',
+                                    'urgente' => 'priority-urgent',
+                                ][(string)($kanban['prioridad'] ?? 'media')] ?? 'priority-medium';
+                                $proximoKanban = (string)($kanban['proximo_contacto'] ?? '');
+                                $venceHoy = $proximoKanban !== '' && $proximoKanban === date('Y-m-d');
+                                $estaVencidoKanban = $proximoKanban !== '' && $proximoKanban < date('Y-m-d') && !in_array((string)$estado_key, ['ganado', 'perdido'], true);
+                                $extraClaseCard = $estaVencidoKanban ? 'is-overdue' : ($venceHoy ? 'is-today' : '');
+                                ?>
+                                <div class="crm-kanban-card <?= htmlspecialchars($prioridadClase) ?> <?= htmlspecialchars($extraClaseCard) ?>" draggable="true" data-crm-id="<?= (int)$kanban['id'] ?>" data-current-estado="<?= htmlspecialchars($estado_key) ?>">
+                                    <div class="title mb-1"><?= htmlspecialchars(trim((string)($kanban['cliente_nombre'] ?? '')) !== '' ? $kanban['cliente_nombre'] : $kanban['titulo']) ?></div>
+                                    <div class="meta mb-1"><?= htmlspecialchars($kanban['titulo'] ?? '') ?></div>
+                                    <?php if (!empty($kanban['telefono'])): ?>
+                                        <div class="meta"><i class="bi bi-telephone"></i> <?= htmlspecialchars($kanban['telefono']) ?></div>
+                                    <?php endif; ?>
+                                    <div class="meta">Próximo: <?= htmlspecialchars(crm_format_date($kanban['proximo_contacto'] ?? null)) ?></div>
+                                    <div class="meta">Cotizaciones: <?= (int)($kanban['total_cotizaciones'] ?? 0) ?></div>
+                                    <div class="crm-chip-row">
+                                        <span class="crm-chip <?= $prioridadChipClase ?>">Prioridad: <?= htmlspecialchars($prioridad_options[$kanban['prioridad']] ?? ucfirst((string)$kanban['prioridad'])) ?></span>
+                                        <?php if ($estaVencidoKanban): ?>
+                                            <span class="crm-chip due-overdue">⚠️ Vencido</span>
+                                        <?php elseif ($venceHoy): ?>
+                                            <span class="crm-chip due-today">📅 Hoy</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="mt-2">
+                                        <a href="crm.php?<?= htmlspecialchars(http_build_query(array_merge($_GET, ['lead' => (int)$kanban['id']])), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-primary w-100">Abrir</a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php if (count($kanban_leads[$estado_key] ?? []) > 8): ?>
+                                <div class="text-muted small">+<?= count($kanban_leads[$estado_key]) - 8 ?> más</div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4">
     <div class="col-xl-7">
         <div class="card crm-panel h-100">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Oportunidades generadas desde visitas</h5>
+                <h5 class="mb-0">Leads, visitas y cotizaciones unificadas</h5>
                 <span class="badge bg-dark"><?= count($leads) ?> registros</span>
             </div>
             <div class="card-body p-0">
                 <?php if (empty($leads)): ?>
                     <div class="p-4 text-center text-muted">
-                        No hay visitas cargadas para convertir en seguimiento. Podés empezar desde <a href="instalaciones.php">Instalaciones y visitas</a>.
+                        No hay leads cargados todavía. Podés empezar desde <a href="instalaciones.php">Instalaciones y visitas</a> o crear un lead manual desde este CRM.
                     </div>
                 <?php else: ?>
                     <div class="table-responsive">
@@ -926,6 +1507,7 @@ if ($lead_actual) {
                                             <?php if (!empty($lead['ultima_cotizacion_numero'])): ?>
                                                 <div class="small"><span class="badge bg-primary-subtle text-primary border">Cotización: <?= htmlspecialchars($lead['ultima_cotizacion_numero']) ?></span></div>
                                             <?php endif; ?>
+                                            <div class="small text-muted">Cotizaciones: <?= (int)($lead['total_cotizaciones'] ?? 0) ?></div>
                                         </td>
                                         <td>
                                             <div class="mb-1"><span class="badge <?= crm_estado_badge((string)$lead['estado']) ?>"><?= htmlspecialchars($estado_options[$lead['estado']] ?? ucfirst((string)$lead['estado'])) ?></span></div>
@@ -1096,6 +1678,53 @@ if ($lead_actual) {
                 </div>
 
                 <div class="card crm-detail-card mb-4">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Cotizaciones vinculadas</h5>
+                        <span class="badge bg-dark"><?= count($cotizaciones_relacionadas) ?></span>
+                    </div>
+                    <div class="card-body">
+                        <?php if (empty($cotizaciones_relacionadas)): ?>
+                            <p class="text-muted mb-3">Todavía no hay cotizaciones asociadas a este lead.</p>
+                            <a href="cotizacion_crear.php?crm_id=<?= (int)$lead_actual['id'] ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-plus"></i> Crear primera cotización</a>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Número</th>
+                                            <th>Fecha</th>
+                                            <th>Total</th>
+                                            <th>Estado</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($cotizaciones_relacionadas as $cot): ?>
+                                            <?php
+                                            $badgeCot = [
+                                                'pendiente' => 'secondary',
+                                                'enviada' => 'info',
+                                                'aceptada' => 'success',
+                                                'rechazada' => 'danger',
+                                                'convertida' => 'primary',
+                                            ][$cot['estado']] ?? 'secondary';
+                                            ?>
+                                            <tr>
+                                                <td class="fw-semibold"><?= htmlspecialchars($cot['numero_cotizacion'] ?: ('COT-' . (int)$cot['id'])) ?></td>
+                                                <td><?= htmlspecialchars(crm_format_datetime($cot['fecha_creacion'] ?? null)) ?></td>
+                                                <td><?= htmlspecialchars(crm_format_money($cot['total'] ?? 0)) ?></td>
+                                                <td><span class="badge bg-<?= $badgeCot ?>"><?= htmlspecialchars(ucfirst((string)$cot['estado'])) ?></span></td>
+                                                <td class="text-end"><a href="cotizacion_detalle.php?id=<?= (int)$cot['id'] ?>" class="btn btn-sm btn-outline-primary">Ver</a></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="card crm-detail-card mb-4">
                     <div class="card-header bg-light">
                         <h5 class="mb-0">Registrar seguimiento</h5>
                     </div>
@@ -1177,5 +1806,67 @@ if ($lead_actual) {
         </div>
     </div>
 </div>
+
+<form method="POST" id="crmKanbanMoveForm" class="d-none">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+    <input type="hidden" name="accion" value="mover_kanban">
+    <input type="hidden" name="crm_id" id="crmKanbanMoveId" value="0">
+    <input type="hidden" name="nuevo_estado" id="crmKanbanMoveEstado" value="">
+</form>
+
+<script>
+(function() {
+    const cards = document.querySelectorAll('.crm-kanban-card[draggable="true"]');
+    const dropzones = document.querySelectorAll('.crm-kanban-body[data-drop-estado]');
+    const moveForm = document.getElementById('crmKanbanMoveForm');
+    const moveIdInput = document.getElementById('crmKanbanMoveId');
+    const moveEstadoInput = document.getElementById('crmKanbanMoveEstado');
+    let draggedCard = null;
+
+    cards.forEach(card => {
+        card.addEventListener('dragstart', () => {
+            draggedCard = card;
+            card.classList.add('dragging');
+        });
+
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            dropzones.forEach(zone => zone.classList.remove('drag-over'));
+            draggedCard = null;
+        });
+    });
+
+    dropzones.forEach(zone => {
+        zone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('drag-over');
+        });
+
+        zone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            zone.classList.remove('drag-over');
+            if (!draggedCard || !moveForm || !moveIdInput || !moveEstadoInput) {
+                return;
+            }
+
+            const crmId = draggedCard.getAttribute('data-crm-id') || '0';
+            const estadoActual = draggedCard.getAttribute('data-current-estado') || '';
+            const nuevoEstado = zone.getAttribute('data-drop-estado') || '';
+
+            if (!crmId || !nuevoEstado || estadoActual === nuevoEstado) {
+                return;
+            }
+
+            moveIdInput.value = crmId;
+            moveEstadoInput.value = nuevoEstado;
+            moveForm.submit();
+        });
+    });
+})();
+</script>
 
 <?php require 'includes/footer.php'; ?>
