@@ -795,7 +795,7 @@ if (!function_exists('contabilidad_afip_sign_tra')) {
                 'file://' . $tmpCert,
                 ['file://' . $tmpKey, ''],
                 [],
-                PKCS7_BINARY | PKCS7_DETACHED
+                PKCS7_BINARY
             );
             if ($ok === false) {
                 $errores = [];
@@ -806,18 +806,30 @@ if (!function_exists('contabilidad_afip_sign_tra')) {
             }
 
             $contenido = (string)file_get_contents($tmpOut);
+            $contenidoNormalizado = str_replace(["\r\n", "\r"], "\n", $contenido);
             $cms = '';
-            if (preg_match('/-----BEGIN PKCS7-----(.*?)-----END PKCS7-----/s', $contenido, $m)) {
-                $cms = preg_replace('/[^A-Za-z0-9+\/=]/', '', $m[1]);
-            } else {
-                $partes = preg_split("/(\r\n\r\n|\n\n|\r\r)/", $contenido, 2);
-                if (isset($partes[1])) {
-                    $cms = preg_replace('/[^A-Za-z0-9+\/=]/', '', $partes[1]);
-                }
+
+            if (preg_match('/-----BEGIN PKCS7-----(.*?)-----END PKCS7-----/s', $contenidoNormalizado, $m)) {
+                $cms = preg_replace('/\s+/', '', trim($m[1]));
+            }
+
+            if ($cms === '' && preg_match('/Content-Transfer-Encoding:\s*base64\b.*?\n\n([A-Za-z0-9+\/=\n]+?)(?:\n--[-A-Za-z0-9]+(?:--)?\s*$|\s*$)/si', $contenidoNormalizado, $m)) {
+                $cms = preg_replace('/\s+/', '', trim($m[1]));
             }
 
             if ($cms === '') {
-                throw new RuntimeException('No se pudo extraer el CMS PKCS#7 firmado para WSAA.');
+                $partes = preg_split("/\n\n+/", $contenidoNormalizado);
+                for ($i = count($partes) - 1; $i >= 0; $i--) {
+                    $candidato = preg_replace('/\s+/', '', trim((string)$partes[$i]));
+                    if ($candidato !== '' && base64_decode($candidato, true) !== false) {
+                        $cms = $candidato;
+                        break;
+                    }
+                }
+            }
+
+            if ($cms === '' || base64_decode($cms, true) === false) {
+                throw new RuntimeException('No se pudo extraer un CMS PKCS#7 válido para WSAA.');
             }
 
             return $cms;
