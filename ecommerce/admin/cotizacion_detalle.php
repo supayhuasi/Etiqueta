@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 try {
     $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
@@ -232,6 +233,20 @@ if (!empty($cotizacion['lista_precio_id'])) {
 
 $items = json_decode($cotizacion['items'], true) ?? [];
 $mensaje = $_GET['mensaje'] ?? '';
+$error = '';
+$impuestos_cotizacion = [];
+$impuestos_incluidos_cotizacion = (float)($cotizacion['impuestos_incluidos'] ?? 0);
+$impuestos_adicionales_cotizacion = (float)($cotizacion['impuestos_adicionales'] ?? 0);
+if (!empty($cotizacion['impuestos_json'])) {
+    $impuestos_cotizacion = json_decode((string)$cotizacion['impuestos_json'], true) ?: [];
+}
+if (empty($impuestos_cotizacion)) {
+    $baseCotizacionFiscal = max(0, (float)($cotizacion['subtotal'] ?? 0) - (float)($cotizacion['descuento'] ?? 0) - (float)($cotizacion['cupon_descuento'] ?? 0));
+    $resumenCotizacionFiscal = contabilidad_calcular_impuestos(contabilidad_get_impuestos($pdo, true), $baseCotizacionFiscal, $baseCotizacionFiscal, 'cotizacion');
+    $impuestos_cotizacion = $resumenCotizacionFiscal['detalle'] ?? [];
+    $impuestos_incluidos_cotizacion = (float)($resumenCotizacionFiscal['total_incluidos'] ?? 0);
+    $impuestos_adicionales_cotizacion = (float)($resumenCotizacionFiscal['total_adicionales'] ?? 0);
+}
 
 // Procesar acciones
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -378,41 +393,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $metodo_pago = 'Cotización';
                 $estado_pedido = 'pendiente_pago';
 
+                $subtotalPedido = (float)($cotizacion['subtotal'] ?? $cotizacion['total'] ?? 0);
+                $descuentoPedido = (float)($cotizacion['descuento'] ?? 0) + (float)($cotizacion['cupon_descuento'] ?? 0);
+                $basePedidoFiscal = max(0, $subtotalPedido - $descuentoPedido);
+                $resumenPedidoFiscal = contabilidad_calcular_impuestos(
+                    contabilidad_get_impuestos($pdo, true),
+                    $basePedidoFiscal,
+                    $basePedidoFiscal,
+                    'pedido'
+                );
+                $totalPedido = max(0, (float)($resumenPedidoFiscal['total_con_impuestos'] ?? $basePedidoFiscal));
+
                 $public_token = bin2hex(random_bytes(16));
-                    try {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, total, factura_a, metodo_pago, estado, public_token, envio_nombre, envio_telefono, envio_direccion, observaciones)
-                            VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $numero_pedido,
-                            $cliente_id,
-                            (float)$cotizacion['total'],
-                            (float)$cotizacion['total'],
-                            $factura_a,
-                            $metodo_pago,
-                            $estado_pedido,
-                            $public_token,
-                            $nombre ?: ($telefono ?: 'Cliente'),
-                            $telefono ?: null,
-                            $direccion,
-                            'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ($documento_numero ? ' | ' . $documento_tipo . ': ' . $documento_numero : '')
-                        ]);
-                    } catch (Exception $e) {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, total, factura_a, metodo_pago, estado, public_token)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $numero_pedido,
-                            $cliente_id,
-                            (float)$cotizacion['total'],
-                            $factura_a,
-                            $metodo_pago,
-                            $estado_pedido,
-                            $public_token
-                        ]);
-                    }
+                $pedidoObservaciones = 'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ($documento_numero ? ' | ' . $documento_tipo . ': ' . $documento_numero : '');
+                $pedidoCols = ['numero_pedido', 'cliente_id', 'total', 'metodo_pago', 'estado', 'public_token'];
+                $pedidoVals = [$numero_pedido, $cliente_id, $totalPedido, $metodo_pago, $estado_pedido, $public_token];
+
+                if (in_array('subtotal', $cols_ped, true)) {
+                    $pedidoCols[] = 'subtotal';
+                    $pedidoVals[] = $subtotalPedido;
+                }
+                if (in_array('envio', $cols_ped, true)) {
+                    $pedidoCols[] = 'envio';
+                    $pedidoVals[] = 0;
+                }
+                if (in_array('descuento_monto', $cols_ped, true)) {
+                    $pedidoCols[] = 'descuento_monto';
+                    $pedidoVals[] = $descuentoPedido;
+                }
+                if (in_array('codigo_descuento', $cols_ped, true)) {
+                    $pedidoCols[] = 'codigo_descuento';
+                    $pedidoVals[] = $cotizacion['cupon_codigo'] ?? null;
+                }
+                if (in_array('factura_a', $cols_ped, true)) {
+                    $pedidoCols[] = 'factura_a';
+                    $pedidoVals[] = $factura_a;
+                }
+                if (in_array('envio_nombre', $cols_ped, true)) {
+                    $pedidoCols[] = 'envio_nombre';
+                    $pedidoVals[] = $nombre ?: ($telefono ?: 'Cliente');
+                }
+                if (in_array('envio_telefono', $cols_ped, true)) {
+                    $pedidoCols[] = 'envio_telefono';
+                    $pedidoVals[] = $telefono ?: null;
+                }
+                if (in_array('envio_direccion', $cols_ped, true)) {
+                    $pedidoCols[] = 'envio_direccion';
+                    $pedidoVals[] = $direccion;
+                }
+                if (in_array('observaciones', $cols_ped, true)) {
+                    $pedidoCols[] = 'observaciones';
+                    $pedidoVals[] = $pedidoObservaciones;
+                }
+                if (in_array('impuestos_json', $cols_ped, true)) {
+                    $pedidoCols[] = 'impuestos_json';
+                    $pedidoVals[] = !empty($resumenPedidoFiscal['detalle']) ? json_encode($resumenPedidoFiscal['detalle'], JSON_UNESCAPED_UNICODE) : null;
+                }
+                if (in_array('impuestos_incluidos', $cols_ped, true)) {
+                    $pedidoCols[] = 'impuestos_incluidos';
+                    $pedidoVals[] = (float)($resumenPedidoFiscal['total_incluidos'] ?? 0);
+                }
+                if (in_array('impuestos_adicionales', $cols_ped, true)) {
+                    $pedidoCols[] = 'impuestos_adicionales';
+                    $pedidoVals[] = (float)($resumenPedidoFiscal['total_adicionales'] ?? 0);
+                }
+
+                $pedidoPlaceholders = implode(', ', array_fill(0, count($pedidoCols), '?'));
+                $stmt = $pdo->prepare("INSERT INTO ecommerce_pedidos (" . implode(', ', $pedidoCols) . ") VALUES (" . $pedidoPlaceholders . ")");
+                $stmt->execute($pedidoVals);
                 $pedido_id = (int)$pdo->lastInsertId();
 
                 $stmtItem = $pdo->prepare("
@@ -706,6 +754,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <td colspan="5" class="text-end text-primary"><strong>Cupón<?= !empty($cotizacion['cupon_codigo']) ? ' (' . htmlspecialchars($cotizacion['cupon_codigo']) . ')' : '' ?>:</strong></td>
                         <td class="text-end text-primary"><strong>-$<?= number_format($cotizacion['cupon_descuento'], 2) ?></strong></td>
                     </tr>
+                    <?php endif; ?>
+                    <?php if (!empty($impuestos_cotizacion) && is_array($impuestos_cotizacion)): ?>
+                        <?php foreach ($impuestos_cotizacion as $impuestoCot): ?>
+                            <?php $montoImpCot = (float)($impuestoCot['monto'] ?? 0); ?>
+                            <?php if ($montoImpCot <= 0) { continue; } ?>
+                            <tr>
+                                <td colspan="5" class="text-end <?= !empty($impuestoCot['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><strong><?= htmlspecialchars((string)($impuestoCot['nombre'] ?? 'Impuesto')) ?><?= !empty($impuestoCot['incluido_en_precio']) ? ' (incluido)' : '' ?>:</strong></td>
+                                <td class="text-end <?= !empty($impuestoCot['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><strong><?= !empty($impuestoCot['incluido_en_precio']) ? '' : '+' ?>$<?= number_format($montoImpCot, 2) ?></strong></td>
+                            </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
                     <tr class="table-primary">
                         <td colspan="5" class="text-end"><strong>TOTAL:</strong></td>

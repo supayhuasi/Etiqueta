@@ -1,9 +1,13 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 $mensaje = '';
 $error = '';
+$contabilidad_config = contabilidad_get_config($pdo);
+$contabilidad_impuestos_activos = contabilidad_get_impuestos($pdo, true);
+$contabilidad_moneda = trim((string)($contabilidad_config['moneda'] ?? 'ARS')) ?: 'ARS';
 
 function cotizacion_tabla_existe(PDO $pdo, string $tabla): bool {
     try {
@@ -497,7 +501,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cupon_descuento = 0;
         }
 
-        $total = $subtotal - $descuento - $cupon_descuento;
+        $base_cotizacion = max(0, $subtotal - $descuento - $cupon_descuento);
+        $resumen_impuestos = contabilidad_calcular_impuestos(
+            $contabilidad_impuestos_activos,
+            $base_cotizacion,
+            $base_cotizacion,
+            'cotizacion'
+        );
+        $total = max(0, (float)($resumen_impuestos['total_con_impuestos'] ?? $base_cotizacion));
         
         // Generar número de cotización
         $año = date('Y');
@@ -545,6 +556,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
         $insert_vals = array_merge($insert_vals, [$lista_precio_id, json_encode($items), $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id']]);
+
+        if (in_array('impuestos_json', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_json';
+            $insert_vals[] = !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null;
+        }
+        if (in_array('impuestos_incluidos', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_incluidos';
+            $insert_vals[] = (float)($resumen_impuestos['total_incluidos'] ?? 0);
+        }
+        if (in_array('impuestos_adicionales', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_adicionales';
+            $insert_vals[] = (float)($resumen_impuestos['total_adicionales'] ?? 0);
+        }
 
         $placeholders = implode(', ', array_fill(0, count($insert_cols), '?'));
         $sql_insert = "INSERT INTO ecommerce_cotizaciones (" . implode(', ', $insert_cols) . ") VALUES (" . $placeholders . ")";
@@ -909,6 +933,20 @@ foreach ($lista_cat_rows as $row) {
                                 </div>
                                 <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="0">
                                 <small id="cupon_info" class="text-muted d-block"></small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. incluidos:</th>
+                            <td class="text-end">
+                                <span id="impuestos_incluidos" class="text-muted">$0.00</span>
+                                <small class="text-muted d-block">Informativo, ya contemplado en el precio.</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. adicionales:</th>
+                            <td class="text-end">
+                                <span id="impuestos_adicionales" class="text-danger">$0.00</span>
+                                <small id="detalle_impuestos" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr class="table-primary">
@@ -1788,6 +1826,71 @@ function actualizarDescuentoItem(index, valor) {
     calcularTotales();
 }
 
+const impuestosConfiguradosCotizacion = <?= json_encode($contabilidad_impuestos_activos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?> || [];
+
+function redondearMonedaCotizacion(valor) {
+    return Math.round(((parseFloat(valor) || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function calcularResumenImpuestosCotizacion(subtotalBase, totalBase) {
+    let totalIncluidos = 0;
+    let totalAdicionales = 0;
+    const detalle = [];
+
+    impuestosConfiguradosCotizacion.forEach((imp) => {
+        if (!imp) return;
+        const aplicaA = String(imp.aplica_a || 'ambos');
+        if (aplicaA !== 'ambos' && aplicaA !== 'cotizacion') return;
+
+        const base = String(imp.base_calculo || 'subtotal') === 'total' ? totalBase : subtotalBase;
+        const valor = parseFloat(imp.valor || 0) || 0;
+        const incluido = Number(imp.incluido_en_precio) === 1 || imp.incluido_en_precio === true || String(imp.incluido_en_precio) === '1';
+        let monto = 0;
+
+        if (String(imp.tipo_calculo || 'porcentaje') === 'fijo') {
+            monto = valor;
+        } else if (incluido) {
+            monto = base > 0 ? base - (base / (1 + (valor / 100))) : 0;
+        } else {
+            monto = base * (valor / 100);
+        }
+
+        monto = redondearMonedaCotizacion(monto);
+        if (monto <= 0) return;
+
+        detalle.push({ nombre: imp.nombre || 'Impuesto', monto, incluido });
+        if (incluido) {
+            totalIncluidos += monto;
+        } else {
+            totalAdicionales += monto;
+        }
+    });
+
+    totalIncluidos = redondearMonedaCotizacion(totalIncluidos);
+    totalAdicionales = redondearMonedaCotizacion(totalAdicionales);
+
+    return {
+        detalle,
+        totalIncluidos,
+        totalAdicionales,
+        totalConImpuestos: redondearMonedaCotizacion((parseFloat(totalBase) || 0) + totalAdicionales)
+    };
+}
+
+function renderizarResumenImpuestosCotizacion(resumen) {
+    const incluidosEl = document.getElementById('impuestos_incluidos');
+    const adicionalesEl = document.getElementById('impuestos_adicionales');
+    const detalleEl = document.getElementById('detalle_impuestos');
+
+    if (incluidosEl) incluidosEl.textContent = '$' + Number(resumen.totalIncluidos || 0).toFixed(2);
+    if (adicionalesEl) adicionalesEl.textContent = '$' + Number(resumen.totalAdicionales || 0).toFixed(2);
+    if (detalleEl) {
+        detalleEl.textContent = resumen.detalle && resumen.detalle.length
+            ? resumen.detalle.map((imp) => `${imp.nombre}${imp.incluido ? ' (incluido)' : ''}: $${Number(imp.monto || 0).toFixed(2)}`).join(' · ')
+            : 'Sin impuestos activos para esta cotización.';
+    }
+}
+
 function calcularTotales() {
     let subtotal = 0;
     let descuentoListaTotal = 0;
@@ -1839,10 +1942,12 @@ function calcularTotales() {
 
     const descuento = parseFloat(descuentoInput?.value || 0);
     const descuentoCupon = parseFloat(document.getElementById('cupon_descuento')?.value || 0);
-    const total = subtotal - descuento - descuentoCupon;
+    const baseFiscal = Math.max(0, subtotal - descuento - descuentoCupon);
+    const resumenImpuestos = calcularResumenImpuestosCotizacion(baseFiscal, baseFiscal);
 
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-    document.getElementById('total').textContent = '$' + total.toFixed(2);
+    renderizarResumenImpuestosCotizacion(resumenImpuestos);
+    document.getElementById('total').textContent = '$' + Number(resumenImpuestos.totalConImpuestos || 0).toFixed(2);
 }
 
 function aplicarCupon() {

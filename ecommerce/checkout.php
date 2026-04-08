@@ -5,6 +5,7 @@ require 'includes/cliente_auth.php';
 require 'includes/mailer.php';
 require 'includes/envio.php';
 require 'includes/descuentos.php';
+require_once __DIR__ . '/admin/includes/contabilidad_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -74,7 +75,16 @@ $descuento_info = aplicar_descuento_actual($pdo, $subtotal);
 $descuento_monto = $descuento_info['monto'] ?? 0.0;
 $codigo_descuento = $descuento_info['codigo'] ?? '';
 
-$total = max(0, $subtotal + $envio - $descuento_monto);
+$impuestos_pedido_activos = contabilidad_get_impuestos($pdo, true);
+$base_subtotal_pedido = max(0, $subtotal - $descuento_monto);
+$base_total_pedido = max(0, $subtotal + $envio - $descuento_monto);
+$resumen_impuestos_pedido = contabilidad_calcular_impuestos(
+    $impuestos_pedido_activos,
+    $base_subtotal_pedido,
+    $base_total_pedido,
+    'pedido'
+);
+$total = max(0, (float)($resumen_impuestos_pedido['total_con_impuestos'] ?? $base_total_pedido));
 
 // Procesar compra
 $mensaje = '';
@@ -273,16 +283,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
             $descuento_aplicado = aplicar_descuento_actual($pdo, $subtotal);
             $descuento_monto = $descuento_aplicado['monto'] ?? 0.0;
             $codigo_descuento = $descuento_aplicado['codigo'] ?? null;
-            $total = max(0, $subtotal + $envio - $descuento_monto);
+            $base_subtotal_pedido = max(0, $subtotal - $descuento_monto);
+            $base_total_pedido = max(0, $subtotal + $envio - $descuento_monto);
+            $resumen_impuestos_pedido = contabilidad_calcular_impuestos(
+                $impuestos_pedido_activos,
+                $base_subtotal_pedido,
+                $base_total_pedido,
+                'pedido'
+            );
+            $total = max(0, (float)($resumen_impuestos_pedido['total_con_impuestos'] ?? $base_total_pedido));
 
             $public_token = bin2hex(random_bytes(16));
 
             // Crear pedido
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, factura_a, envio_nombre, envio_telefono, envio_direccion, envio_localidad, envio_provincia, envio_codigo_postal, metodo_pago, estado, public_token)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
+            $cols_pedido_insert = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+            $pedido_cols = [
+                'numero_pedido', 'cliente_id', 'subtotal', 'envio', 'descuento_monto', 'codigo_descuento', 'total',
+                'factura_a', 'envio_nombre', 'envio_telefono', 'envio_direccion', 'envio_localidad', 'envio_provincia',
+                'envio_codigo_postal', 'metodo_pago', 'estado', 'public_token'
+            ];
+            $pedido_vals = [
                 $numero_pedido,
                 $cliente_id,
                 $subtotal,
@@ -300,7 +320,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                 $metodo_pago,
                 $estado_pedido,
                 $public_token
-            ]);
+            ];
+
+            if (in_array('impuestos_json', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_json';
+                $pedido_vals[] = !empty($resumen_impuestos_pedido['detalle']) ? json_encode($resumen_impuestos_pedido['detalle'], JSON_UNESCAPED_UNICODE) : null;
+            }
+            if (in_array('impuestos_incluidos', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_incluidos';
+                $pedido_vals[] = (float)($resumen_impuestos_pedido['total_incluidos'] ?? 0);
+            }
+            if (in_array('impuestos_adicionales', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_adicionales';
+                $pedido_vals[] = (float)($resumen_impuestos_pedido['total_adicionales'] ?? 0);
+            }
+
+            $pedido_placeholders = implode(', ', array_fill(0, count($pedido_cols), '?'));
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_pedidos (" . implode(', ', $pedido_cols) . ") VALUES (" . $pedido_placeholders . ")");
+            $stmt->execute($pedido_vals);
             $pedido_id = $pdo->lastInsertId();
             
             // Agregar items al pedido
@@ -689,6 +726,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <div class="d-flex justify-content-between mb-3">
                                 <span>Descuento:</span>
                                 <strong class="text-success">- $<?= number_format($descuento_monto, 2, ',', '.') ?></strong>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($resumen_impuestos_pedido['detalle']) && is_array($resumen_impuestos_pedido['detalle'])): ?>
+                            <?php foreach ($resumen_impuestos_pedido['detalle'] as $impuesto): ?>
+                                <?php $montoImpuesto = (float)($impuesto['monto'] ?? 0); ?>
+                                <?php if ($montoImpuesto <= 0) { continue; } ?>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span><?= htmlspecialchars((string)($impuesto['nombre'] ?? 'Impuesto')) ?><?= !empty($impuesto['incluido_en_precio']) ? ' (incluido)' : '' ?>:</span>
+                                    <strong class="<?= !empty($impuesto['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><?= !empty($impuesto['incluido_en_precio']) ? '' : '+ ' ?>$<?= number_format($montoImpuesto, 2, ',', '.') ?></strong>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;">
+                                <small class="text-muted">Los impuestos incluidos ya forman parte del precio; los adicionales se suman automáticamente al total.</small>
                             </div>
                         <?php endif; ?>
                         <div class="d-flex justify-content-between">

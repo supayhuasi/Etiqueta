@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -363,7 +364,15 @@ try {
         $cupon_descuento = 0;
     }
 
-    $total = $subtotal - $descuento - $cupon_descuento;
+    $base_cotizacion = max(0, $subtotal - $descuento - $cupon_descuento);
+    $impuestos_activos = contabilidad_get_impuestos($pdo, true);
+    $resumen_impuestos = contabilidad_calcular_impuestos(
+        $impuestos_activos,
+        $base_cotizacion,
+        $base_cotizacion,
+        'cotizacion'
+    );
+    $total = max(0, (float)($resumen_impuestos['total_con_impuestos'] ?? $base_cotizacion));
 
     // generar numero
     $año = date('Y');
@@ -404,6 +413,19 @@ try {
 
     $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
     $insert_vals = array_merge($insert_vals, [$lista_precio_id, $items_json, $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id'] ?? null]);
+
+    if (in_array('impuestos_json', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_json';
+        $insert_vals[] = !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null;
+    }
+    if (in_array('impuestos_incluidos', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_incluidos';
+        $insert_vals[] = (float)($resumen_impuestos['total_incluidos'] ?? 0);
+    }
+    if (in_array('impuestos_adicionales', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_adicionales';
+        $insert_vals[] = (float)($resumen_impuestos['total_adicionales'] ?? 0);
+    }
 
     $placeholders = implode(', ', array_fill(0, count($insert_cols), '?'));
     $sql_insert = "INSERT INTO ecommerce_cotizaciones (" . implode(', ', $insert_cols) . ") VALUES (" . $placeholders . ")";

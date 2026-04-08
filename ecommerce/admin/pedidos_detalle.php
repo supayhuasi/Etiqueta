@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 function registrarMovimientoInventario(PDO $pdo, array $payload): void
 {
@@ -118,11 +119,9 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
 
 $pedido_id = isset($_GET['pedido_id']) ? intval($_GET['pedido_id']) : 0;
 
-// DEBUG: Mostrar el valor de $pedido_id recibido
 if (!isset($_GET['pedido_id'])) {
     die('Falta el parámetro pedido_id en la URL');
 }
-var_dump('DEBUG pedido_id:', $pedido_id);
 // Obtener pedido
 $stmt = $pdo->prepare("
     SELECT p.*, c.nombre, c.email, c.telefono, c.direccion as dir_cliente, c.ciudad, c.provincia, c.codigo_postal
@@ -132,6 +131,21 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$pedido_id]);
 $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$impuestos_pedido = [];
+$impuestos_incluidos_pedido = (float)($pedido['impuestos_incluidos'] ?? 0);
+$impuestos_adicionales_pedido = (float)($pedido['impuestos_adicionales'] ?? 0);
+if (!empty($pedido['impuestos_json'])) {
+    $impuestos_pedido = json_decode((string)$pedido['impuestos_json'], true) ?: [];
+}
+if (empty($impuestos_pedido) && $pedido) {
+    $baseSubtotalPedido = max(0, (float)($pedido['subtotal'] ?? 0) - (float)($pedido['descuento_monto'] ?? 0));
+    $baseTotalPedido = max(0, (float)($pedido['subtotal'] ?? 0) + (float)($pedido['envio'] ?? 0) - (float)($pedido['descuento_monto'] ?? 0));
+    $resumenFiscalPedido = contabilidad_calcular_impuestos(contabilidad_get_impuestos($pdo, true), $baseSubtotalPedido, $baseTotalPedido, 'pedido');
+    $impuestos_pedido = $resumenFiscalPedido['detalle'] ?? [];
+    $impuestos_incluidos_pedido = (float)($resumenFiscalPedido['total_incluidos'] ?? 0);
+    $impuestos_adicionales_pedido = (float)($resumenFiscalPedido['total_adicionales'] ?? 0);
+}
 
 if (!$pedido) {
     die("Pedido no encontrado (ID: " . htmlspecialchars($pedido_id) . ")");
@@ -461,6 +475,18 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Fecha:</strong> <?= date('d/m/Y H:i:s', strtotime($pedido['fecha_creacion'])) ?></p>
                 <p><strong>Método de Pago:</strong> <span class="badge bg-info"><?= htmlspecialchars($pedido['metodo_pago']) ?></span></p>
                 <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                <?php if (!empty($impuestos_pedido) && is_array($impuestos_pedido)): ?>
+                    <div class="small text-muted mb-2">
+                        <?php foreach ($impuestos_pedido as $impuestoPedido): ?>
+                            <?php $montoImpuestoPedido = (float)($impuestoPedido['monto'] ?? 0); ?>
+                            <?php if ($montoImpuestoPedido <= 0) { continue; } ?>
+                            <div>
+                                <?= htmlspecialchars((string)($impuestoPedido['nombre'] ?? 'Impuesto')) ?><?= !empty($impuestoPedido['incluido_en_precio']) ? ' (incluido)' : '' ?>:
+                                <strong class="<?= !empty($impuestoPedido['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><?= !empty($impuestoPedido['incluido_en_precio']) ? '' : '+' ?>$<?= number_format($montoImpuestoPedido, 2, ',', '.') ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <?php if (!empty($pedido['public_token'])): ?>
                     <p><strong>Link público:</strong>
                         <a href="../pedido_publico.php?token=<?= urlencode($pedido['public_token']) ?>" target="_blank" rel="noopener">

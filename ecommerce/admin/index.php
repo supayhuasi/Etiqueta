@@ -81,6 +81,7 @@ $modulos = [
     ['perm' => 'instalaciones', 'titulo' => 'Instalaciones y visitas', 'desc' => 'Programación y seguimiento en un solo tablero', 'url' => 'instalaciones.php', 'icon' => 'bi-calendar-check'],
     ['perm' => 'crm', 'titulo' => 'CRM', 'desc' => 'Seguimiento comercial desde visitas y leads', 'url' => 'crm.php', 'icon' => 'bi-person-lines-fill'],
     ['perm' => 'calidad', 'titulo' => 'Calidad', 'desc' => 'Reclamos, rehechos, demoras y satisfacción', 'url' => 'calidad.php', 'icon' => 'bi-award'],
+    ['perm' => 'finanzas', 'titulo' => 'Contabilidad', 'desc' => 'Impuestos y configuración fiscal', 'url' => 'contabilidad.php', 'icon' => 'bi-receipt-cutoff'],
     ['perm' => 'gastos', 'titulo' => 'Gastos', 'desc' => 'Control financiero diario', 'url' => 'gastos/gastos.php', 'icon' => 'bi-cash-coin'],
     ['perm' => 'cheques', 'titulo' => 'Cheques', 'desc' => 'Seguimiento y vencimientos', 'url' => 'cheques/cheques.php', 'icon' => 'bi-journal-check'],
     ['perm' => 'inventario', 'titulo' => 'Inventario', 'desc' => 'Stock y reposición', 'url' => 'inventario.php', 'icon' => 'bi-box-seam'],

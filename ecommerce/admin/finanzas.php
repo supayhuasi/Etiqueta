@@ -1,5 +1,8 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
+
+ensureContabilidadSchema($pdo);
 
 function fin_table_exists(PDO $pdo, $table)
 {
@@ -163,6 +166,12 @@ if (fin_table_exists($pdo, 'ecommerce_materiales') && fin_column_exists($pdo, 'e
 }
 
 $saldo_real_estimado = $saldo_flujo_mes + $cxc_pedidos + $valor_total_stock - $gastos_pendientes - $cheques_pendientes;
+
+$contabConfig = contabilidad_get_config($pdo);
+$contabMoneda = (string)($contabConfig['moneda'] ?? 'ARS');
+$contabImpuestosActivos = contabilidad_get_impuestos($pdo, true);
+$contabResumenMes = contabilidad_calcular_impuestos($contabImpuestosActivos, $ingresos_mes, $ingresos_mes, 'pedido');
+$contabImpuestosMesTotal = (float)($contabResumenMes['total_incluidos'] ?? 0) + (float)($contabResumenMes['total_adicionales'] ?? 0);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -276,8 +285,25 @@ $saldo_real_estimado = $saldo_flujo_mes + $cxc_pedidos + $valor_total_stock - $g
     </div>
 </div>
 
+<div class="card mb-3 border-primary">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h5 class="mb-1">📚 Contabilidad fiscal</h5>
+            <div class="text-muted small">
+                Impuestos activos: <?= number_format(count($contabImpuestosActivos), 0, ',', '.') ?> ·
+                Carga estimada del mes: <?= htmlspecialchars($contabMoneda) ?> $<?= number_format($contabImpuestosMesTotal, 0, ',', '.') ?>
+            </div>
+            <?php if (!empty($contabConfig['condicion_fiscal'])): ?>
+                <div class="small text-muted">Condición fiscal: <?= htmlspecialchars((string)$contabConfig['condicion_fiscal']) ?></div>
+            <?php endif; ?>
+        </div>
+        <a href="contabilidad.php" class="btn btn-outline-primary">Abrir módulo de contabilidad</a>
+    </div>
+</div>
+
 <div class="d-flex flex-wrap gap-2">
     <a href="flujo_caja.php?mes=<?= urlencode($mes) ?>" class="btn btn-outline-primary">Ver Flujo de Caja</a>
+    <a href="contabilidad.php" class="btn btn-outline-info">Ver Contabilidad</a>
     <a href="gastos/gastos.php?mes=<?= urlencode($mes) ?>" class="btn btn-outline-warning">Ver Gastos</a>
     <a href="cheques/cheques.php?mes=<?= urlencode($mes) ?>" class="btn btn-outline-danger">Ver Cheques</a>
     <a href="inventario_reporte_reponer.php" class="btn btn-outline-secondary">Ver Reposición</a>
