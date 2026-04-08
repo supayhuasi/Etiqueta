@@ -912,7 +912,13 @@ if (!function_exists('contabilidad_afip_obtener_ta')) {
                 'expira_at' => (string)$afipConfig['wsaa_expira_at'],
             ];
         } catch (Throwable $e) {
-            $afipConfig['ultimo_error'] = $e->getMessage();
+            $mensaje = $e->getMessage();
+            if (stripos($mensaje, 'Certificado no emitido por AC de confianza') !== false) {
+                $ambienteActual = (string)($afipConfig['ambiente'] ?? 'homologacion');
+                $mensaje .= ' Verificá que el .crt cargado sea el certificado final emitido por ARCA/AFIP para ' . $ambienteActual . ' y no un CSR, un certificado autofirmado o uno generado para el otro ambiente.';
+                $e = new RuntimeException($mensaje, 0, $e);
+            }
+            $afipConfig['ultimo_error'] = $mensaje;
             contabilidad_save_afip_config($pdo, $afipConfig);
             throw $e;
         }
