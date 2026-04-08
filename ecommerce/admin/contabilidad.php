@@ -15,6 +15,7 @@ $moneda = 'ARS';
 $config = contabilidad_get_config($pdo);
 $afipConfig = contabilidad_get_afip_config($pdo);
 $afipOpenSslDisponible = contabilidad_afip_openssl_available();
+$afipCertInfo = !empty($afipConfig['certificado_pem']) ? contabilidad_afip_resumen_certificado((string)$afipConfig['certificado_pem']) : [];
 
 $descargaAfip = (string)($_GET['descargar_afip'] ?? '');
 if ($descargaAfip !== '') {
@@ -286,10 +287,19 @@ if (contabilidad_table_exists($pdo, 'ecommerce_pedidos')) {
                     <div class="alert alert-danger">OpenSSL no está disponible en PHP, por lo que no se puede generar el CSR desde el sistema.</div>
                 <?php endif; ?>
 
-                <?php if (!empty($afipConfig['certificado_vencimiento']) || !empty($afipConfig['wsaa_expira_at']) || !empty($afipConfig['ultimo_error'])): ?>
+                <?php if (!empty($afipConfig['certificado_vencimiento']) || !empty($afipConfig['wsaa_expira_at']) || !empty($afipConfig['ultimo_error']) || !empty($afipCertInfo)): ?>
                     <div class="alert alert-secondary small py-2">
                         <?php if (!empty($afipConfig['certificado_vencimiento'])): ?>
                             <div><strong>Certificado:</strong> válido hasta <?= htmlspecialchars(date('d/m/Y', strtotime((string)$afipConfig['certificado_vencimiento']))) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($afipCertInfo['subject_cn']) || !empty($afipCertInfo['cuit_subject'])): ?>
+                            <div><strong>Certificado cargado:</strong> <?= htmlspecialchars((string)($afipCertInfo['subject_cn'] ?? '')) ?><?php if (!empty($afipCertInfo['cuit_subject'])): ?> · CUIT <?= htmlspecialchars((string)$afipCertInfo['cuit_subject']) ?><?php endif; ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($afipCertInfo['issuer_o']) || !empty($afipCertInfo['issuer_cn'])): ?>
+                            <div><strong>Emisor:</strong> <?= htmlspecialchars(trim((string)($afipCertInfo['issuer_o'] ?? '') . ' ' . (string)($afipCertInfo['issuer_cn'] ?? ''))) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($afipConfig['cuit_representada']) && !empty($afipCertInfo['cuit_subject']) && preg_replace('/\D+/', '', (string)$afipConfig['cuit_representada']) !== (string)$afipCertInfo['cuit_subject']): ?>
+                            <div class="text-danger"><strong>Atención:</strong> el certificado es para el CUIT <?= htmlspecialchars((string)$afipCertInfo['cuit_subject']) ?> pero en configuración figura el CUIT <?= htmlspecialchars((string)$afipConfig['cuit_representada']) ?>.</div>
                         <?php endif; ?>
                         <?php if (!empty($afipConfig['wsaa_expira_at'])): ?>
                             <div><strong>Sesión WSAA:</strong> vigente hasta <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$afipConfig['wsaa_expira_at']))) ?></div>

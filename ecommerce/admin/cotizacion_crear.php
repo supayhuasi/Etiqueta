@@ -274,8 +274,11 @@ if (!in_array('cuit', $cols_cot, true)) {
 if (!in_array('factura_a', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
 }
+if (!in_array('comprobante_tipo', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN comprobante_tipo VARCHAR(20) NOT NULL DEFAULT 'factura' AFTER factura_a");
+}
 if (!in_array('es_empresa', $cols_cot, true)) {
-    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER comprobante_tipo");
 }
 if (!in_array('crm_id', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN crm_id INT NULL AFTER cliente_id");
@@ -353,6 +356,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $crm_id = !empty($_POST['crm_id']) ? intval($_POST['crm_id']) : $crm_id_context;
         $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
         $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
+        $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+        if ($comprobante_tipo === 'recibo') {
+            $factura_a = 0;
+        }
         $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
         
         // Validaciones
@@ -553,6 +560,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insert_cols[] = 'factura_a';
             $insert_vals[] = $factura_a;
         }
+        if (in_array('comprobante_tipo', $cols_cot_insert, true)) {
+            $insert_cols[] = 'comprobante_tipo';
+            $insert_vals[] = $comprobante_tipo;
+        }
 
         $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
         $insert_vals = array_merge($insert_vals, [$lista_precio_id, json_encode($items), $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id']]);
@@ -687,7 +698,8 @@ $form_data = [
     'lista_precio_id' => trim((string)($_POST['lista_precio_id'] ?? '')),
     'es_empresa' => !empty($_POST['es_empresa']),
     'factura_a' => !empty($_POST['factura_a']),
-    'cuit' => trim((string)($_POST['cuit'] ?? '')),
+    'comprobante_tipo' => contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura')),
+    'cuit' => trim((string)($_POST['cuit'] ?? '')), 
 ];
 
 if ($form_data['cliente_id'] <= 0) {
@@ -881,6 +893,14 @@ foreach ($lista_cat_rows as $row) {
                         <label for="descuento_porcentaje_default" class="form-label">Descuento % por defecto (nuevos ítems)</label>
                         <input type="number" class="form-control" id="descuento_porcentaje_default" name="descuento_porcentaje_default" value="0" min="0" max="100" step="0.01">
                         <small class="text-muted">Se aplica al precio sugerido al agregar un item nuevo.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="comprobante_tipo" class="form-label">Comprobante previsto</label>
+                        <select class="form-select" id="comprobante_tipo" name="comprobante_tipo">
+                            <option value="factura" <?= (string)($form_data['comprobante_tipo'] ?? 'factura') !== 'recibo' ? 'selected' : '' ?>>Factura fiscal</option>
+                            <option value="recibo" <?= (string)($form_data['comprobante_tipo'] ?? 'factura') === 'recibo' ? 'selected' : '' ?>>Recibo interno (sin ARCA/AFIP)</option>
+                        </select>
+                        <small class="text-muted">Definí desde ahora si al convertirla en pedido debería facturarse o emitirse como recibo.</small>
                     </div>
                     <div class="alert alert-light border mb-3 py-2 small">
                         La cotización primero intenta reutilizar un cliente existente por <strong>CUIT, email, teléfono o nombre</strong>. Solo si no existe, se crea uno nuevo.
@@ -2146,20 +2166,29 @@ function toggleEmpresaFields() {
     const facturaA = document.getElementById('factura_a');
     const cuit = document.getElementById('cuit');
     const wrapper = document.getElementById('empresaFields');
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    const esRecibo = !!(comprobanteTipo && comprobanteTipo.value === 'recibo');
     const activo = !!(esEmpresa && esEmpresa.checked);
     if (wrapper) {
         wrapper.style.display = activo ? '' : 'none';
     }
-    if (!activo && facturaA) {
-        facturaA.checked = false;
+    if (facturaA) {
+        if (!activo || esRecibo) {
+            facturaA.checked = false;
+        }
+        facturaA.disabled = esRecibo;
     }
     if (cuit) {
-        cuit.required = !!(activo && facturaA && facturaA.checked);
+        cuit.required = !!(activo && facturaA && facturaA.checked && !esRecibo);
     }
 }
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    if (comprobanteTipo) {
+        comprobanteTipo.addEventListener('change', toggleEmpresaFields);
+    }
     toggleEmpresaFields();
     const clienteSearch = document.getElementById('buscar_cliente');
     const clienteSelect = document.getElementById('cliente_id');

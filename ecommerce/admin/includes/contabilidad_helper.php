@@ -151,6 +151,9 @@ if (!function_exists('ensureContabilidadSchema')) {
                 if (!in_array('impuestos_adicionales', $columnasDocumento, true)) {
                     $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN impuestos_adicionales DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER impuestos_incluidos");
                 }
+                if (!in_array('comprobante_tipo', $columnasDocumento, true)) {
+                    $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN comprobante_tipo VARCHAR(20) NOT NULL DEFAULT 'factura' AFTER impuestos_adicionales");
+                }
 
                 if ($tablaDocumento === 'ecommerce_pedidos') {
                     if (!in_array('tipo_factura', $columnasDocumento, true)) {
@@ -690,6 +693,7 @@ if (!function_exists('contabilidad_afip_soap_request')) {
             . '</soap:Envelope>';
 
         $response = false;
+        $httpCode = 0;
         if (function_exists('curl_init')) {
             $ch = curl_init($url);
             curl_setopt_array($ch, [
@@ -700,11 +704,13 @@ if (!function_exists('contabilidad_afip_soap_request')) {
                     'Content-Type: text/xml; charset=utf-8',
                     'SOAPAction: "' . $soapAction . '"',
                     'Content-Length: ' . strlen($envelope),
+                    'Expect:',
                 ],
                 CURLOPT_CONNECTTIMEOUT => 20,
                 CURLOPT_TIMEOUT => 60,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             ]);
             $response = curl_exec($ch);
             $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -713,13 +719,6 @@ if (!function_exists('contabilidad_afip_soap_request')) {
 
             if ($response === false) {
                 throw new RuntimeException('No se pudo conectar con ARCA/AFIP: ' . ($curlError !== '' ? $curlError : 'error desconocido de cURL.'));
-            }
-            if (stripos((string)$response, 'Cache Access Denied') !== false || stripos((string)$response, 'authenticated yourself') !== false) {
-                throw new RuntimeException('La salida HTTPS hacia ARCA/AFIP está bloqueada por el proxy o firewall del servidor (Cache Access Denied). Habilitá acceso a wsaahomo.afip.gov.ar / wswhomo.afip.gov.ar y a wsaa.afip.gov.ar / servicios1.afip.gov.ar.');
-            }
-            if ($httpCode >= 400) {
-                $detalle = trim(preg_replace('/\s+/', ' ', strip_tags(substr((string)$response, 0, 300))));
-                throw new RuntimeException('ARCA/AFIP devolvió HTTP ' . $httpCode . ($detalle !== '' ? ' · ' . $detalle : '.'));
             }
         } else {
             $context = stream_context_create([
@@ -734,13 +733,20 @@ if (!function_exists('contabilidad_afip_soap_request')) {
             if ($response === false) {
                 throw new RuntimeException('No se pudo conectar con ARCA/AFIP y cURL no está disponible.');
             }
-            if (stripos((string)$response, 'Cache Access Denied') !== false || stripos((string)$response, 'authenticated yourself') !== false) {
-                throw new RuntimeException('La salida HTTPS hacia ARCA/AFIP está bloqueada por el proxy o firewall del servidor (Cache Access Denied).');
-            }
         }
 
-        if (preg_match('/<faultstring>(.*?)<\/faultstring>/is', $response, $m)) {
-            throw new RuntimeException('ARCA/AFIP respondió un SOAP Fault: ' . trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_XML1, 'UTF-8')));
+        if (stripos((string)$response, 'Cache Access Denied') !== false || stripos((string)$response, 'authenticated yourself') !== false) {
+            throw new RuntimeException('La salida HTTPS hacia ARCA/AFIP está bloqueada por el proxy o firewall del servidor (Cache Access Denied). Habilitá acceso a wsaahomo.afip.gov.ar / wswhomo.afip.gov.ar y a wsaa.afip.gov.ar / servicios1.afip.gov.ar.');
+        }
+
+        if (preg_match('/<faultstring[^>]*>(.*?)<\/faultstring>/is', (string)$response, $m)) {
+            $fault = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_XML1, 'UTF-8'));
+            throw new RuntimeException('ARCA/AFIP respondió un SOAP Fault' . ($httpCode > 0 ? ' (HTTP ' . $httpCode . ')' : '') . ': ' . $fault);
+        }
+
+        if ($httpCode >= 400) {
+            $detalle = trim(preg_replace('/\s+/', ' ', strip_tags(substr((string)$response, 0, 500))));
+            throw new RuntimeException('ARCA/AFIP devolvió HTTP ' . $httpCode . ($detalle !== '' ? ' · ' . $detalle : '.'));
         }
 
         return (string)$response;
@@ -842,6 +848,15 @@ if (!function_exists('contabilidad_afip_obtener_ta')) {
         $privateKeyPem = trim((string)($afipConfig['private_key_pem'] ?? ''));
         if ($certPem === '' || $privateKeyPem === '') {
             throw new RuntimeException('Faltan el certificado PEM o la clave privada para autenticar con ARCA/AFIP.');
+        }
+
+        $certInfo = contabilidad_afip_resumen_certificado($certPem);
+        $cuitConfigurada = preg_replace('/\D+/', '', (string)($afipConfig['cuit_representada'] ?? ''));
+        if ($cuitConfigurada !== '' && !empty($certInfo['cuit_subject']) && $certInfo['cuit_subject'] !== $cuitConfigurada) {
+            throw new RuntimeException('El certificado cargado corresponde al CUIT ' . $certInfo['cuit_subject'] . ' pero en la configuración AFIP/ARCA figura el CUIT ' . $cuitConfigurada . '. Deben coincidir antes de pedir CAE.');
+        }
+        if (!empty($certInfo['valid_to']) && strtotime((string)$certInfo['valid_to']) < time()) {
+            throw new RuntimeException('El certificado AFIP/ARCA está vencido desde ' . date('d/m/Y H:i', strtotime((string)$certInfo['valid_to'])) . '.');
         }
 
         $endpoints = contabilidad_afip_endpoints((string)($afipConfig['ambiente'] ?? 'homologacion'));
@@ -1296,6 +1311,36 @@ if (!function_exists('contabilidad_facturar_pedido_afip')) {
         } finally {
             $unlockStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
             $unlockStmt->execute([$lockName]);
+        }
+    }
+}
+
+if (!function_exists('contabilidad_afip_resumen_certificado')) {
+    function contabilidad_afip_resumen_certificado(string $certificadoPem): array
+    {
+        $certificadoPem = trim($certificadoPem);
+        if ($certificadoPem === '' || !function_exists('openssl_x509_parse')) {
+            return [];
+        }
+
+        try {
+            $parsed = openssl_x509_parse($certificadoPem);
+            if (!is_array($parsed)) {
+                return [];
+            }
+
+            $serialRaw = (string)($parsed['subject']['serialNumber'] ?? '');
+            return [
+                'subject_cn' => (string)($parsed['subject']['CN'] ?? ''),
+                'issuer_cn' => (string)($parsed['issuer']['CN'] ?? ''),
+                'issuer_o' => (string)($parsed['issuer']['O'] ?? ''),
+                'subject_serial' => $serialRaw,
+                'cuit_subject' => preg_replace('/\D+/', '', $serialRaw),
+                'valid_from' => !empty($parsed['validFrom_time_t']) ? date('Y-m-d H:i:s', (int)$parsed['validFrom_time_t']) : null,
+                'valid_to' => !empty($parsed['validTo_time_t']) ? date('Y-m-d H:i:s', (int)$parsed['validTo_time_t']) : null,
+            ];
+        } catch (Throwable $e) {
+            return [];
         }
     }
 }

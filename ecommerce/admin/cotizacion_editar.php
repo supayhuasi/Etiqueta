@@ -82,6 +82,7 @@ $dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
 $cuit_actual = $cuit_col !== null ? preg_replace('/\D+/', '', (string)($cotizacion[$cuit_col] ?? '')) : '';
 $factura_a_actual = $factura_a_col !== null ? (int)($cotizacion[$factura_a_col] ?? 0) : 0;
 $es_empresa_actual = $es_empresa_col !== null ? (int)($cotizacion[$es_empresa_col] ?? 0) : 0;
+$comprobante_tipo_actual = contabilidad_normalizar_comprobante_tipo((string)($cotizacion['comprobante_tipo'] ?? 'factura'));
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -96,7 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
         $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
         $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
-        $observaciones = $_POST['observaciones'] ?? '';
+        $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+        if ($comprobante_tipo === 'recibo') {
+            $factura_a = 0;
+        }
+        $observaciones = $_POST['observaciones'] ?? ''; 
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
 
@@ -228,6 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pushIfColumnExists('impuestos_json', !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null);
             $pushIfColumnExists('impuestos_incluidos', (float)($resumen_impuestos['total_incluidos'] ?? 0));
             $pushIfColumnExists('impuestos_adicionales', (float)($resumen_impuestos['total_adicionales'] ?? 0));
+            $pushIfColumnExists('comprobante_tipo', $comprobante_tipo);
             $pushIfColumnExists('observaciones', $observaciones);
             $pushIfColumnExists('validez_dias', $validez_dias);
 
@@ -465,6 +471,14 @@ foreach ($lista_cat_rows as $row) {
                             <?php endforeach; ?>
                         </select>
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="comprobante_tipo" class="form-label">Comprobante previsto</label>
+                        <select class="form-select" id="comprobante_tipo" name="comprobante_tipo">
+                            <option value="factura" <?= $comprobante_tipo_actual !== 'recibo' ? 'selected' : '' ?>>Factura fiscal</option>
+                            <option value="recibo" <?= $comprobante_tipo_actual === 'recibo' ? 'selected' : '' ?>>Recibo interno (sin ARCA/AFIP)</option>
+                        </select>
+                        <small class="text-muted">Si elegís recibo, al convertir la cotización no se intentará facturar con ARCA/AFIP.</small>
                     </div>
                     <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
@@ -1855,19 +1869,28 @@ function toggleEmpresaFields() {
     const facturaA = document.getElementById('factura_a');
     const cuit = document.getElementById('cuit');
     const wrapper = document.getElementById('empresaFields');
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    const esRecibo = !!(comprobanteTipo && comprobanteTipo.value === 'recibo');
     const activo = !!(esEmpresa && esEmpresa.checked);
     if (wrapper) {
         wrapper.style.display = activo ? '' : 'none';
     }
-    if (!activo && facturaA) {
-        facturaA.checked = false;
+    if (facturaA) {
+        if (!activo || esRecibo) {
+            facturaA.checked = false;
+        }
+        facturaA.disabled = esRecibo;
     }
     if (cuit) {
-        cuit.required = !!(activo && facturaA && facturaA.checked);
+        cuit.required = !!(activo && facturaA && facturaA.checked && !esRecibo);
     }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    if (comprobanteTipo) {
+        comprobanteTipo.addEventListener('change', toggleEmpresaFields);
+    }
     toggleEmpresaFields();
     if (itemsExistentes.length > 0) {
         itemsExistentes.forEach(item => {

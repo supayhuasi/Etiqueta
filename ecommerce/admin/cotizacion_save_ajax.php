@@ -258,8 +258,11 @@ try {
     if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'factura_a')) {
         $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
     }
+    if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'comprobante_tipo')) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN comprobante_tipo VARCHAR(20) NOT NULL DEFAULT 'factura' AFTER factura_a");
+    }
     if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'es_empresa')) {
-        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER comprobante_tipo");
     }
 
     asegurar_unicidad_clientes_ajax($pdo);
@@ -292,6 +295,10 @@ try {
     $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
     $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
     $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
+    $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+    if ($comprobante_tipo === 'recibo') {
+        $factura_a = 0;
+    }
     $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
 
     if ($es_empresa && $factura_a && strlen($cuit) !== 11) {
@@ -409,6 +416,10 @@ try {
     if (in_array('factura_a', $cols_cot, true)) {
         $insert_cols[] = 'factura_a';
         $insert_vals[] = $factura_a;
+    }
+    if (in_array('comprobante_tipo', $cols_cot, true)) {
+        $insert_cols[] = 'comprobante_tipo';
+        $insert_vals[] = $comprobante_tipo;
     }
 
     $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);

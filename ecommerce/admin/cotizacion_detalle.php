@@ -290,6 +290,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('Para empresa con Factura A se requiere CUIT válido (11 dígitos)');
                 }
 
+                $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($cotizacion['comprobante_tipo'] ?? 'factura'));
+                if ($comprobante_tipo === 'recibo') {
+                    $factura_a = 0;
+                }
+
                 $documento_tipo = null;
                 $documento_numero = null;
                 if ($es_empresa && $cuit !== '') {
@@ -428,6 +433,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (in_array('factura_a', $cols_ped, true)) {
                     $pedidoCols[] = 'factura_a';
                     $pedidoVals[] = $factura_a;
+                }
+                if (in_array('comprobante_tipo', $cols_ped, true)) {
+                    $pedidoCols[] = 'comprobante_tipo';
+                    $pedidoVals[] = $comprobante_tipo;
                 }
                 if (in_array('envio_nombre', $cols_ped, true)) {
                     $pedidoCols[] = 'envio_nombre';

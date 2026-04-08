@@ -17,6 +17,7 @@ $carrito = $_SESSION['carrito'] ?? [];
 $mensaje_descuento = '';
 $error_descuento = '';
 $skip_checkout = false;
+$checkoutComprobanteTipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
 
 if (empty($carrito)) {
     header("Location: tienda.php");
@@ -165,7 +166,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $documento_tipo = $_POST['documento_tipo'] ?? '';
     $documento_numero = $_POST['documento_numero'] ?? '';
+    $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
     $factura_a = isset($_POST['factura_a']) ? 1 : 0;
+    if ($comprobante_tipo === 'recibo') {
+        $factura_a = 0;
+    }
     $envio_mismo = isset($_POST['envio_mismo']) ? 1 : 0;
     $envio_nombre = trim($_POST['envio_nombre'] ?? '');
     $envio_telefono = trim($_POST['envio_telefono'] ?? '');
@@ -187,8 +192,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     }
     
     // Validar datos
-    if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
-        $error = "Por favor completa todos los campos obligatorios (incluyendo datos fiscales)";
+    if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad)) {
+        $error = "Por favor completa todos los datos básicos obligatorios";
+    } elseif ($comprobante_tipo !== 'recibo' && (empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero))) {
+        $error = "Para emitir factura fiscal completá también los datos fiscales del cliente";
     } elseif (!$envio_mismo && (empty($envio_nombre) || empty($envio_direccion) || empty($envio_localidad) || empty($envio_provincia))) {
         $error = "Por favor completa los datos de envío";
     } elseif ($metodo_codigo === '' || empty($metodo_pago)) {
@@ -322,6 +329,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                 $public_token
             ];
 
+            if (in_array('comprobante_tipo', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'comprobante_tipo';
+                $pedido_vals[] = $comprobante_tipo;
+            }
             if (in_array('impuestos_json', $cols_pedido_insert, true)) {
                 $pedido_cols[] = 'impuestos_json';
                 $pedido_vals[] = !empty($resumen_impuestos_pedido['detalle']) ? json_encode($resumen_impuestos_pedido['detalle'], JSON_UNESCAPED_UNICODE) : null;
@@ -441,8 +452,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <h5>Datos de Facturación</h5>
                         </div>
                         <div class="card-body">
+                            <div class="border rounded p-3 bg-light mb-3">
+                                <label class="form-label fw-semibold mb-2">Tipo de comprobante</label>
+                                <div class="form-check">
+                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_factura" name="comprobante_tipo" value="factura" <?= $checkoutComprobanteTipo !== 'recibo' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="comprobante_tipo_factura">Quiero factura fiscal</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_recibo" name="comprobante_tipo" value="recibo" <?= $checkoutComprobanteTipo === 'recibo' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="comprobante_tipo_recibo">Solo recibo interno (sin conexión a ARCA/AFIP)</label>
+                                </div>
+                                <small class="text-muted d-block mt-2">Si elegís recibo, el pedido no intentará facturarse fiscalmente hasta que lo cambies.</small>
+                            </div>
                             <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1">
+                                <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1" <?= !empty($_POST['factura_a']) ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="factura_a">Necesito Factura A</label>
                             </div>
                             <div class="row">
@@ -618,6 +641,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
 
                         inputs.forEach(i => i.addEventListener('change', update));
                         update();
+                    })();
+
+                    (function() {
+                        const radios = document.querySelectorAll('.comprobante-tipo-input');
+                        const facturaAInput = document.getElementById('factura_a');
+                        const facturaALabel = document.querySelector('label[for="factura_a"]');
+                        const responsabilidadFiscal = document.getElementById('responsabilidad_fiscal');
+                        const documentoTipo = document.getElementById('documento_tipo');
+                        const documentoNumero = document.getElementById('documento_numero');
+                        if (!radios.length || !facturaAInput) return;
+
+                        const updateComprobante = () => {
+                            const seleccionado = document.querySelector('.comprobante-tipo-input:checked');
+                            const esRecibo = !!seleccionado && seleccionado.value === 'recibo';
+                            if (esRecibo) {
+                                facturaAInput.checked = false;
+                            }
+                            facturaAInput.disabled = esRecibo;
+                            [responsabilidadFiscal, documentoTipo, documentoNumero].forEach(campo => {
+                                if (campo) {
+                                    campo.required = !esRecibo;
+                                }
+                            });
+                            if (facturaALabel) {
+                                facturaALabel.textContent = esRecibo ? 'Factura A no aplica en recibo interno' : 'Necesito Factura A';
+                            }
+                        };
+
+                        radios.forEach(radio => radio.addEventListener('change', updateComprobante));
+                        updateComprobante();
                     })();
                 </script>
                 <script>
