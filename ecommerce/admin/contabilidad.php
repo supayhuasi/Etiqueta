@@ -13,6 +13,43 @@ $error = '';
 $editandoId = max(0, (int)($_GET['editar'] ?? 0));
 $moneda = 'ARS';
 $config = contabilidad_get_config($pdo);
+$afipConfig = contabilidad_get_afip_config($pdo);
+$afipOpenSslDisponible = contabilidad_afip_openssl_available();
+
+$descargaAfip = (string)($_GET['descargar_afip'] ?? '');
+if ($descargaAfip !== '') {
+    $cuitArchivo = preg_replace('/\D+/', '', (string)($afipConfig['cuit_representada'] ?? '')) ?: 'sin_cuit';
+    $ambienteArchivo = preg_replace('/[^a-z0-9_-]+/i', '_', (string)($afipConfig['ambiente'] ?? 'homologacion')) ?: 'homologacion';
+    $archivosAfip = [
+        'csr' => [
+            'contenido' => trim((string)($afipConfig['csr_pem'] ?? '')),
+            'nombre' => 'ARCA_CSR_' . $cuitArchivo . '_' . $ambienteArchivo . '.csr',
+            'tipo' => 'application/pkcs10',
+        ],
+        'key' => [
+            'contenido' => trim((string)($afipConfig['private_key_pem'] ?? '')),
+            'nombre' => 'ARCA_CLAVE_PRIVADA_' . $cuitArchivo . '_' . $ambienteArchivo . '.key',
+            'tipo' => 'application/x-pem-file',
+        ],
+        'crt' => [
+            'contenido' => trim((string)($afipConfig['certificado_pem'] ?? '')),
+            'nombre' => 'ARCA_CERTIFICADO_' . $cuitArchivo . '_' . $ambienteArchivo . '.crt',
+            'tipo' => 'application/x-x509-ca-cert',
+        ],
+    ];
+
+    if (isset($archivosAfip[$descargaAfip]) && $archivosAfip[$descargaAfip]['contenido'] !== '') {
+        header('Content-Description: File Transfer');
+        header('Content-Type: ' . $archivosAfip[$descargaAfip]['tipo'] . '; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $archivosAfip[$descargaAfip]['nombre'] . '"');
+        header('Content-Length: ' . strlen($archivosAfip[$descargaAfip]['contenido']));
+        echo $archivosAfip[$descargaAfip]['contenido'];
+        exit;
+    }
+
+    $error = 'No hay un archivo AFIP/ARCA disponible para descargar todavía.';
+}
+
 if (!empty($config['moneda'])) {
     $moneda = (string)$config['moneda'];
 }
@@ -35,6 +72,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $mensaje = 'Configuración contable guardada correctamente.';
+        } elseif (in_array($action, ['guardar_afip_config', 'generar_csr_afip', 'guardar_certificado_afip'], true)) {
+            $afipData = [
+                'ambiente' => (string)($_POST['afip_ambiente'] ?? ($afipConfig['ambiente'] ?? 'homologacion')),
+                'punto_venta' => max(1, (int)($_POST['afip_punto_venta'] ?? ($afipConfig['punto_venta'] ?? 1))),
+                'cuit_representada' => preg_replace('/\D+/', '', (string)($_POST['afip_cuit_representada'] ?? ($afipConfig['cuit_representada'] ?? ''))),
+                'razon_social' => trim((string)($_POST['afip_razon_social'] ?? ($afipConfig['razon_social'] ?? ''))),
+                'alias_certificado' => trim((string)($_POST['afip_alias_certificado'] ?? ($afipConfig['alias_certificado'] ?? ''))),
+                'email_contacto' => trim((string)($_POST['afip_email_contacto'] ?? ($afipConfig['email_contacto'] ?? ''))),
+                'provincia' => trim((string)($_POST['afip_provincia'] ?? ($afipConfig['provincia'] ?? ''))),
+                'localidad' => trim((string)($_POST['afip_localidad'] ?? ($afipConfig['localidad'] ?? ''))),
+                'private_key_pem' => (string)($afipConfig['private_key_pem'] ?? ''),
+                'csr_pem' => (string)($afipConfig['csr_pem'] ?? ''),
+                'certificado_pem' => (string)($afipConfig['certificado_pem'] ?? ''),
+            ];
+
+            if ($action === 'generar_csr_afip') {
+                if (!$afipOpenSslDisponible) {
+                    throw new Exception('OpenSSL no está disponible en este servidor para generar el CSR.');
+                }
+                $generado = contabilidad_generar_csr_afip($afipData);
+                $afipData['csr_pem'] = $generado['csr_pem'];
+                $afipData['private_key_pem'] = $generado['private_key_pem'];
+                contabilidad_save_afip_config($pdo, $afipData);
+                $mensaje = 'CSR PKCS#10 generado correctamente. Descargalo y subilo en ARCA para solicitar el nuevo certificado.';
+            } elseif ($action === 'guardar_certificado_afip') {
+                $certificadoPem = trim((string)($_POST['afip_certificado_pem'] ?? ''));
+                if ($certificadoPem === '') {
+                    throw new Exception('Pegá el certificado devuelto por AFIP en formato PEM.');
+                }
+                if (!contabilidad_validar_certificado_pem($certificadoPem)) {
+                    throw new Exception('El certificado cargado no tiene un formato PEM válido.');
+                }
+                $afipData['certificado_pem'] = $certificadoPem;
+                contabilidad_save_afip_config($pdo, $afipData);
+                $mensaje = 'Certificado AFIP guardado correctamente.';
+            } else {
+                contabilidad_save_afip_config($pdo, $afipData);
+                $mensaje = 'Configuración AFIP guardada correctamente.';
+            }
         } elseif ($action === 'guardar_impuesto') {
             $id = max(0, (int)($_POST['id'] ?? 0));
             $nombre = trim((string)($_POST['nombre'] ?? ''));
@@ -92,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $config = contabilidad_get_config($pdo);
+        $afipConfig = contabilidad_get_afip_config($pdo);
         if (!empty($config['moneda'])) {
             $moneda = (string)$config['moneda'];
         }
@@ -193,6 +270,137 @@ if (contabilidad_table_exists($pdo, 'ecommerce_pedidos')) {
 
 <div class="alert alert-info">
     Este módulo agrega una capa <strong>contable/fiscal</strong> al sistema. Las configuraciones sirven como referencia para pedidos y cotizaciones sin modificar el historial ya guardado.
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light"><strong>ARCA / AFIP · Certificado digital</strong></div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Para obtener un nuevo certificado de factura electrónica, ARCA solicita subir un <strong>CSR (Certificate Signing Request) en formato PKCS#10</strong>. Desde acá podés generarlo, descargarlo y guardar luego el certificado devuelto.</p>
+
+                <?php if (!$afipOpenSslDisponible): ?>
+                    <div class="alert alert-danger">OpenSSL no está disponible en PHP, por lo que no se puede generar el CSR desde el sistema.</div>
+                <?php endif; ?>
+
+                <form method="POST" class="row g-3">
+                    <input type="hidden" name="action" value="guardar_afip_config">
+                    <div class="col-md-4">
+                        <label class="form-label">Ambiente</label>
+                        <?php $ambienteAfip = (string)($afipConfig['ambiente'] ?? 'homologacion'); ?>
+                        <select name="afip_ambiente" class="form-select">
+                            <option value="homologacion" <?= $ambienteAfip === 'homologacion' ? 'selected' : '' ?>>Homologación</option>
+                            <option value="produccion" <?= $ambienteAfip === 'produccion' ? 'selected' : '' ?>>Producción</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Punto de venta</label>
+                        <input type="number" name="afip_punto_venta" class="form-control" min="1" value="<?= (int)($afipConfig['punto_venta'] ?? 1) ?>">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">CUIT representado</label>
+                        <input type="text" name="afip_cuit_representada" class="form-control" maxlength="20" value="<?= htmlspecialchars((string)($afipConfig['cuit_representada'] ?? '')) ?>" placeholder="30XXXXXXXXX">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Razón social</label>
+                        <input type="text" name="afip_razon_social" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['razon_social'] ?? '')) ?>" placeholder="Nombre legal de la empresa">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Alias del certificado</label>
+                        <input type="text" name="afip_alias_certificado" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['alias_certificado'] ?? '')) ?>" placeholder="Ej: AFIP Tucu Roller">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email de contacto</label>
+                        <input type="email" name="afip_email_contacto" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['email_contacto'] ?? '')) ?>" placeholder="facturacion@empresa.com">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Provincia</label>
+                        <input type="text" name="afip_provincia" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['provincia'] ?? '')) ?>">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Localidad</label>
+                        <input type="text" name="afip_localidad" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['localidad'] ?? '')) ?>">
+                    </div>
+                    <div class="col-12 d-flex gap-2 flex-wrap">
+                        <button type="submit" class="btn btn-outline-primary">Guardar datos AFIP</button>
+                    </div>
+                </form>
+
+                <hr>
+
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <form method="POST" class="d-inline">
+                        <input type="hidden" name="action" value="generar_csr_afip">
+                        <input type="hidden" name="afip_ambiente" value="<?= htmlspecialchars((string)($afipConfig['ambiente'] ?? 'homologacion')) ?>">
+                        <input type="hidden" name="afip_punto_venta" value="<?= (int)($afipConfig['punto_venta'] ?? 1) ?>">
+                        <input type="hidden" name="afip_cuit_representada" value="<?= htmlspecialchars((string)($afipConfig['cuit_representada'] ?? '')) ?>">
+                        <input type="hidden" name="afip_razon_social" value="<?= htmlspecialchars((string)($afipConfig['razon_social'] ?? '')) ?>">
+                        <input type="hidden" name="afip_alias_certificado" value="<?= htmlspecialchars((string)($afipConfig['alias_certificado'] ?? '')) ?>">
+                        <input type="hidden" name="afip_email_contacto" value="<?= htmlspecialchars((string)($afipConfig['email_contacto'] ?? '')) ?>">
+                        <input type="hidden" name="afip_provincia" value="<?= htmlspecialchars((string)($afipConfig['provincia'] ?? '')) ?>">
+                        <input type="hidden" name="afip_localidad" value="<?= htmlspecialchars((string)($afipConfig['localidad'] ?? '')) ?>">
+                        <button type="submit" class="btn btn-primary" <?= !$afipOpenSslDisponible ? 'disabled' : '' ?>>Generar CSR PKCS#10</button>
+                    </form>
+                </div>
+
+                <ol class="small text-muted mb-0 ps-3">
+                    <li>Completá los datos fiscales de AFIP.</li>
+                    <li>Generá el <strong>CSR PKCS#10</strong>.</li>
+                    <li>Copialo y subilo en AFIP para pedir el certificado.</li>
+                    <li>Cuando AFIP te devuelva el certificado, pegalo abajo para dejarlo guardado.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light"><strong>CSR generado y certificado PEM</strong></div>
+            <div class="card-body">
+                <label class="form-label">CSR para subir a ARCA (PKCS#10)</label>
+                <textarea class="form-control font-monospace" rows="8" readonly><?= htmlspecialchars((string)($afipConfig['csr_pem'] ?? '')) ?></textarea>
+                <small class="text-muted d-block mt-2">Este bloque empieza con <code>-----BEGIN CERTIFICATE REQUEST-----</code> y es el que ARCA te pide subir.</small>
+
+                <div class="d-flex gap-2 flex-wrap mt-3">
+                    <a href="contabilidad.php?descargar_afip=csr" class="btn btn-outline-primary <?= empty($afipConfig['csr_pem']) ? 'disabled' : '' ?>" <?= empty($afipConfig['csr_pem']) ? 'tabindex="-1" aria-disabled="true"' : '' ?>>Descargar CSR (.csr)</a>
+                    <a href="contabilidad.php?descargar_afip=key" class="btn btn-outline-danger <?= empty($afipConfig['private_key_pem']) ? 'disabled' : '' ?>" <?= empty($afipConfig['private_key_pem']) ? 'tabindex="-1" aria-disabled="true"' : '' ?>>Descargar clave privada (.key)</a>
+                    <?php if (!empty($afipConfig['certificado_pem'])): ?>
+                        <a href="contabilidad.php?descargar_afip=crt" class="btn btn-outline-success">Descargar certificado (.crt)</a>
+                    <?php endif; ?>
+                </div>
+                <small class="text-muted d-block mt-2">Subí a ARCA solamente el archivo <code>.csr</code>. La clave privada <code>.key</code> guardala de forma segura y no la compartas.</small>
+
+                <details class="mt-3">
+                    <summary class="fw-semibold">Ver clave privada generada</summary>
+                    <div class="alert alert-warning mt-2 py-2 mb-2">Guardá esta clave privada en un lugar seguro. Se usará luego para firmar comprobantes.</div>
+                    <textarea class="form-control font-monospace" rows="7" readonly><?= htmlspecialchars((string)($afipConfig['private_key_pem'] ?? '')) ?></textarea>
+                </details>
+
+                <hr>
+
+                <form method="POST" class="row g-3">
+                    <input type="hidden" name="action" value="guardar_certificado_afip">
+                    <input type="hidden" name="afip_ambiente" value="<?= htmlspecialchars((string)($afipConfig['ambiente'] ?? 'homologacion')) ?>">
+                    <input type="hidden" name="afip_punto_venta" value="<?= (int)($afipConfig['punto_venta'] ?? 1) ?>">
+                    <input type="hidden" name="afip_cuit_representada" value="<?= htmlspecialchars((string)($afipConfig['cuit_representada'] ?? '')) ?>">
+                    <input type="hidden" name="afip_razon_social" value="<?= htmlspecialchars((string)($afipConfig['razon_social'] ?? '')) ?>">
+                    <input type="hidden" name="afip_alias_certificado" value="<?= htmlspecialchars((string)($afipConfig['alias_certificado'] ?? '')) ?>">
+                    <input type="hidden" name="afip_email_contacto" value="<?= htmlspecialchars((string)($afipConfig['email_contacto'] ?? '')) ?>">
+                    <input type="hidden" name="afip_provincia" value="<?= htmlspecialchars((string)($afipConfig['provincia'] ?? '')) ?>">
+                    <input type="hidden" name="afip_localidad" value="<?= htmlspecialchars((string)($afipConfig['localidad'] ?? '')) ?>">
+                    <div class="col-12">
+                        <label class="form-label">Certificado devuelto por AFIP (PEM)</label>
+                        <textarea name="afip_certificado_pem" class="form-control font-monospace" rows="8" placeholder="-----BEGIN CERTIFICATE-----"><?= htmlspecialchars((string)($afipConfig['certificado_pem'] ?? '')) ?></textarea>
+                    </div>
+                    <div class="col-12 d-flex gap-2 flex-wrap align-items-center">
+                        <button type="submit" class="btn btn-success">Guardar certificado</button>
+                        <?php if (!empty($afipConfig['certificado_vencimiento'])): ?>
+                            <span class="badge bg-info text-dark">Vence: <?= htmlspecialchars(date('d/m/Y', strtotime((string)$afipConfig['certificado_vencimiento']))) ?></span>
+                        <?php endif; ?>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row g-4 mb-4">

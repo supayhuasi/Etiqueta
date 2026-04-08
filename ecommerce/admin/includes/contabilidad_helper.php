@@ -44,6 +44,23 @@ if (!function_exists('ensureContabilidadSchema')) {
                 INDEX idx_orden (orden_visual, id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+            $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_contabilidad_afip_config (
+                id TINYINT PRIMARY KEY,
+                ambiente ENUM('homologacion','produccion') NOT NULL DEFAULT 'homologacion',
+                punto_venta INT NOT NULL DEFAULT 1,
+                cuit_representada VARCHAR(20) NULL,
+                razon_social VARCHAR(150) NULL,
+                alias_certificado VARCHAR(150) NULL,
+                email_contacto VARCHAR(150) NULL,
+                provincia VARCHAR(120) NULL,
+                localidad VARCHAR(120) NULL,
+                private_key_pem LONGTEXT NULL,
+                csr_pem LONGTEXT NULL,
+                certificado_pem LONGTEXT NULL,
+                certificado_vencimiento DATE NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             $stmt = $pdo->query("SELECT COUNT(*) FROM ecommerce_contabilidad_config");
             $countConfig = (int)($stmt ? $stmt->fetchColumn() : 0);
             if ($countConfig <= 0) {
@@ -76,6 +93,29 @@ if (!function_exists('ensureContabilidadSchema')) {
                 foreach ($defaults as $row) {
                     $stmtIns->execute($row);
                 }
+            }
+
+            $stmt = $pdo->query("SELECT COUNT(*) FROM ecommerce_contabilidad_afip_config");
+            $countAfip = (int)($stmt ? $stmt->fetchColumn() : 0);
+            if ($countAfip <= 0) {
+                $empresaAfip = [];
+                if (contabilidad_table_exists($pdo, 'ecommerce_empresa')) {
+                    try {
+                        $empresaAfip = $pdo->query("SELECT nombre, cuit, email, provincia, ciudad FROM ecommerce_empresa LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+                    } catch (Throwable $e) {
+                        $empresaAfip = [];
+                    }
+                }
+
+                $stmtAfip = $pdo->prepare("INSERT INTO ecommerce_contabilidad_afip_config (id, ambiente, punto_venta, cuit_representada, razon_social, alias_certificado, email_contacto, provincia, localidad) VALUES (1, 'homologacion', 1, ?, ?, ?, ?, ?, ?)");
+                $stmtAfip->execute([
+                    preg_replace('/\D+/', '', (string)($empresaAfip['cuit'] ?? '')) ?: null,
+                    trim((string)($empresaAfip['nombre'] ?? '')) ?: null,
+                    trim((string)($empresaAfip['nombre'] ?? '')) !== '' ? 'AFIP ' . trim((string)$empresaAfip['nombre']) : 'Certificado AFIP',
+                    trim((string)($empresaAfip['email'] ?? '')) ?: null,
+                    trim((string)($empresaAfip['provincia'] ?? '')) ?: null,
+                    trim((string)($empresaAfip['ciudad'] ?? '')) ?: null,
+                ]);
             }
 
             foreach (['ecommerce_cotizaciones', 'ecommerce_pedidos'] as $tablaDocumento) {
@@ -141,6 +181,69 @@ if (!function_exists('contabilidad_save_config')) {
             $data['condicion_fiscal'] ?? null,
             !empty($data['redondear_totales']) ? 1 : 0,
             $data['notas_fiscales'] ?? null,
+        ]);
+    }
+}
+
+if (!function_exists('contabilidad_get_afip_config')) {
+    function contabilidad_get_afip_config(PDO $pdo): array
+    {
+        ensureContabilidadSchema($pdo);
+        try {
+            $stmt = $pdo->query("SELECT * FROM ecommerce_contabilidad_afip_config WHERE id = 1 LIMIT 1");
+            return $stmt ? ($stmt->fetch(PDO::FETCH_ASSOC) ?: []) : [];
+        } catch (Throwable $e) {
+            return [];
+        }
+    }
+}
+
+if (!function_exists('contabilidad_save_afip_config')) {
+    function contabilidad_save_afip_config(PDO $pdo, array $data): void
+    {
+        ensureContabilidadSchema($pdo);
+
+        $certVencimiento = null;
+        $certPem = trim((string)($data['certificado_pem'] ?? ''));
+        if ($certPem !== '' && function_exists('openssl_x509_parse')) {
+            try {
+                $parsed = openssl_x509_parse($certPem);
+                if (!empty($parsed['validTo_time_t'])) {
+                    $certVencimiento = date('Y-m-d', (int)$parsed['validTo_time_t']);
+                }
+            } catch (Throwable $e) {
+                $certVencimiento = null;
+            }
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO ecommerce_contabilidad_afip_config (id, ambiente, punto_venta, cuit_representada, razon_social, alias_certificado, email_contacto, provincia, localidad, private_key_pem, csr_pem, certificado_pem, certificado_vencimiento)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                ambiente = VALUES(ambiente),
+                punto_venta = VALUES(punto_venta),
+                cuit_representada = VALUES(cuit_representada),
+                razon_social = VALUES(razon_social),
+                alias_certificado = VALUES(alias_certificado),
+                email_contacto = VALUES(email_contacto),
+                provincia = VALUES(provincia),
+                localidad = VALUES(localidad),
+                private_key_pem = VALUES(private_key_pem),
+                csr_pem = VALUES(csr_pem),
+                certificado_pem = VALUES(certificado_pem),
+                certificado_vencimiento = VALUES(certificado_vencimiento)");
+        $stmt->execute([
+            in_array(($data['ambiente'] ?? 'homologacion'), ['homologacion', 'produccion'], true) ? $data['ambiente'] : 'homologacion',
+            max(1, (int)($data['punto_venta'] ?? 1)),
+            preg_replace('/\D+/', '', (string)($data['cuit_representada'] ?? '')) ?: null,
+            trim((string)($data['razon_social'] ?? '')) ?: null,
+            trim((string)($data['alias_certificado'] ?? '')) ?: null,
+            trim((string)($data['email_contacto'] ?? '')) ?: null,
+            trim((string)($data['provincia'] ?? '')) ?: null,
+            trim((string)($data['localidad'] ?? '')) ?: null,
+            $data['private_key_pem'] ?? null,
+            $data['csr_pem'] ?? null,
+            $certPem !== '' ? $certPem : null,
+            $certVencimiento,
         ]);
     }
 }
@@ -328,5 +431,145 @@ if (!function_exists('contabilidad_generar_numero_factura')) {
         }
 
         return sprintf('%04d-%08d', max(1, $puntoVenta), max(1, $secuencia));
+    }
+}
+
+if (!function_exists('contabilidad_afip_openssl_available')) {
+    function contabilidad_afip_openssl_available(): bool
+    {
+        return extension_loaded('openssl')
+            && function_exists('openssl_pkey_new')
+            && function_exists('openssl_pkey_export')
+            && function_exists('openssl_csr_new')
+            && function_exists('openssl_csr_export');
+    }
+}
+
+if (!function_exists('contabilidad_afip_detect_openssl_config')) {
+    function contabilidad_afip_detect_openssl_config(): ?string
+    {
+        $candidatos = array_filter([
+            getenv('OPENSSL_CONF') ?: null,
+            'C:\\xampp\\apache\\conf\\openssl.cnf',
+            'C:\\xampp\\php\\extras\\openssl\\openssl.cnf',
+            'C:\\xampp\\php\\extras\\ssl\\openssl.cnf',
+            'C:\\xampp\\php\\windowsXamppPhp\\extras\\ssl\\openssl.cnf',
+        ]);
+
+        foreach ($candidatos as $ruta) {
+            if ($ruta && @is_file($ruta)) {
+                return $ruta;
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('contabilidad_generar_csr_afip')) {
+    function contabilidad_generar_csr_afip(array $data): array
+    {
+        if (!contabilidad_afip_openssl_available()) {
+            throw new RuntimeException('OpenSSL no está disponible en el servidor para generar el CSR.');
+        }
+
+        $cuit = preg_replace('/\D+/', '', (string)($data['cuit_representada'] ?? ''));
+        $razonSocial = trim((string)($data['razon_social'] ?? ''));
+        $alias = trim((string)($data['alias_certificado'] ?? ''));
+        $email = trim((string)($data['email_contacto'] ?? ''));
+        $provincia = trim((string)($data['provincia'] ?? 'Buenos Aires')) ?: 'Buenos Aires';
+        $localidad = trim((string)($data['localidad'] ?? 'CABA')) ?: 'CABA';
+
+        if (strlen($cuit) !== 11) {
+            throw new InvalidArgumentException('El CUIT representado debe tener 11 dígitos para generar el CSR.');
+        }
+        if ($razonSocial === '') {
+            throw new InvalidArgumentException('La razón social es obligatoria para generar el CSR.');
+        }
+        if ($alias === '') {
+            $alias = 'AFIP ' . $razonSocial;
+        }
+        if ($email === '') {
+            $email = 'facturacion@localhost.local';
+        }
+
+        $dn = [
+            'countryName' => 'AR',
+            'stateOrProvinceName' => $provincia,
+            'localityName' => $localidad,
+            'organizationName' => $razonSocial,
+            'organizationalUnitName' => 'Facturacion Electronica',
+            'commonName' => $alias,
+            'emailAddress' => $email,
+            'serialNumber' => 'CUIT ' . $cuit,
+        ];
+
+        $opensslConfigPath = contabilidad_afip_detect_openssl_config();
+        if ($opensslConfigPath) {
+            @putenv('OPENSSL_CONF=' . $opensslConfigPath);
+        }
+
+        $opensslOptions = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            'digest_alg' => 'sha256',
+        ];
+        if ($opensslConfigPath) {
+            $opensslOptions['config'] = $opensslConfigPath;
+        }
+
+        $privkey = openssl_pkey_new($opensslOptions);
+        if ($privkey === false) {
+            $opensslError = function_exists('openssl_error_string') ? (openssl_error_string() ?: '') : '';
+            throw new RuntimeException('No se pudo generar la clave privada RSA para el CSR.' . ($opensslError !== '' ? ' OpenSSL: ' . $opensslError : ''));
+        }
+
+        $csr = openssl_csr_new($dn, $privkey, $opensslOptions);
+        if ($csr === false) {
+            $opensslError = function_exists('openssl_error_string') ? (openssl_error_string() ?: '') : '';
+            throw new RuntimeException('No se pudo generar el CSR PKCS#10.' . ($opensslError !== '' ? ' OpenSSL: ' . $opensslError : ''));
+        }
+
+        $csrPem = '';
+        $privateKeyPem = '';
+        $csrExportado = openssl_csr_export($csr, $csrPem, true);
+        $keyExportada = openssl_pkey_export($privkey, $privateKeyPem, null, $opensslOptions);
+
+        if ($csrExportado === false || $keyExportada === false || trim($csrPem) === '' || trim($privateKeyPem) === '') {
+            $errores = [];
+            if (function_exists('openssl_error_string')) {
+                while (($opensslError = openssl_error_string()) !== false) {
+                    $errores[] = $opensslError;
+                }
+            }
+            throw new RuntimeException('El servidor no devolvió el CSR o la clave privada correctamente.' . (!empty($errores) ? ' OpenSSL: ' . implode(' | ', $errores) : ''));
+        }
+
+        return [
+            'csr_pem' => $csrPem,
+            'private_key_pem' => $privateKeyPem,
+            'subject' => $dn,
+        ];
+    }
+}
+
+if (!function_exists('contabilidad_validar_certificado_pem')) {
+    function contabilidad_validar_certificado_pem(string $certificadoPem): bool
+    {
+        $certificadoPem = trim($certificadoPem);
+        if ($certificadoPem === '' || strpos($certificadoPem, 'BEGIN CERTIFICATE') === false) {
+            return false;
+        }
+
+        if (function_exists('openssl_x509_read')) {
+            try {
+                $x509 = openssl_x509_read($certificadoPem);
+                return $x509 !== false;
+            } catch (Throwable $e) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
