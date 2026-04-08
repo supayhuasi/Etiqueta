@@ -46,6 +46,9 @@ $sql = "
            COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0) AS saldo,
            p_last.id AS ultimo_pedido_id,
            p_last.numero_pedido AS ultimo_numero_pedido,
+           p_last.tipo_factura AS ultimo_tipo_factura,
+           p_last.numero_factura AS ultimo_numero_factura,
+           p_last.fecha_facturacion AS ultima_fecha_facturacion,
            op.fecha_creacion AS orden_fecha_creacion,
            op.fecha_entrega AS orden_fecha_entrega
     FROM ecommerce_clientes c
@@ -239,6 +242,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <?php elseif (!empty($c['orden_fecha_entrega'])): ?>
                                             <div class="small text-muted mt-1">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($c['orden_fecha_entrega']))) ?></div>
                                         <?php endif; ?>
+                                        <?php if (!empty($c['ultimo_numero_factura'])): ?>
+                                            <div class="small text-success mt-1">Factura <?= htmlspecialchars((string)($c['ultimo_tipo_factura'] ?? '')) ?> <?= htmlspecialchars((string)$c['ultimo_numero_factura']) ?></div>
+                                        <?php endif; ?>
                                     <?php else: ?>
                                         <span class="text-muted small">-</span>
                                     <?php endif; ?>
@@ -253,8 +259,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php endif; ?></strong>
                                 </td>
                                 <td class="text-center">
-                                    <?php if ($c['saldo'] > 0 && !empty($c['ultimo_pedido_id'])): ?>
-                                        <a href="pedidos_detalle.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>#pagos" class="btn btn-sm btn-success">Pagar</a>
+                                    <?php if (!empty($c['ultimo_pedido_id'])): ?>
+                                        <div class="d-flex flex-column gap-1">
+                                            <?php if ($c['saldo'] > 0): ?>
+                                                <a href="pedidos_detalle.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>#pagos" class="btn btn-sm btn-success">Pagar</a>
+                                            <?php endif; ?>
+                                            <a href="pedido_factura_pdf.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Factura</a>
+                                        </div>
                                     <?php else: ?>
                                         <span class="text-muted small">-</span>
                                     <?php endif; ?>

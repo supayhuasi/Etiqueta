@@ -21,6 +21,8 @@ if (!empty($ids)) {
                COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0) AS saldo,
                p_last.id AS ultimo_pedido_id,
                p_last.numero_pedido AS ultimo_numero_pedido,
+               p_last.tipo_factura AS ultimo_tipo_factura,
+               p_last.numero_factura AS ultimo_numero_factura,
                op.id AS orden_id,
                op.fecha_creacion AS orden_fecha_creacion,
                op.fecha_entrega AS orden_fecha_entrega
@@ -104,6 +106,7 @@ if (!empty($ids)) {
                     <th>Contacto</th>
                     <th>Pedido</th>
                     <th>Orden de Producción</th>
+                    <th>Factura</th>
                     <th class="text-end">Total pedidos</th>
                     <th class="text-end">Total pagado</th>
                     <th class="text-end">Saldo</th>
@@ -132,6 +135,16 @@ if (!empty($ids)) {
                                 <?php elseif (!empty($c['orden_fecha_entrega'])): ?>
                                     <div class="small text-muted">Entrega: <?= htmlspecialchars(date('d/m/Y', strtotime($c['orden_fecha_entrega']))) ?></div>
                                 <?php endif; ?>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($c['ultimo_numero_factura'])): ?>
+                                <span class="badge bg-success">Factura <?= htmlspecialchars((string)($c['ultimo_tipo_factura'] ?? '')) ?></span>
+                                <div class="small"><?= htmlspecialchars((string)$c['ultimo_numero_factura']) ?></div>
+                            <?php elseif (!empty($c['ultimo_pedido_id'])): ?>
+                                <a href="pedido_factura_pdf.php?pedido_id=<?= (int)$c['ultimo_pedido_id'] ?>" target="_blank">Emitir</a>
                             <?php else: ?>
                                 <span class="text-muted">-</span>
                             <?php endif; ?>

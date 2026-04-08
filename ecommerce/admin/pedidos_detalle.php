@@ -124,13 +124,27 @@ if (!isset($_GET['pedido_id'])) {
 }
 // Obtener pedido
 $stmt = $pdo->prepare("
-    SELECT p.*, c.nombre, c.email, c.telefono, c.direccion as dir_cliente, c.ciudad, c.provincia, c.codigo_postal
+    SELECT p.*, c.nombre, c.email, c.telefono, c.direccion as dir_cliente, c.ciudad, c.provincia, c.codigo_postal,
+           c.responsabilidad_fiscal, c.documento_tipo, c.documento_numero
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
     WHERE p.id = ?
 ");
 $stmt->execute([$pedido_id]);
 $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$pedido) {
+    die("Pedido no encontrado (ID: " . htmlspecialchars($pedido_id) . ")");
+}
+
+$configContablePedido = contabilidad_get_config($pdo);
+$condicionEmisorPedido = trim((string)($configContablePedido['condicion_fiscal'] ?? '')) ?: 'Responsable Inscripto';
+$condicionClientePedido = trim((string)($pedido['responsabilidad_fiscal'] ?? '')) ?: (!empty($pedido['factura_a']) ? 'Responsable Inscripto' : 'Consumidor Final');
+$documentoTipoPedido = strtoupper(trim((string)($pedido['documento_tipo'] ?? '')));
+$documentoNumeroPedido = preg_replace('/\D+/', '', (string)($pedido['documento_numero'] ?? ''));
+$solicitaFacturaAPedido = !empty($pedido['factura_a']) && $documentoTipoPedido === 'CUIT' && strlen($documentoNumeroPedido) >= 11;
+$tipoFacturaPedidoInfo = contabilidad_determinar_tipo_factura($condicionEmisorPedido, $condicionClientePedido, $solicitaFacturaAPedido);
+$tipoFacturaPedidoActual = trim((string)($pedido['tipo_factura'] ?? '')) ?: (string)($tipoFacturaPedidoInfo['tipo'] ?? 'B');
 
 $impuestos_pedido = [];
 $impuestos_incluidos_pedido = (float)($pedido['impuestos_incluidos'] ?? 0);
@@ -145,10 +159,6 @@ if (empty($impuestos_pedido) && $pedido) {
     $impuestos_pedido = $resumenFiscalPedido['detalle'] ?? [];
     $impuestos_incluidos_pedido = (float)($resumenFiscalPedido['total_incluidos'] ?? 0);
     $impuestos_adicionales_pedido = (float)($resumenFiscalPedido['total_adicionales'] ?? 0);
-}
-
-if (!$pedido) {
-    die("Pedido no encontrado (ID: " . htmlspecialchars($pedido_id) . ")");
 }
 
 if (empty($pedido['public_token'])) {
@@ -452,6 +462,8 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Ciudad:</strong> <?= htmlspecialchars($pedido['ciudad'] ?? 'N/A') ?></p>
                 <p><strong>Provincia:</strong> <?= htmlspecialchars($pedido['provincia'] ?? 'N/A') ?></p>
                 <p><strong>Código Postal:</strong> <?= htmlspecialchars($pedido['codigo_postal'] ?? 'N/A') ?></p>
+                <p><strong>Condición fiscal:</strong> <?= htmlspecialchars($condicionClientePedido ?: 'Consumidor Final') ?></p>
+                <p><strong>Documento:</strong> <?= htmlspecialchars(trim(($pedido['documento_tipo'] ?? 'DNI') . ' ' . ($pedido['documento_numero'] ?? '-'))) ?></p>
             </div>
         </div>
     </div>
@@ -475,6 +487,20 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Fecha:</strong> <?= date('d/m/Y H:i:s', strtotime($pedido['fecha_creacion'])) ?></p>
                 <p><strong>Método de Pago:</strong> <span class="badge bg-info"><?= htmlspecialchars($pedido['metodo_pago']) ?></span></p>
                 <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                <p><strong>Factura estimada:</strong> <span class="badge bg-warning text-dark">Factura <?= htmlspecialchars($tipoFacturaPedidoActual) ?></span></p>
+                <?php if (!empty($pedido['numero_factura'])): ?>
+                    <p><strong>Comprobante emitido:</strong> <?= htmlspecialchars((string)($pedido['tipo_factura'] ?? $tipoFacturaPedidoActual)) ?> <?= htmlspecialchars((string)$pedido['numero_factura']) ?><?php if (!empty($pedido['fecha_facturacion'])): ?> · <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$pedido['fecha_facturacion']))) ?><?php endif; ?></p>
+                <?php endif; ?>
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                    <a href="pedido_factura_pdf.php?pedido_id=<?= (int)$pedido_id ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+                        <?= !empty($pedido['numero_factura']) ? 'Ver factura PDF' : 'Emitir factura PDF' ?>
+                    </a>
+                    <?php if (!empty($pedido['factura_archivo'])): ?>
+                        <a href="/<?= htmlspecialchars(ltrim((string)$pedido['factura_archivo'], '/')) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                            Descargar archivo guardado
+                        </a>
+                    <?php endif; ?>
+                </div>
                 <?php if (!empty($impuestos_pedido) && is_array($impuestos_pedido)): ?>
                     <div class="small text-muted mb-2">
                         <?php foreach ($impuestos_pedido as $impuestoPedido): ?>

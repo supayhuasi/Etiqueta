@@ -93,6 +93,24 @@ if (!function_exists('ensureContabilidadSchema')) {
                 if (!in_array('impuestos_adicionales', $columnasDocumento, true)) {
                     $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN impuestos_adicionales DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER impuestos_incluidos");
                 }
+
+                if ($tablaDocumento === 'ecommerce_pedidos') {
+                    if (!in_array('tipo_factura', $columnasDocumento, true)) {
+                        $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN tipo_factura VARCHAR(5) NULL AFTER impuestos_adicionales");
+                    }
+                    if (!in_array('numero_factura', $columnasDocumento, true)) {
+                        $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN numero_factura VARCHAR(30) NULL AFTER tipo_factura");
+                    }
+                    if (!in_array('fecha_facturacion', $columnasDocumento, true)) {
+                        $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN fecha_facturacion DATETIME NULL AFTER numero_factura");
+                    }
+                    if (!in_array('factura_archivo', $columnasDocumento, true)) {
+                        $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN factura_archivo VARCHAR(255) NULL AFTER fecha_facturacion");
+                    }
+                    if (!in_array('factura_nombre_original', $columnasDocumento, true)) {
+                        $pdo->exec("ALTER TABLE {$tablaDocumento} ADD COLUMN factura_nombre_original VARCHAR(255) NULL AFTER factura_archivo");
+                    }
+                }
             }
         } catch (Throwable $e) {
             error_log('ensureContabilidadSchema: ' . $e->getMessage());
@@ -218,5 +236,97 @@ if (!function_exists('contabilidad_calcular_impuestos')) {
             'total_adicionales' => $totalAdicionales,
             'total_con_impuestos' => $totalBase + $totalAdicionales,
         ];
+    }
+}
+
+if (!function_exists('contabilidad_normalizar_condicion_fiscal')) {
+    function contabilidad_normalizar_condicion_fiscal(?string $valor): string
+    {
+        $valor = trim((string)$valor);
+        if ($valor === '') {
+            return 'consumidor_final';
+        }
+
+        $normalizado = function_exists('mb_strtolower') ? mb_strtolower($valor, 'UTF-8') : strtolower($valor);
+        $normalizado = str_replace(['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], $normalizado);
+
+        if (strpos($normalizado, 'responsable inscripto') !== false || strpos($normalizado, 'iva responsable inscripto') !== false) {
+            return 'responsable_inscripto';
+        }
+        if (strpos($normalizado, 'monotrib') !== false) {
+            return 'monotributista';
+        }
+        if (strpos($normalizado, 'exento') !== false) {
+            return 'exento';
+        }
+        if (strpos($normalizado, 'no responsable') !== false) {
+            return 'no_responsable';
+        }
+        if (strpos($normalizado, 'sujeto no categorizado') !== false) {
+            return 'sujeto_no_categorizado';
+        }
+        if (strpos($normalizado, 'consumidor final') !== false) {
+            return 'consumidor_final';
+        }
+
+        return preg_replace('/[^a-z0-9]+/', '_', $normalizado) ?: 'consumidor_final';
+    }
+}
+
+if (!function_exists('contabilidad_determinar_tipo_factura')) {
+    function contabilidad_determinar_tipo_factura(?string $condicionEmisor, ?string $condicionCliente, bool $solicitaFacturaA = false): array
+    {
+        $emisor = contabilidad_normalizar_condicion_fiscal($condicionEmisor);
+        $cliente = contabilidad_normalizar_condicion_fiscal($condicionCliente);
+
+        $tipo = 'B';
+        $codigo = '06';
+        $descripcion = 'Factura B';
+
+        if (in_array($emisor, ['monotributista', 'exento', 'no_alcanzado'], true)) {
+            $tipo = 'C';
+            $codigo = '11';
+            $descripcion = 'Factura C';
+        } elseif ($emisor === 'responsable_inscripto') {
+            if ($cliente === 'responsable_inscripto' || $solicitaFacturaA) {
+                $tipo = 'A';
+                $codigo = '01';
+                $descripcion = 'Factura A';
+            } else {
+                $tipo = 'B';
+                $codigo = '06';
+                $descripcion = 'Factura B';
+            }
+        }
+
+        return [
+            'tipo' => $tipo,
+            'codigo' => $codigo,
+            'descripcion' => $descripcion,
+            'condicion_emisor' => $emisor,
+            'condicion_cliente' => $cliente,
+        ];
+    }
+}
+
+if (!function_exists('contabilidad_generar_numero_factura')) {
+    function contabilidad_generar_numero_factura(PDO $pdo, string $tipoFactura, int $puntoVenta = 1): string
+    {
+        ensureContabilidadSchema($pdo);
+
+        $secuencia = 1;
+        try {
+            $stmt = $pdo->prepare("SELECT numero_factura FROM ecommerce_pedidos WHERE tipo_factura = ? AND numero_factura IS NOT NULL AND numero_factura != '' ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$tipoFactura]);
+            $ultimo = (string)($stmt->fetchColumn() ?: '');
+            if ($ultimo !== '' && preg_match('/^(\d{4})-(\d{8})$/', $ultimo, $m)) {
+                $puntoVenta = (int)$m[1];
+                $secuencia = ((int)$m[2]) + 1;
+            }
+        } catch (Throwable $e) {
+            $secuencia = 1;
+        }
+
+        return sprintf('%04d-%08d', max(1, $puntoVenta), max(1, $secuencia));
     }
 }
