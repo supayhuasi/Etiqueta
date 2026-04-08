@@ -39,6 +39,9 @@ if ($descargaAfip !== '') {
     ];
 
     if (isset($archivosAfip[$descargaAfip]) && $archivosAfip[$descargaAfip]['contenido'] !== '') {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         header('Content-Description: File Transfer');
         header('Content-Type: ' . $archivosAfip[$descargaAfip]['tipo'] . '; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $archivosAfip[$descargaAfip]['nombre'] . '"');
@@ -281,6 +284,20 @@ if (contabilidad_table_exists($pdo, 'ecommerce_pedidos')) {
 
                 <?php if (!$afipOpenSslDisponible): ?>
                     <div class="alert alert-danger">OpenSSL no está disponible en PHP, por lo que no se puede generar el CSR desde el sistema.</div>
+                <?php endif; ?>
+
+                <?php if (!empty($afipConfig['certificado_vencimiento']) || !empty($afipConfig['wsaa_expira_at']) || !empty($afipConfig['ultimo_error'])): ?>
+                    <div class="alert alert-secondary small py-2">
+                        <?php if (!empty($afipConfig['certificado_vencimiento'])): ?>
+                            <div><strong>Certificado:</strong> válido hasta <?= htmlspecialchars(date('d/m/Y', strtotime((string)$afipConfig['certificado_vencimiento']))) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($afipConfig['wsaa_expira_at'])): ?>
+                            <div><strong>Sesión WSAA:</strong> vigente hasta <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$afipConfig['wsaa_expira_at']))) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($afipConfig['ultimo_error'])): ?>
+                            <div class="text-danger"><strong>Último error ARCA/AFIP:</strong> <?= htmlspecialchars((string)$afipConfig['ultimo_error']) ?></div>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
 
                 <form method="POST" class="row g-3">

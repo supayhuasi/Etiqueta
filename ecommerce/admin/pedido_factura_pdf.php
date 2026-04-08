@@ -77,17 +77,27 @@ if ($condicionCliente === '') {
 
 $solicitaFacturaA = !empty($pedido['factura_a']) && $documentoTipo === 'CUIT' && strlen($documentoNumero) >= 11;
 $tipoFacturaInfo = contabilidad_determinar_tipo_factura($condicionEmisor, $condicionCliente, $solicitaFacturaA);
+$comprobanteTipo = contabilidad_normalizar_comprobante_tipo((string)($pedido['comprobante_tipo'] ?? 'factura'));
 $tipoFactura = (string)($pedido['tipo_factura'] ?? '');
-if ($tipoFactura === '') {
+if ($comprobanteTipo === 'recibo') {
+    $tipoFactura = 'REC';
+} elseif ($tipoFactura === '') {
     $tipoFactura = (string)($tipoFacturaInfo['tipo'] ?? 'B');
 }
 
 $numeroFactura = trim((string)($pedido['numero_factura'] ?? ''));
 if ($numeroFactura === '') {
-    $numeroFactura = contabilidad_generar_numero_factura($pdo, $tipoFactura, 1);
+    $numeroFactura = $comprobanteTipo === 'recibo'
+        ? 'REC-' . contabilidad_generar_numero_factura($pdo, 'REC', 1)
+        : contabilidad_generar_numero_factura($pdo, $tipoFactura, 1);
 }
+$tituloComprobante = $comprobanteTipo === 'recibo' ? 'RECIBO' : 'FACTURA';
 
 $fechaFacturacion = !empty($pedido['fecha_facturacion']) ? (string)$pedido['fecha_facturacion'] : date('Y-m-d H:i:s');
+$cae = trim((string)($pedido['cae'] ?? ''));
+$caeVencimiento = !empty($pedido['cae_vencimiento']) ? (string)$pedido['cae_vencimiento'] : '';
+$afipResultado = strtoupper(trim((string)($pedido['afip_resultado'] ?? '')));
+$afipObservaciones = trim((string)($pedido['afip_observaciones'] ?? ''));
 
 $baseSubtotal = max(0, (float)($pedido['subtotal'] ?? 0) - (float)($pedido['descuento_monto'] ?? 0));
 $baseTotal = max(0, (float)($pedido['subtotal'] ?? 0) + (float)($pedido['envio'] ?? 0) - (float)($pedido['descuento_monto'] ?? 0));
@@ -113,13 +123,19 @@ class PDFFacturaArgentina extends FPDF
     private array $empresa;
     private string $tipoFactura;
     private string $numeroFactura;
+    private string $cae;
+    private string $caeVencimiento;
+    private string $tituloComprobante;
 
-    public function __construct(array $empresa, string $tipoFactura, string $numeroFactura)
+    public function __construct(array $empresa, string $tipoFactura, string $numeroFactura, string $cae = '', string $caeVencimiento = '', string $tituloComprobante = 'FACTURA')
     {
         parent::__construct();
         $this->empresa = $empresa;
         $this->tipoFactura = $tipoFactura;
         $this->numeroFactura = $numeroFactura;
+        $this->cae = $cae;
+        $this->caeVencimiento = $caeVencimiento;
+        $this->tituloComprobante = $tituloComprobante;
         $this->SetMargins(10, 10, 10);
         $this->SetAutoPageBreak(true, 15);
     }
@@ -137,11 +153,11 @@ class PDFFacturaArgentina extends FPDF
         }
 
         $this->SetFont('Arial', 'B', 16);
-        $this->Cell(130, 8, utf8_decode($this->empresa['nombre'] ?? 'Factura'), 0, 0, 'L');
+        $this->Cell(130, 8, utf8_decode($this->empresa['nombre'] ?? $this->tituloComprobante), 0, 0, 'L');
         $this->SetFont('Arial', 'B', 22);
         $this->Cell(20, 12, $this->tipoFactura, 1, 0, 'C');
         $this->SetFont('Arial', 'B', 11);
-        $this->Cell(30, 6, utf8_decode('FACTURA'), 0, 1, 'R');
+        $this->Cell(30, 6, utf8_decode($this->tituloComprobante), 0, 1, 'R');
 
         $this->SetFont('Arial', '', 9);
         $this->Cell(130, 5, utf8_decode(trim((string)($this->empresa['direccion'] ?? ''))), 0, 0, 'L');
@@ -170,11 +186,21 @@ class PDFFacturaArgentina extends FPDF
         $this->SetY(-18);
         $this->SetFont('Arial', 'I', 8);
         $this->SetTextColor(90, 90, 90);
-        $this->MultiCell(0, 4, utf8_decode('Comprobante emitido según condición fiscal argentina. Si se requiere validez fiscal electrónica oficial, debe integrarse CAE/AFIP WSFE.'));
+        if ($this->tipoFactura === 'REC') {
+            $this->MultiCell(0, 4, utf8_decode('Recibo interno emitido sin conexión a ARCA/AFIP. No requiere CAE.'));
+        } elseif ($this->cae !== '') {
+            $linea = 'Comprobante autorizado electrónicamente por ARCA/AFIP. CAE: ' . $this->cae;
+            if ($this->caeVencimiento !== '') {
+                $linea .= ' · Vto: ' . date('d/m/Y', strtotime($this->caeVencimiento));
+            }
+            $this->MultiCell(0, 4, utf8_decode($linea));
+        } else {
+            $this->MultiCell(0, 4, utf8_decode('Comprobante emitido según condición fiscal argentina. Para validez fiscal electrónica oficial debe obtenerse el CAE en ARCA/AFIP.'));
+        }
     }
 }
 
-$pdf = new PDFFacturaArgentina($empresa, $tipoFactura, $numeroFactura);
+$pdf = new PDFFacturaArgentina($empresa, $tipoFactura, $numeroFactura, $cae, $caeVencimiento, $tituloComprobante);
 $pdf->AddPage();
 
 $pdf->SetFont('Arial', 'B', 11);
@@ -201,10 +227,10 @@ $pdf->MultiCell(95, 5,
     utf8_decode(
         'Pedido: ' . ($pedido['numero_pedido'] ?? ('#' . $pedidoId))
         . "\nFecha de emisión: " . date('d/m/Y H:i', strtotime($fechaFacturacion))
-        . "\nTipo: Factura " . $tipoFactura
+        . "\nTipo: " . ($comprobanteTipo === 'recibo' ? 'Recibo interno' : 'Factura ' . $tipoFactura)
         . "\nMoneda: " . $moneda
         . "\nEstado pedido: " . str_replace('_', ' ', (string)($pedido['estado'] ?? 'pendiente'))
-        . "\nCAE: Pendiente / no integrado"
+        . "\nCAE: " . ($comprobanteTipo === 'recibo' ? 'No aplica / recibo interno' : ($cae !== '' ? $cae . ($caeVencimiento !== '' ? ' · Vto ' . date('d/m/Y', strtotime($caeVencimiento)) : '') : 'Pendiente / no autorizado'))
     ),
     1
 );
@@ -286,7 +312,13 @@ if ($notasFiscales !== '') {
     $pdf->MultiCell(0, 4, utf8_decode('Notas fiscales: ' . $notasFiscales));
     $pdf->Ln(2);
 }
-$pdf->MultiCell(0, 4, utf8_decode('Este documento se genera automáticamente respetando la condición fiscal del emisor y del cliente (Factura A/B/C).'));
+$pdf->MultiCell(0, 4, utf8_decode($comprobanteTipo === 'recibo'
+    ? 'Este documento se genera como recibo interno, sin conexión a ARCA/AFIP.'
+    : 'Este documento se genera automáticamente respetando la condición fiscal del emisor y del cliente (Factura A/B/C).'));
+if ($afipObservaciones !== '') {
+    $pdf->Ln(2);
+    $pdf->MultiCell(0, 4, utf8_decode('ARCA/AFIP: ' . $afipObservaciones));
+}
 
 $uploadsRoot = __DIR__ . '/../../uploads';
 if (!is_dir($uploadsRoot)) {
@@ -298,7 +330,8 @@ if (!is_dir($facturasDir)) {
 }
 
 $numeroFacturaArchivo = str_replace(['/', '\\', ' '], '_', $numeroFactura);
-$nombreArchivo = 'Factura_' . $tipoFactura . '_' . $numeroFacturaArchivo . '_pedido_' . $pedidoId . '.pdf';
+$prefijoArchivo = $comprobanteTipo === 'recibo' ? 'Recibo' : 'Factura';
+$nombreArchivo = $prefijoArchivo . '_' . $tipoFactura . '_' . $numeroFacturaArchivo . '_pedido_' . $pedidoId . '.pdf';
 $destinoAbs = $facturasDir . '/' . $nombreArchivo;
 $rutaRel = 'uploads/facturas_pedidos/' . $nombreArchivo;
 
@@ -310,11 +343,14 @@ if ($posicionPdf !== false && $posicionPdf > 0) {
 @file_put_contents($destinoAbs, $pdfContent);
 
 try {
-    $stmtUpdate = $pdo->prepare("UPDATE ecommerce_pedidos SET tipo_factura = ?, numero_factura = ?, fecha_facturacion = ?, factura_archivo = ?, factura_nombre_original = ? WHERE id = ?");
+    $stmtUpdate = $pdo->prepare("UPDATE ecommerce_pedidos SET comprobante_tipo = ?, tipo_factura = ?, numero_factura = ?, fecha_facturacion = ?, afip_resultado = CASE WHEN ? = 'recibo' THEN 'RECIBO' ELSE afip_resultado END, afip_observaciones = CASE WHEN ? = 'recibo' THEN 'Se emitió recibo interno sin conexión a ARCA/AFIP.' ELSE afip_observaciones END, factura_archivo = ?, factura_nombre_original = ? WHERE id = ?");
     $stmtUpdate->execute([
+        $comprobanteTipo,
         $tipoFactura,
         $numeroFactura,
         $fechaFacturacion,
+        $comprobanteTipo,
+        $comprobanteTipo,
         $rutaRel,
         $nombreArchivo,
         $pedidoId,
