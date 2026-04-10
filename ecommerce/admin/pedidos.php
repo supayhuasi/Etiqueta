@@ -255,16 +255,10 @@ $fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $cliente_busqueda = $_GET['cliente'] ?? '';
 $calidad_revision_filter = $_GET['calidad_revision'] ?? '';
 $calidad_observacion_filter = $_GET['calidad_observacion'] ?? '';
+$per_page = 50;
+$page = max(1, intval($_GET['pagina'] ?? 1));
 
-$query = "
-    SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
-           COALESCE(pp.total_pagado, 0) AS total_pagado,
-           ci.id AS calidad_inspeccion_id,
-           ci.estado_calidad,
-           ci.prueba_aprobada,
-           ci.detalle_revision,
-           ci.observaciones,
-           ci.fecha_revision AS calidad_fecha_revision
+$query_from = "
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
     LEFT JOIN (
@@ -278,22 +272,22 @@ $query = "
 $params = [];
 
 if (!empty($estado_filter)) {
-    $query .= " AND p.estado = ?";
+    $query_from .= " AND p.estado = ?";
     $params[] = $estado_filter;
 }
 
 if (!empty($fecha_desde)) {
-    $query .= " AND DATE(p.fecha_pedido) >= ?";
+    $query_from .= " AND DATE(p.fecha_pedido) >= ?";
     $params[] = $fecha_desde;
 }
 
 if (!empty($fecha_hasta)) {
-    $query .= " AND DATE(p.fecha_pedido) <= ?";
+    $query_from .= " AND DATE(p.fecha_pedido) <= ?";
     $params[] = $fecha_hasta;
 }
 
 if (!empty($cliente_busqueda)) {
-    $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+    $query_from .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
     $busqueda_wildcard = '%' . $cliente_busqueda . '%';
     $params[] = $busqueda_wildcard;
     $params[] = $busqueda_wildcard;
@@ -301,19 +295,19 @@ if (!empty($cliente_busqueda)) {
 }
 
 if ($calidad_revision_filter === 'chequeados') {
-    $query .= " AND ci.id IS NOT NULL";
+    $query_from .= " AND ci.id IS NOT NULL";
 } elseif ($calidad_revision_filter === 'sin_chequear') {
-    $query .= " AND ci.id IS NULL";
+    $query_from .= " AND ci.id IS NULL";
 }
 
 if ($calidad_observacion_filter === 'con_observacion') {
-    $query .= " AND (
+    $query_from .= " AND (
         LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
         OR NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NOT NULL
         OR NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NOT NULL
     )";
 } elseif ($calidad_observacion_filter === 'sin_observacion') {
-    $query .= " AND (
+    $query_from .= " AND (
         ci.id IS NULL
         OR (
             LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
@@ -323,10 +317,26 @@ if ($calidad_observacion_filter === 'con_observacion') {
     )";
 }
 
-$query .= " ORDER BY p.fecha_pedido DESC";
+// Contar total para paginación
+$stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
+$stmt_count->execute($params);
+$total_pedidos = (int)$stmt_count->fetchColumn();
+$total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
+$page = min($page, $total_paginas);
+$offset = ($page - 1) * $per_page;
+
+$query = "SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
+           COALESCE(pp.total_pagado, 0) AS total_pagado,
+           ci.id AS calidad_inspeccion_id,
+           ci.estado_calidad,
+           ci.prueba_aprobada,
+           ci.detalle_revision,
+           ci.observaciones,
+           ci.fecha_revision AS calidad_fecha_revision
+    " . $query_from . " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 
 $stmt = $pdo->prepare($query);
-$stmt->execute($params);
+$stmt->execute(array_merge($params, [$per_page, $offset]));
 $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $request_scheme = 'http';
@@ -446,7 +456,7 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
         <h1 class="mb-1">Pedidos</h1>
         <p class="text-muted mb-0">Gestión de pedidos y seguimiento de estados</p>
     </div>
-    <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= count($pedidos) ?></div>
+    <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= $total_pedidos ?></div>
 </div>
 
 <?php if (isset($error)): ?>
@@ -597,6 +607,40 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
             </div>
         </div>
     </div>
+
+    <?php if ($total_paginas > 1): ?>
+        <?php
+            $filtros_url = http_build_query(array_filter([
+                'estado'              => $estado_filter,
+                'fecha_desde'         => $fecha_desde,
+                'fecha_hasta'         => $fecha_hasta,
+                'cliente'             => $cliente_busqueda,
+                'calidad_revision'    => $calidad_revision_filter,
+                'calidad_observacion' => $calidad_observacion_filter,
+            ]));
+            $url_base = 'pedidos.php?' . ($filtros_url ? $filtros_url . '&' : '');
+        ?>
+        <nav class="mt-3" aria-label="Paginación de pedidos">
+            <ul class="pagination justify-content-center flex-wrap">
+                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $url_base ?>pagina=<?= $page - 1 ?>">‹ Anterior</a>
+                </li>
+                <?php for ($p = 1; $p <= $total_paginas; $p++): ?>
+                    <?php if ($p === 1 || $p === $total_paginas || abs($p - $page) <= 2): ?>
+                        <li class="page-item <?= $p === $page ? 'active' : '' ?>">
+                            <a class="page-link" href="<?= $url_base ?>pagina=<?= $p ?>"><?= $p ?></a>
+                        </li>
+                    <?php elseif (abs($p - $page) === 3): ?>
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    <?php endif; ?>
+                <?php endfor; ?>
+                <li class="page-item <?= $page >= $total_paginas ? 'disabled' : '' ?>">
+                    <a class="page-link" href="<?= $url_base ?>pagina=<?= $page + 1 ?>">Siguiente ›</a>
+                </li>
+            </ul>
+            <p class="text-center text-muted small">Página <?= $page ?> de <?= $total_paginas ?> · <?= $total_pedidos ?> pedidos en total</p>
+        </nav>
+    <?php endif; ?>
 <?php endif; ?>
 
 <style>
