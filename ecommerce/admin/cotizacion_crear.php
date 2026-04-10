@@ -1,9 +1,13 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 $mensaje = '';
 $error = '';
+$contabilidad_config = contabilidad_get_config($pdo);
+$contabilidad_impuestos_activos = contabilidad_get_impuestos($pdo, true);
+$contabilidad_moneda = trim((string)($contabilidad_config['moneda'] ?? 'ARS')) ?: 'ARS';
 
 function cotizacion_tabla_existe(PDO $pdo, string $tabla): bool {
     try {
@@ -270,8 +274,11 @@ if (!in_array('cuit', $cols_cot, true)) {
 if (!in_array('factura_a', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
 }
+if (!in_array('comprobante_tipo', $cols_cot, true)) {
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN comprobante_tipo VARCHAR(20) NOT NULL DEFAULT 'factura' AFTER factura_a");
+}
 if (!in_array('es_empresa', $cols_cot, true)) {
-    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+    $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER comprobante_tipo");
 }
 if (!in_array('crm_id', $cols_cot, true)) {
     $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN crm_id INT NULL AFTER cliente_id");
@@ -349,6 +356,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $crm_id = !empty($_POST['crm_id']) ? intval($_POST['crm_id']) : $crm_id_context;
         $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
         $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
+        $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+        if ($comprobante_tipo === 'recibo') {
+            $factura_a = 0;
+        }
         $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
         
         // Validaciones
@@ -497,7 +508,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cupon_descuento = 0;
         }
 
-        $total = $subtotal - $descuento - $cupon_descuento;
+        $base_cotizacion = max(0, $subtotal - $descuento - $cupon_descuento);
+        $resumen_impuestos = contabilidad_calcular_impuestos(
+            $contabilidad_impuestos_activos,
+            $base_cotizacion,
+            $base_cotizacion,
+            'cotizacion'
+        );
+        $total = max(0, (float)($resumen_impuestos['total_con_impuestos'] ?? $base_cotizacion));
         
         // Generar número de cotización
         $año = date('Y');
@@ -542,9 +560,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insert_cols[] = 'factura_a';
             $insert_vals[] = $factura_a;
         }
+        if (in_array('comprobante_tipo', $cols_cot_insert, true)) {
+            $insert_cols[] = 'comprobante_tipo';
+            $insert_vals[] = $comprobante_tipo;
+        }
 
         $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
         $insert_vals = array_merge($insert_vals, [$lista_precio_id, json_encode($items), $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id']]);
+
+        if (in_array('impuestos_json', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_json';
+            $insert_vals[] = !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null;
+        }
+        if (in_array('impuestos_incluidos', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_incluidos';
+            $insert_vals[] = (float)($resumen_impuestos['total_incluidos'] ?? 0);
+        }
+        if (in_array('impuestos_adicionales', $cols_cot_insert, true)) {
+            $insert_cols[] = 'impuestos_adicionales';
+            $insert_vals[] = (float)($resumen_impuestos['total_adicionales'] ?? 0);
+        }
 
         $placeholders = implode(', ', array_fill(0, count($insert_cols), '?'));
         $sql_insert = "INSERT INTO ecommerce_cotizaciones (" . implode(', ', $insert_cols) . ") VALUES (" . $placeholders . ")";
@@ -663,7 +698,8 @@ $form_data = [
     'lista_precio_id' => trim((string)($_POST['lista_precio_id'] ?? '')),
     'es_empresa' => !empty($_POST['es_empresa']),
     'factura_a' => !empty($_POST['factura_a']),
-    'cuit' => trim((string)($_POST['cuit'] ?? '')),
+    'comprobante_tipo' => contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura')),
+    'cuit' => trim((string)($_POST['cuit'] ?? '')), 
 ];
 
 if ($form_data['cliente_id'] <= 0) {
@@ -858,6 +894,14 @@ foreach ($lista_cat_rows as $row) {
                         <input type="number" class="form-control" id="descuento_porcentaje_default" name="descuento_porcentaje_default" value="0" min="0" max="100" step="0.01">
                         <small class="text-muted">Se aplica al precio sugerido al agregar un item nuevo.</small>
                     </div>
+                    <div class="mb-3">
+                        <label for="comprobante_tipo" class="form-label">Comprobante previsto</label>
+                        <select class="form-select" id="comprobante_tipo" name="comprobante_tipo">
+                            <option value="factura" <?= (string)($form_data['comprobante_tipo'] ?? 'factura') !== 'recibo' ? 'selected' : '' ?>>Factura fiscal</option>
+                            <option value="recibo" <?= (string)($form_data['comprobante_tipo'] ?? 'factura') === 'recibo' ? 'selected' : '' ?>>Recibo interno (sin ARCA/AFIP)</option>
+                        </select>
+                        <small class="text-muted">Definí desde ahora si al convertirla en pedido debería facturarse o emitirse como recibo.</small>
+                    </div>
                     <div class="alert alert-light border mb-3 py-2 small">
                         La cotización primero intenta reutilizar un cliente existente por <strong>CUIT, email, teléfono o nombre</strong>. Solo si no existe, se crea uno nuevo.
                     </div>
@@ -909,6 +953,20 @@ foreach ($lista_cat_rows as $row) {
                                 </div>
                                 <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="0">
                                 <small id="cupon_info" class="text-muted d-block"></small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. incluidos:</th>
+                            <td class="text-end">
+                                <span id="impuestos_incluidos" class="text-muted">$0.00</span>
+                                <small class="text-muted d-block">Informativo, ya contemplado en el precio.</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. adicionales:</th>
+                            <td class="text-end">
+                                <span id="impuestos_adicionales" class="text-danger">$0.00</span>
+                                <small id="detalle_impuestos" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr class="table-primary">
@@ -1788,6 +1846,71 @@ function actualizarDescuentoItem(index, valor) {
     calcularTotales();
 }
 
+const impuestosConfiguradosCotizacion = <?= json_encode($contabilidad_impuestos_activos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?> || [];
+
+function redondearMonedaCotizacion(valor) {
+    return Math.round(((parseFloat(valor) || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function calcularResumenImpuestosCotizacion(subtotalBase, totalBase) {
+    let totalIncluidos = 0;
+    let totalAdicionales = 0;
+    const detalle = [];
+
+    impuestosConfiguradosCotizacion.forEach((imp) => {
+        if (!imp) return;
+        const aplicaA = String(imp.aplica_a || 'ambos');
+        if (aplicaA !== 'ambos' && aplicaA !== 'cotizacion') return;
+
+        const base = String(imp.base_calculo || 'subtotal') === 'total' ? totalBase : subtotalBase;
+        const valor = parseFloat(imp.valor || 0) || 0;
+        const incluido = Number(imp.incluido_en_precio) === 1 || imp.incluido_en_precio === true || String(imp.incluido_en_precio) === '1';
+        let monto = 0;
+
+        if (String(imp.tipo_calculo || 'porcentaje') === 'fijo') {
+            monto = valor;
+        } else if (incluido) {
+            monto = base > 0 ? base - (base / (1 + (valor / 100))) : 0;
+        } else {
+            monto = base * (valor / 100);
+        }
+
+        monto = redondearMonedaCotizacion(monto);
+        if (monto <= 0) return;
+
+        detalle.push({ nombre: imp.nombre || 'Impuesto', monto, incluido });
+        if (incluido) {
+            totalIncluidos += monto;
+        } else {
+            totalAdicionales += monto;
+        }
+    });
+
+    totalIncluidos = redondearMonedaCotizacion(totalIncluidos);
+    totalAdicionales = redondearMonedaCotizacion(totalAdicionales);
+
+    return {
+        detalle,
+        totalIncluidos,
+        totalAdicionales,
+        totalConImpuestos: redondearMonedaCotizacion((parseFloat(totalBase) || 0) + totalAdicionales)
+    };
+}
+
+function renderizarResumenImpuestosCotizacion(resumen) {
+    const incluidosEl = document.getElementById('impuestos_incluidos');
+    const adicionalesEl = document.getElementById('impuestos_adicionales');
+    const detalleEl = document.getElementById('detalle_impuestos');
+
+    if (incluidosEl) incluidosEl.textContent = '$' + Number(resumen.totalIncluidos || 0).toFixed(2);
+    if (adicionalesEl) adicionalesEl.textContent = '$' + Number(resumen.totalAdicionales || 0).toFixed(2);
+    if (detalleEl) {
+        detalleEl.textContent = resumen.detalle && resumen.detalle.length
+            ? resumen.detalle.map((imp) => `${imp.nombre}${imp.incluido ? ' (incluido)' : ''}: $${Number(imp.monto || 0).toFixed(2)}`).join(' · ')
+            : 'Sin impuestos activos para esta cotización.';
+    }
+}
+
 function calcularTotales() {
     let subtotal = 0;
     let descuentoListaTotal = 0;
@@ -1839,10 +1962,12 @@ function calcularTotales() {
 
     const descuento = parseFloat(descuentoInput?.value || 0);
     const descuentoCupon = parseFloat(document.getElementById('cupon_descuento')?.value || 0);
-    const total = subtotal - descuento - descuentoCupon;
+    const baseFiscal = Math.max(0, subtotal - descuento - descuentoCupon);
+    const resumenImpuestos = calcularResumenImpuestosCotizacion(baseFiscal, baseFiscal);
 
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-    document.getElementById('total').textContent = '$' + total.toFixed(2);
+    renderizarResumenImpuestosCotizacion(resumenImpuestos);
+    document.getElementById('total').textContent = '$' + Number(resumenImpuestos.totalConImpuestos || 0).toFixed(2);
 }
 
 function aplicarCupon() {
@@ -2041,20 +2166,29 @@ function toggleEmpresaFields() {
     const facturaA = document.getElementById('factura_a');
     const cuit = document.getElementById('cuit');
     const wrapper = document.getElementById('empresaFields');
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    const esRecibo = !!(comprobanteTipo && comprobanteTipo.value === 'recibo');
     const activo = !!(esEmpresa && esEmpresa.checked);
     if (wrapper) {
         wrapper.style.display = activo ? '' : 'none';
     }
-    if (!activo && facturaA) {
-        facturaA.checked = false;
+    if (facturaA) {
+        if (!activo || esRecibo) {
+            facturaA.checked = false;
+        }
+        facturaA.disabled = esRecibo;
     }
     if (cuit) {
-        cuit.required = !!(activo && facturaA && facturaA.checked);
+        cuit.required = !!(activo && facturaA && facturaA.checked && !esRecibo);
     }
 }
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    if (comprobanteTipo) {
+        comprobanteTipo.addEventListener('change', toggleEmpresaFields);
+    }
     toggleEmpresaFields();
     const clienteSearch = document.getElementById('buscar_cliente');
     const clienteSelect = document.getElementById('cliente_id');

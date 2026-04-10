@@ -1,6 +1,11 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
+
+$contabilidad_config = contabilidad_get_config($pdo);
+$contabilidad_impuestos_activos = contabilidad_get_impuestos($pdo, true);
+$contabilidad_moneda = trim((string)($contabilidad_config['moneda'] ?? 'ARS')) ?: 'ARS';
 
 $id = intval($_GET['id'] ?? $_POST['id'] ?? 0);
 
@@ -77,6 +82,7 @@ $dni_actual = $dni_col !== null ? (string)($cotizacion[$dni_col] ?? '') : '';
 $cuit_actual = $cuit_col !== null ? preg_replace('/\D+/', '', (string)($cotizacion[$cuit_col] ?? '')) : '';
 $factura_a_actual = $factura_a_col !== null ? (int)($cotizacion[$factura_a_col] ?? 0) : 0;
 $es_empresa_actual = $es_empresa_col !== null ? (int)($cotizacion[$es_empresa_col] ?? 0) : 0;
+$comprobante_tipo_actual = contabilidad_normalizar_comprobante_tipo((string)($cotizacion['comprobante_tipo'] ?? 'factura'));
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -91,7 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
         $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
         $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
-        $observaciones = $_POST['observaciones'] ?? '';
+        $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+        if ($comprobante_tipo === 'recibo') {
+            $factura_a = 0;
+        }
+        $observaciones = $_POST['observaciones'] ?? ''; 
         $validez_dias = intval($_POST['validez_dias'] ?? 15);
         $lista_precio_id = !empty($_POST['lista_precio_id']) ? intval($_POST['lista_precio_id']) : null;
 
@@ -192,7 +202,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cupon_descuento = 0;
         }
 
-        $total = $subtotal - $descuento - $cupon_descuento;
+        $base_cotizacion = max(0, $subtotal - $descuento - $cupon_descuento);
+        $resumen_impuestos = contabilidad_calcular_impuestos(
+            $contabilidad_impuestos_activos,
+            $base_cotizacion,
+            $base_cotizacion,
+            'cotizacion'
+        );
+        $total = max(0, (float)($resumen_impuestos['total_con_impuestos'] ?? $base_cotizacion));
             $set_parts = [];
             $params = [];
 
@@ -213,6 +230,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pushIfColumnExists('cupon_codigo', $cupon_codigo ?: null);
             $pushIfColumnExists('cupon_descuento', $cupon_descuento);
             $pushIfColumnExists('total', $total);
+            $pushIfColumnExists('impuestos_json', !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null);
+            $pushIfColumnExists('impuestos_incluidos', (float)($resumen_impuestos['total_incluidos'] ?? 0));
+            $pushIfColumnExists('impuestos_adicionales', (float)($resumen_impuestos['total_adicionales'] ?? 0));
+            $pushIfColumnExists('comprobante_tipo', $comprobante_tipo);
             $pushIfColumnExists('observaciones', $observaciones);
             $pushIfColumnExists('validez_dias', $validez_dias);
 
@@ -452,6 +473,14 @@ foreach ($lista_cat_rows as $row) {
                         <small class="text-muted">Aplica descuentos por producto o categoría</small>
                     </div>
                     <div class="mb-3">
+                        <label for="comprobante_tipo" class="form-label">Comprobante previsto</label>
+                        <select class="form-select" id="comprobante_tipo" name="comprobante_tipo">
+                            <option value="factura" <?= $comprobante_tipo_actual !== 'recibo' ? 'selected' : '' ?>>Factura fiscal</option>
+                            <option value="recibo" <?= $comprobante_tipo_actual === 'recibo' ? 'selected' : '' ?>>Recibo interno (sin ARCA/AFIP)</option>
+                        </select>
+                        <small class="text-muted">Si elegís recibo, al convertir la cotización no se intentará facturar con ARCA/AFIP.</small>
+                    </div>
+                    <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
                         <textarea class="form-control" id="observaciones" name="observaciones" rows="4"><?= htmlspecialchars($cotizacion['observaciones'] ?? '') ?></textarea>
                     </div>
@@ -495,6 +524,20 @@ foreach ($lista_cat_rows as $row) {
                                 </div>
                                 <input type="hidden" id="cupon_descuento" name="cupon_descuento" value="<?= (float)($cotizacion['cupon_descuento'] ?? 0) ?>">
                                 <small id="cupon_info" class="text-muted d-block"></small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. incluidos:</th>
+                            <td class="text-end">
+                                <span id="impuestos_incluidos" class="text-muted">$0.00</span>
+                                <small class="text-muted d-block">Informativo, ya contemplado en el precio.</small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Imp. adicionales:</th>
+                            <td class="text-end">
+                                <span id="impuestos_adicionales" class="text-danger">$0.00</span>
+                                <small id="detalle_impuestos" class="text-muted d-block"></small>
                             </td>
                         </tr>
                         <tr class="table-primary">
@@ -1497,6 +1540,71 @@ function actualizarDescuentoItem(index, valor) {
     calcularTotales();
 }
 
+const impuestosConfiguradosCotizacion = <?= json_encode($contabilidad_impuestos_activos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?> || [];
+
+function redondearMonedaCotizacion(valor) {
+    return Math.round(((parseFloat(valor) || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function calcularResumenImpuestosCotizacion(subtotalBase, totalBase) {
+    let totalIncluidos = 0;
+    let totalAdicionales = 0;
+    const detalle = [];
+
+    impuestosConfiguradosCotizacion.forEach((imp) => {
+        if (!imp) return;
+        const aplicaA = String(imp.aplica_a || 'ambos');
+        if (aplicaA !== 'ambos' && aplicaA !== 'cotizacion') return;
+
+        const base = String(imp.base_calculo || 'subtotal') === 'total' ? totalBase : subtotalBase;
+        const valor = parseFloat(imp.valor || 0) || 0;
+        const incluido = Number(imp.incluido_en_precio) === 1 || imp.incluido_en_precio === true || String(imp.incluido_en_precio) === '1';
+        let monto = 0;
+
+        if (String(imp.tipo_calculo || 'porcentaje') === 'fijo') {
+            monto = valor;
+        } else if (incluido) {
+            monto = base > 0 ? base - (base / (1 + (valor / 100))) : 0;
+        } else {
+            monto = base * (valor / 100);
+        }
+
+        monto = redondearMonedaCotizacion(monto);
+        if (monto <= 0) return;
+
+        detalle.push({ nombre: imp.nombre || 'Impuesto', monto, incluido });
+        if (incluido) {
+            totalIncluidos += monto;
+        } else {
+            totalAdicionales += monto;
+        }
+    });
+
+    totalIncluidos = redondearMonedaCotizacion(totalIncluidos);
+    totalAdicionales = redondearMonedaCotizacion(totalAdicionales);
+
+    return {
+        detalle,
+        totalIncluidos,
+        totalAdicionales,
+        totalConImpuestos: redondearMonedaCotizacion((parseFloat(totalBase) || 0) + totalAdicionales)
+    };
+}
+
+function renderizarResumenImpuestosCotizacion(resumen) {
+    const incluidosEl = document.getElementById('impuestos_incluidos');
+    const adicionalesEl = document.getElementById('impuestos_adicionales');
+    const detalleEl = document.getElementById('detalle_impuestos');
+
+    if (incluidosEl) incluidosEl.textContent = '$' + Number(resumen.totalIncluidos || 0).toFixed(2);
+    if (adicionalesEl) adicionalesEl.textContent = '$' + Number(resumen.totalAdicionales || 0).toFixed(2);
+    if (detalleEl) {
+        detalleEl.textContent = resumen.detalle && resumen.detalle.length
+            ? resumen.detalle.map((imp) => `${imp.nombre}${imp.incluido ? ' (incluido)' : ''}: $${Number(imp.monto || 0).toFixed(2)}`).join(' · ')
+            : 'Sin impuestos activos para esta cotización.';
+    }
+}
+
 function calcularTotales() {
     let subtotal = 0;
     let descuentoListaTotal = 0;
@@ -1560,10 +1668,12 @@ function calcularTotales() {
 
     const descuento = parseFloat(descuentoInput?.value || 0);
     const descuentoCupon = parseFloat(document.getElementById('cupon_descuento')?.value || 0);
-    const total = subtotal - descuento - descuentoCupon;
+    const baseFiscal = Math.max(0, subtotal - descuento - descuentoCupon);
+    const resumenImpuestos = calcularResumenImpuestosCotizacion(baseFiscal, baseFiscal);
 
     document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
-    document.getElementById('total').textContent = '$' + total.toFixed(2);
+    renderizarResumenImpuestosCotizacion(resumenImpuestos);
+    document.getElementById('total').textContent = '$' + Number(resumenImpuestos.totalConImpuestos || 0).toFixed(2);
 }
 
 function aplicarCupon() {
@@ -1759,19 +1869,28 @@ function toggleEmpresaFields() {
     const facturaA = document.getElementById('factura_a');
     const cuit = document.getElementById('cuit');
     const wrapper = document.getElementById('empresaFields');
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    const esRecibo = !!(comprobanteTipo && comprobanteTipo.value === 'recibo');
     const activo = !!(esEmpresa && esEmpresa.checked);
     if (wrapper) {
         wrapper.style.display = activo ? '' : 'none';
     }
-    if (!activo && facturaA) {
-        facturaA.checked = false;
+    if (facturaA) {
+        if (!activo || esRecibo) {
+            facturaA.checked = false;
+        }
+        facturaA.disabled = esRecibo;
     }
     if (cuit) {
-        cuit.required = !!(activo && facturaA && facturaA.checked);
+        cuit.required = !!(activo && facturaA && facturaA.checked && !esRecibo);
     }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const comprobanteTipo = document.getElementById('comprobante_tipo');
+    if (comprobanteTipo) {
+        comprobanteTipo.addEventListener('change', toggleEmpresaFields);
+    }
     toggleEmpresaFields();
     if (itemsExistentes.length > 0) {
         itemsExistentes.forEach(item => {

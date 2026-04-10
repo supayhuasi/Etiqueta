@@ -5,6 +5,7 @@ require 'includes/cliente_auth.php';
 require 'includes/mailer.php';
 require 'includes/envio.php';
 require 'includes/descuentos.php';
+require_once __DIR__ . '/admin/includes/contabilidad_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -16,6 +17,7 @@ $carrito = $_SESSION['carrito'] ?? [];
 $mensaje_descuento = '';
 $error_descuento = '';
 $skip_checkout = false;
+$checkoutComprobanteTipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
 
 if (empty($carrito)) {
     header("Location: tienda.php");
@@ -74,7 +76,16 @@ $descuento_info = aplicar_descuento_actual($pdo, $subtotal);
 $descuento_monto = $descuento_info['monto'] ?? 0.0;
 $codigo_descuento = $descuento_info['codigo'] ?? '';
 
-$total = max(0, $subtotal + $envio - $descuento_monto);
+$impuestos_pedido_activos = contabilidad_get_impuestos($pdo, true);
+$base_subtotal_pedido = max(0, $subtotal - $descuento_monto);
+$base_total_pedido = max(0, $subtotal + $envio - $descuento_monto);
+$resumen_impuestos_pedido = contabilidad_calcular_impuestos(
+    $impuestos_pedido_activos,
+    $base_subtotal_pedido,
+    $base_total_pedido,
+    'pedido'
+);
+$total = max(0, (float)($resumen_impuestos_pedido['total_con_impuestos'] ?? $base_total_pedido));
 
 // Procesar compra
 $mensaje = '';
@@ -155,7 +166,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $documento_tipo = $_POST['documento_tipo'] ?? '';
     $documento_numero = $_POST['documento_numero'] ?? '';
+    $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
     $factura_a = isset($_POST['factura_a']) ? 1 : 0;
+    if ($comprobante_tipo === 'recibo') {
+        $factura_a = 0;
+    }
     $envio_mismo = isset($_POST['envio_mismo']) ? 1 : 0;
     $envio_nombre = trim($_POST['envio_nombre'] ?? '');
     $envio_telefono = trim($_POST['envio_telefono'] ?? '');
@@ -177,8 +192,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     }
     
     // Validar datos
-    if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad) || empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero)) {
-        $error = "Por favor completa todos los campos obligatorios (incluyendo datos fiscales)";
+    if (empty($nombre) || empty($direccion) || empty($provincia) || empty($localidad)) {
+        $error = "Por favor completa todos los datos básicos obligatorios";
+    } elseif ($comprobante_tipo !== 'recibo' && (empty($responsabilidad_fiscal) || empty($documento_tipo) || empty($documento_numero))) {
+        $error = "Para emitir factura fiscal completá también los datos fiscales del cliente";
     } elseif (!$envio_mismo && (empty($envio_nombre) || empty($envio_direccion) || empty($envio_localidad) || empty($envio_provincia))) {
         $error = "Por favor completa los datos de envío";
     } elseif ($metodo_codigo === '' || empty($metodo_pago)) {
@@ -273,16 +290,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
             $descuento_aplicado = aplicar_descuento_actual($pdo, $subtotal);
             $descuento_monto = $descuento_aplicado['monto'] ?? 0.0;
             $codigo_descuento = $descuento_aplicado['codigo'] ?? null;
-            $total = max(0, $subtotal + $envio - $descuento_monto);
+            $base_subtotal_pedido = max(0, $subtotal - $descuento_monto);
+            $base_total_pedido = max(0, $subtotal + $envio - $descuento_monto);
+            $resumen_impuestos_pedido = contabilidad_calcular_impuestos(
+                $impuestos_pedido_activos,
+                $base_subtotal_pedido,
+                $base_total_pedido,
+                'pedido'
+            );
+            $total = max(0, (float)($resumen_impuestos_pedido['total_con_impuestos'] ?? $base_total_pedido));
 
             $public_token = bin2hex(random_bytes(16));
 
             // Crear pedido
-            $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_pedidos (numero_pedido, cliente_id, subtotal, envio, descuento_monto, codigo_descuento, total, factura_a, envio_nombre, envio_telefono, envio_direccion, envio_localidad, envio_provincia, envio_codigo_postal, metodo_pago, estado, public_token)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
+            $cols_pedido_insert = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+            $pedido_cols = [
+                'numero_pedido', 'cliente_id', 'subtotal', 'envio', 'descuento_monto', 'codigo_descuento', 'total',
+                'factura_a', 'envio_nombre', 'envio_telefono', 'envio_direccion', 'envio_localidad', 'envio_provincia',
+                'envio_codigo_postal', 'metodo_pago', 'estado', 'public_token'
+            ];
+            $pedido_vals = [
                 $numero_pedido,
                 $cliente_id,
                 $subtotal,
@@ -300,7 +327,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                 $metodo_pago,
                 $estado_pedido,
                 $public_token
-            ]);
+            ];
+
+            if (in_array('comprobante_tipo', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'comprobante_tipo';
+                $pedido_vals[] = $comprobante_tipo;
+            }
+            if (in_array('impuestos_json', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_json';
+                $pedido_vals[] = !empty($resumen_impuestos_pedido['detalle']) ? json_encode($resumen_impuestos_pedido['detalle'], JSON_UNESCAPED_UNICODE) : null;
+            }
+            if (in_array('impuestos_incluidos', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_incluidos';
+                $pedido_vals[] = (float)($resumen_impuestos_pedido['total_incluidos'] ?? 0);
+            }
+            if (in_array('impuestos_adicionales', $cols_pedido_insert, true)) {
+                $pedido_cols[] = 'impuestos_adicionales';
+                $pedido_vals[] = (float)($resumen_impuestos_pedido['total_adicionales'] ?? 0);
+            }
+
+            $pedido_placeholders = implode(', ', array_fill(0, count($pedido_cols), '?'));
+            $stmt = $pdo->prepare("INSERT INTO ecommerce_pedidos (" . implode(', ', $pedido_cols) . ") VALUES (" . $pedido_placeholders . ")");
+            $stmt->execute($pedido_vals);
             $pedido_id = $pdo->lastInsertId();
             
             // Agregar items al pedido
@@ -404,8 +452,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <h5>Datos de Facturación</h5>
                         </div>
                         <div class="card-body">
+                            <div class="border rounded p-3 bg-light mb-3">
+                                <label class="form-label fw-semibold mb-2">Tipo de comprobante</label>
+                                <div class="form-check">
+                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_factura" name="comprobante_tipo" value="factura" <?= $checkoutComprobanteTipo !== 'recibo' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="comprobante_tipo_factura">Quiero factura fiscal</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_recibo" name="comprobante_tipo" value="recibo" <?= $checkoutComprobanteTipo === 'recibo' ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="comprobante_tipo_recibo">Solo recibo interno (sin conexión a ARCA/AFIP)</label>
+                                </div>
+                                <small class="text-muted d-block mt-2">Si elegís recibo, el pedido no intentará facturarse fiscalmente hasta que lo cambies.</small>
+                            </div>
                             <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1">
+                                <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1" <?= !empty($_POST['factura_a']) ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="factura_a">Necesito Factura A</label>
                             </div>
                             <div class="row">
@@ -582,6 +642,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                         inputs.forEach(i => i.addEventListener('change', update));
                         update();
                     })();
+
+                    (function() {
+                        const radios = document.querySelectorAll('.comprobante-tipo-input');
+                        const facturaAInput = document.getElementById('factura_a');
+                        const facturaALabel = document.querySelector('label[for="factura_a"]');
+                        const responsabilidadFiscal = document.getElementById('responsabilidad_fiscal');
+                        const documentoTipo = document.getElementById('documento_tipo');
+                        const documentoNumero = document.getElementById('documento_numero');
+                        if (!radios.length || !facturaAInput) return;
+
+                        const updateComprobante = () => {
+                            const seleccionado = document.querySelector('.comprobante-tipo-input:checked');
+                            const esRecibo = !!seleccionado && seleccionado.value === 'recibo';
+                            if (esRecibo) {
+                                facturaAInput.checked = false;
+                            }
+                            facturaAInput.disabled = esRecibo;
+                            [responsabilidadFiscal, documentoTipo, documentoNumero].forEach(campo => {
+                                if (campo) {
+                                    campo.required = !esRecibo;
+                                }
+                            });
+                            if (facturaALabel) {
+                                facturaALabel.textContent = esRecibo ? 'Factura A no aplica en recibo interno' : 'Necesito Factura A';
+                            }
+                        };
+
+                        radios.forEach(radio => radio.addEventListener('change', updateComprobante));
+                        updateComprobante();
+                    })();
                 </script>
                 <script>
                     (function() {
@@ -689,6 +779,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <div class="d-flex justify-content-between mb-3">
                                 <span>Descuento:</span>
                                 <strong class="text-success">- $<?= number_format($descuento_monto, 2, ',', '.') ?></strong>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($resumen_impuestos_pedido['detalle']) && is_array($resumen_impuestos_pedido['detalle'])): ?>
+                            <?php foreach ($resumen_impuestos_pedido['detalle'] as $impuesto): ?>
+                                <?php $montoImpuesto = (float)($impuesto['monto'] ?? 0); ?>
+                                <?php if ($montoImpuesto <= 0) { continue; } ?>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span><?= htmlspecialchars((string)($impuesto['nombre'] ?? 'Impuesto')) ?><?= !empty($impuesto['incluido_en_precio']) ? ' (incluido)' : '' ?>:</span>
+                                    <strong class="<?= !empty($impuesto['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><?= !empty($impuesto['incluido_en_precio']) ? '' : '+ ' ?>$<?= number_format($montoImpuesto, 2, ',', '.') ?></strong>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="mb-3 pb-3" style="border-bottom: 2px solid #dee2e6;">
+                                <small class="text-muted">Los impuestos incluidos ya forman parte del precio; los adicionales se suman automáticamente al total.</small>
                             </div>
                         <?php endif; ?>
                         <div class="d-flex justify-content-between">

@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
+require_once __DIR__ . '/includes/contabilidad_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -257,8 +258,11 @@ try {
     if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'factura_a')) {
         $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN factura_a TINYINT(1) NOT NULL DEFAULT 0 AFTER cuit");
     }
+    if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'comprobante_tipo')) {
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN comprobante_tipo VARCHAR(20) NOT NULL DEFAULT 'factura' AFTER factura_a");
+    }
     if (!tabla_tiene_columna_ajax($pdo, 'ecommerce_cotizaciones', 'es_empresa')) {
-        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER factura_a");
+        $pdo->exec("ALTER TABLE ecommerce_cotizaciones ADD COLUMN es_empresa TINYINT(1) NOT NULL DEFAULT 0 AFTER comprobante_tipo");
     }
 
     asegurar_unicidad_clientes_ajax($pdo);
@@ -291,6 +295,10 @@ try {
     $cliente_id = !empty($_POST['cliente_id']) ? intval($_POST['cliente_id']) : 0;
     $es_empresa = !empty($_POST['es_empresa']) ? 1 : 0;
     $factura_a = !empty($_POST['factura_a']) ? 1 : 0;
+    $comprobante_tipo = contabilidad_normalizar_comprobante_tipo((string)($_POST['comprobante_tipo'] ?? 'factura'));
+    if ($comprobante_tipo === 'recibo') {
+        $factura_a = 0;
+    }
     $cuit = preg_replace('/\D+/', '', (string)($_POST['cuit'] ?? ''));
 
     if ($es_empresa && $factura_a && strlen($cuit) !== 11) {
@@ -363,7 +371,15 @@ try {
         $cupon_descuento = 0;
     }
 
-    $total = $subtotal - $descuento - $cupon_descuento;
+    $base_cotizacion = max(0, $subtotal - $descuento - $cupon_descuento);
+    $impuestos_activos = contabilidad_get_impuestos($pdo, true);
+    $resumen_impuestos = contabilidad_calcular_impuestos(
+        $impuestos_activos,
+        $base_cotizacion,
+        $base_cotizacion,
+        'cotizacion'
+    );
+    $total = max(0, (float)($resumen_impuestos['total_con_impuestos'] ?? $base_cotizacion));
 
     // generar numero
     $año = date('Y');
@@ -401,9 +417,26 @@ try {
         $insert_cols[] = 'factura_a';
         $insert_vals[] = $factura_a;
     }
+    if (in_array('comprobante_tipo', $cols_cot, true)) {
+        $insert_cols[] = 'comprobante_tipo';
+        $insert_vals[] = $comprobante_tipo;
+    }
 
     $insert_cols = array_merge($insert_cols, ['lista_precio_id', 'items', 'subtotal', 'descuento', 'cupon_codigo', 'cupon_descuento', 'total', 'observaciones', 'validez_dias', 'creado_por']);
     $insert_vals = array_merge($insert_vals, [$lista_precio_id, $items_json, $subtotal, $descuento, $cupon_codigo ?: null, $cupon_descuento, $total, $observaciones, $validez_dias, $_SESSION['user']['id'] ?? null]);
+
+    if (in_array('impuestos_json', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_json';
+        $insert_vals[] = !empty($resumen_impuestos['detalle']) ? json_encode($resumen_impuestos['detalle'], JSON_UNESCAPED_UNICODE) : null;
+    }
+    if (in_array('impuestos_incluidos', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_incluidos';
+        $insert_vals[] = (float)($resumen_impuestos['total_incluidos'] ?? 0);
+    }
+    if (in_array('impuestos_adicionales', $cols_cot, true)) {
+        $insert_cols[] = 'impuestos_adicionales';
+        $insert_vals[] = (float)($resumen_impuestos['total_adicionales'] ?? 0);
+    }
 
     $placeholders = implode(', ', array_fill(0, count($insert_cols), '?'));
     $sql_insert = "INSERT INTO ecommerce_cotizaciones (" . implode(', ', $insert_cols) . ") VALUES (" . $placeholders . ")";

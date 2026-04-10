@@ -74,6 +74,23 @@ if (!function_exists('calidad_formatear_atributos_pedido')) {
     }
 }
 
+if (!function_exists('calidad_resolver_pedido_id_form')) {
+    function calidad_resolver_pedido_id_form($pedidoIdInput, string $pedidoBusqueda = ''): int
+    {
+        $pedidoId = max(0, (int)$pedidoIdInput);
+        if ($pedidoId > 0) {
+            return $pedidoId;
+        }
+
+        $pedidoBusqueda = trim($pedidoBusqueda);
+        if ($pedidoBusqueda !== '' && preg_match('/(?:pedido\s*#?\s*)?(\d{1,10})/i', $pedidoBusqueda, $match)) {
+            return max(0, (int)($match[1] ?? 0));
+        }
+
+        return 0;
+    }
+}
+
 $desde = $_GET['desde'] ?? date('Y-m-01');
 $hasta = $_GET['hasta'] ?? date('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$desde)) {
@@ -88,7 +105,11 @@ if ($hasta < $desde) {
 
 $mensaje = '';
 $error = '';
-$pedidoCalidadId = max(0, (int)($_GET['pedido_id'] ?? ($_POST['pedido_id'] ?? 0)));
+$pedidoCalidadId = calidad_resolver_pedido_id_form(
+    $_GET['pedido_id'] ?? ($_POST['pedido_id'] ?? 0),
+    (string)($_GET['pedido_busqueda'] ?? ($_POST['pedido_busqueda'] ?? ''))
+);
+$pedidoAutocompleteValue = trim((string)($_POST['pedido_busqueda'] ?? ($_GET['pedido_busqueda'] ?? '')));
 $pedidoCalidad = null;
 $pedidoCalidadItems = [];
 $inspeccionPedido = null;
@@ -111,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$nuevoEstado, $id]);
             $mensaje = 'Estado de calidad actualizado correctamente.';
         } elseif ($action === 'guardar_inspeccion_pedido') {
-            $pedidoId = (int)($_POST['pedido_id'] ?? 0);
+            $pedidoId = calidad_resolver_pedido_id_form($_POST['pedido_id'] ?? 0, (string)($_POST['pedido_busqueda'] ?? ''));
             $clienteNombre = trim((string)($_POST['cliente_nombre'] ?? ''));
             $estadoCalidad = (string)($_POST['estado_calidad'] ?? 'pendiente');
             $pruebaAprobada = (int)($_POST['prueba_aprobada'] ?? 0) === 1 ? 1 : 0;
@@ -224,7 +245,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $titulo = trim((string)($_POST['titulo'] ?? ''));
             $descripcion = trim((string)($_POST['descripcion'] ?? ''));
             $clienteNombre = trim((string)($_POST['cliente_nombre'] ?? ''));
-            $pedidoId = !empty($_POST['pedido_id']) ? (int)$_POST['pedido_id'] : null;
+            $pedidoIdResolved = calidad_resolver_pedido_id_form($_POST['pedido_id'] ?? 0, (string)($_POST['pedido_busqueda'] ?? ''));
+            $pedidoId = $pedidoIdResolved > 0 ? $pedidoIdResolved : null;
             $instalacionTipo = trim((string)($_POST['instalacion_tipo'] ?? ''));
             $instalacionId = !empty($_POST['instalacion_id']) ? (int)$_POST['instalacion_id'] : null;
             $cantidad = max(1, (int)($_POST['cantidad'] ?? 1));
@@ -316,6 +338,11 @@ if ($pedidoCalidadId > 0) {
             $error = 'No se pudo cargar el pedido para control de calidad: ' . $e->getMessage();
         }
     }
+}
+
+if ($pedidoAutocompleteValue === '' && $pedidoCalidad) {
+    $clienteAutocomplete = trim((string)($pedidoCalidad['cliente_nombre'] ?? $pedidoCalidad['envio_nombre'] ?? ''));
+    $pedidoAutocompleteValue = 'Pedido #' . (int)($pedidoCalidad['id'] ?? 0) . ($clienteAutocomplete !== '' ? ' · ' . $clienteAutocomplete : '');
 }
 
 $metricas = [
@@ -682,11 +709,14 @@ try {
                         </div>
                         <div class="col-12">
                             <label class="form-label">Cliente</label>
-                            <input type="text" name="cliente_nombre" class="form-control" placeholder="Nombre del cliente" value="<?= htmlspecialchars((string)($pedidoCalidad['cliente_nombre'] ?? '')) ?>">
+                            <input type="text" name="cliente_nombre" id="calidad_cliente_nombre" class="form-control" placeholder="Nombre del cliente" value="<?= htmlspecialchars((string)($pedidoCalidad['cliente_nombre'] ?? '')) ?>">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Pedido ID</label>
-                            <input type="number" name="pedido_id" class="form-control" min="1" placeholder="Opcional" value="<?= $pedidoCalidad ? (int)$pedidoCalidad['id'] : '' ?>">
+                            <label class="form-label">Pedido / Cliente</label>
+                            <input type="hidden" name="pedido_id" id="calidad_pedido_id" value="<?= $pedidoCalidad ? (int)$pedidoCalidad['id'] : '' ?>">
+                            <input type="text" name="pedido_busqueda" id="calidad_pedido_busqueda" class="form-control" list="calidad_pedidos_lista" autocomplete="off" placeholder="Buscar por nombre del cliente o #pedido" value="<?= htmlspecialchars((string)$pedidoAutocompleteValue) ?>">
+                            <datalist id="calidad_pedidos_lista"></datalist>
+                            <small id="calidad_pedido_help" class="text-muted d-block mt-1">Escribí el nombre del cliente o el número de pedido y elegí una sugerencia.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Cantidad</label>
@@ -915,6 +945,104 @@ if (typeof Chart !== 'undefined') {
                 }
             }
         });
+    }
+
+    const pedidoBusquedaInput = document.getElementById('calidad_pedido_busqueda');
+    const pedidoIdInput = document.getElementById('calidad_pedido_id');
+    const pedidosList = document.getElementById('calidad_pedidos_lista');
+    const clienteNombreInput = document.getElementById('calidad_cliente_nombre');
+    const pedidoHelp = document.getElementById('calidad_pedido_help');
+
+    if (pedidoBusquedaInput && pedidoIdInput && pedidosList) {
+        let debounceTimer = null;
+
+        const setHelpText = (text, success = false) => {
+            if (!pedidoHelp) {
+                return;
+            }
+            pedidoHelp.textContent = text;
+            pedidoHelp.classList.toggle('text-muted', !success);
+            pedidoHelp.classList.toggle('text-success', success);
+        };
+
+        const syncSelectedPedido = () => {
+            const value = pedidoBusquedaInput.value.trim();
+            const options = Array.from(pedidosList.options || []);
+            const match = options.find((option) => option.value === value);
+
+            if (match) {
+                pedidoIdInput.value = match.dataset.pedidoId || '';
+                if (clienteNombreInput && (clienteNombreInput.value.trim() === '' || clienteNombreInput.dataset.autocompleteSync === '1')) {
+                    clienteNombreInput.value = match.dataset.clienteNombre || clienteNombreInput.value;
+                    clienteNombreInput.dataset.autocompleteSync = '1';
+                }
+                setHelpText('Pedido seleccionado: #' + (match.dataset.pedidoId || '') + ((match.dataset.clienteNombre || '') !== '' ? ' · ' + match.dataset.clienteNombre : ''), true);
+                return;
+            }
+
+            const numericMatch = value.match(/(?:pedido\s*#?\s*)?(\d{1,10})/i);
+            if (numericMatch) {
+                pedidoIdInput.value = numericMatch[1];
+                setHelpText('Se usará el pedido #' + numericMatch[1] + '.', true);
+            } else {
+                pedidoIdInput.value = '';
+                setHelpText('Escribí el nombre del cliente o el número de pedido y elegí una sugerencia.');
+            }
+        };
+
+        const buscarPedidos = (query) => {
+            fetch('calidad_pedidos_autocomplete.php?q=' + encodeURIComponent(query), {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then((response) => response.ok ? response.json() : Promise.reject(new Error('No se pudo buscar pedidos.')))
+                .then((data) => {
+                    pedidosList.innerHTML = '';
+                    if (!data || !data.ok || !Array.isArray(data.results)) {
+                        return;
+                    }
+
+                    data.results.forEach((item) => {
+                        const option = document.createElement('option');
+                        option.value = item.label || '';
+                        option.dataset.pedidoId = item.id || '';
+                        option.dataset.clienteNombre = item.cliente_nombre || '';
+                        pedidosList.appendChild(option);
+                    });
+
+                    syncSelectedPedido();
+                })
+                .catch(() => {
+                    setHelpText('No se pudieron cargar sugerencias ahora mismo.');
+                });
+        };
+
+        pedidoBusquedaInput.addEventListener('input', function () {
+            syncSelectedPedido();
+            const query = this.value.trim();
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            if (query.length < 2) {
+                return;
+            }
+            debounceTimer = setTimeout(() => buscarPedidos(query), 220);
+        });
+
+        pedidoBusquedaInput.addEventListener('change', syncSelectedPedido);
+        pedidoBusquedaInput.addEventListener('blur', syncSelectedPedido);
+
+        if (clienteNombreInput) {
+            clienteNombreInput.addEventListener('input', function () {
+                if (this.value.trim() !== '') {
+                    this.dataset.autocompleteSync = '0';
+                }
+            });
+        }
+
+        syncSelectedPedido();
     }
 }
 </script>

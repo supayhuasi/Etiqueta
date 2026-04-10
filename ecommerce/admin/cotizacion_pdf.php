@@ -14,6 +14,7 @@ if (!$cotizacion) {
 }
 
 $items = json_decode($cotizacion['items'], true) ?? [];
+$impuestosCotizacion = !empty($cotizacion['impuestos_json']) ? (json_decode((string)$cotizacion['impuestos_json'], true) ?: []) : [];
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
@@ -183,6 +184,28 @@ if (!empty($cotizacion['cupon_descuento'])) {
     $pdf->Cell(35, 6, $label . ':', 1, 0, 'R');
     $pdf->Cell(35, 6, '-$' . number_format($cotizacion['cupon_descuento'], 2), 1, 1, 'R');
     $pdf->SetTextColor(0, 0, 0);
+}
+
+if (!empty($impuestosCotizacion) && is_array($impuestosCotizacion)) {
+    foreach ($impuestosCotizacion as $impuesto) {
+        $montoImpuesto = (float)($impuesto['monto'] ?? 0);
+        if ($montoImpuesto <= 0) {
+            continue;
+        }
+        $pdf->Cell(120, 6, '', 0);
+        if (!empty($impuesto['incluido_en_precio'])) {
+            $pdf->SetTextColor(120, 120, 120);
+        } else {
+            $pdf->SetTextColor(180, 0, 0);
+        }
+        $labelImpuesto = utf8_decode((string)($impuesto['nombre'] ?? 'Impuesto'));
+        if (!empty($impuesto['incluido_en_precio'])) {
+            $labelImpuesto .= ' (incl.)';
+        }
+        $pdf->Cell(35, 6, $labelImpuesto . ':', 1, 0, 'R');
+        $pdf->Cell(35, 6, (!empty($impuesto['incluido_en_precio']) ? '' : '+') . '$' . number_format($montoImpuesto, 2), 1, 1, 'R');
+        $pdf->SetTextColor(0, 0, 0);
+    }
 }
 
 $pdf->Cell(120, 6, '', 0);

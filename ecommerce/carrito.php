@@ -2,6 +2,7 @@
 require 'config.php';
 require 'includes/descuentos.php';
 require 'includes/envio.php';
+require_once __DIR__ . '/admin/includes/contabilidad_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -97,7 +98,16 @@ $descuento_info = aplicar_descuento_actual($pdo, $subtotal);
 $descuento_monto = $descuento_info['monto'] ?? 0.0;
 $codigo_descuento = $descuento_info['codigo'] ?? '';
 
-$total = max(0, $subtotal + $envio - $descuento_monto);
+$impuestos_pedido_activos = contabilidad_get_impuestos($pdo, true);
+$base_subtotal_pedido = max(0, $subtotal - $descuento_monto);
+$base_total_pedido = max(0, $subtotal + $envio - $descuento_monto);
+$resumen_impuestos_pedido = contabilidad_calcular_impuestos(
+    $impuestos_pedido_activos,
+    $base_subtotal_pedido,
+    $base_total_pedido,
+    'pedido'
+);
+$total = max(0, (float)($resumen_impuestos_pedido['total_con_impuestos'] ?? $base_total_pedido));
 
 require 'includes/header.php';
 ?>
@@ -239,6 +249,19 @@ require 'includes/header.php';
                             <div class="d-flex justify-content-between mb-3">
                                 <span>Descuento:</span>
                                 <strong class="text-success">- $<?= number_format($descuento_monto, 2, ',', '.') ?></strong>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($resumen_impuestos_pedido['detalle']) && is_array($resumen_impuestos_pedido['detalle'])): ?>
+                            <?php foreach ($resumen_impuestos_pedido['detalle'] as $impuesto): ?>
+                                <?php $montoImpuesto = (float)($impuesto['monto'] ?? 0); ?>
+                                <?php if ($montoImpuesto <= 0) { continue; } ?>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span><?= htmlspecialchars((string)($impuesto['nombre'] ?? 'Impuesto')) ?><?= !empty($impuesto['incluido_en_precio']) ? ' (incluido)' : '' ?>:</span>
+                                    <strong class="<?= !empty($impuesto['incluido_en_precio']) ? 'text-muted' : 'text-danger' ?>"><?= !empty($impuesto['incluido_en_precio']) ? '' : '+ ' ?>$<?= number_format($montoImpuesto, 2, ',', '.') ?></strong>
+                                </div>
+                            <?php endforeach; ?>
+                            <div class="mb-3 pb-3 border-bottom">
+                                <small class="text-muted">Los impuestos incluidos ya forman parte del precio; los adicionales se suman automáticamente al total.</small>
                             </div>
                         <?php endif; ?>
                         <div class="d-flex justify-content-between mb-4">
