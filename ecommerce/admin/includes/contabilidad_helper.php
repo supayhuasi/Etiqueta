@@ -917,6 +917,10 @@ if (!function_exists('contabilidad_afip_obtener_ta')) {
                 $ambienteActual = (string)($afipConfig['ambiente'] ?? 'homologacion');
                 $mensaje .= ' Verificá que el .crt cargado sea el certificado final emitido por ARCA/AFIP para ' . $ambienteActual . ' y no un CSR, un certificado autofirmado o uno generado para el otro ambiente.';
                 $e = new RuntimeException($mensaje, 0, $e);
+            } elseif (stripos($mensaje, 'Computador no autorizado a acceder al servicio') !== false) {
+                $servicioActual = (string)($endpoints['service'] ?? 'wsfe');
+                $mensaje .= ' La relación puede figurar como existente, pero AFIP todavía no reconoce este certificado/alias para ' . $servicioActual . '. Reasociá el servicio bajo el CUIT representado, eliminá y recreá la relación si emitiste un certificado nuevo y esperá unos minutos para la propagación.';
+                $e = new RuntimeException($mensaje, 0, $e);
             }
             $afipConfig['ultimo_error'] = $mensaje;
             contabilidad_save_afip_config($pdo, $afipConfig);
