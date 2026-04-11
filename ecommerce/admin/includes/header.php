@@ -403,16 +403,17 @@ $notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes
 $notificaciones_permiso_admin = ($role === 'admin');
 
 if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
-    try {
-        if (
-            $notificaciones_permiso_produccion
-            &&
-            admin_table_exists($pdo, 'ecommerce_ordenes_produccion')
-            && admin_table_exists($pdo, 'ecommerce_pedidos')
-            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'pedido_id')
-            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'fecha_entrega')
-            && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'estado')
-        ) {
+
+    // --- Sección 1: Órdenes de producción atrasadas (cache diario) ---
+    if (
+        $notificaciones_permiso_produccion
+        && admin_table_exists($pdo, 'ecommerce_ordenes_produccion')
+        && admin_table_exists($pdo, 'ecommerce_pedidos')
+        && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'pedido_id')
+        && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'fecha_entrega')
+        && admin_column_exists($pdo, 'ecommerce_ordenes_produccion', 'estado')
+    ) {
+        try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_notificaciones_diarias (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 tipo VARCHAR(80) NOT NULL,
@@ -472,7 +473,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     $notificaciones_atrasos = $pdo->query($sql_lista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 }
 
-                $stmt_insert = $pdo->prepare("INSERT INTO ecommerce_notificaciones_diarias (tipo, fecha_notificacion, total, payload_json) VALUES (?, ?, ?, ?)");
+                // INSERT IGNORE evita error de clave duplicada en requests concurrentes
+                $stmt_insert = $pdo->prepare("INSERT IGNORE INTO ecommerce_notificaciones_diarias (tipo, fecha_notificacion, total, payload_json) VALUES (?, ?, ?, ?)");
                 $stmt_insert->execute([
                     $tipo_notif,
                     $hoy,
@@ -498,18 +500,22 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     }
                 }
             }
+        } catch (Throwable $e) {
+            error_log('Notif produccion error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            &&
-            admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
-            && admin_table_exists($pdo, 'usuarios')
-            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'usuario_id')
-            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'titulo')
-            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'estado')
-            && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_limite')
-        ) {
+    // --- Sección 2: Tareas vencidas ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
+        && admin_table_exists($pdo, 'usuarios')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'usuario_id')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'titulo')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'estado')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_limite')
+    ) {
+        try {
             $sql_tareas_vencidas_count = "
                 SELECT COUNT(*)
                 FROM ecommerce_tareas_usuarios t
@@ -545,18 +551,22 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     }
                 }
             }
+        } catch (Throwable $e) {
+            error_log('Notif tareas vencidas error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            &&
-            admin_table_exists($pdo, 'asistencias')
-            && admin_table_exists($pdo, 'empleados')
-            && admin_column_exists($pdo, 'asistencias', 'empleado_id')
-            && admin_column_exists($pdo, 'asistencias', 'fecha')
-            && admin_column_exists($pdo, 'asistencias', 'estado')
-            && admin_column_exists($pdo, 'asistencias', 'hora_entrada')
-        ) {
+    // --- Sección 3: Tardanzas del día ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'asistencias')
+        && admin_table_exists($pdo, 'empleados')
+        && admin_column_exists($pdo, 'asistencias', 'empleado_id')
+        && admin_column_exists($pdo, 'asistencias', 'fecha')
+        && admin_column_exists($pdo, 'asistencias', 'estado')
+        && admin_column_exists($pdo, 'asistencias', 'hora_entrada')
+    ) {
+        try {
             $sql_tardes_count = "
                 SELECT COUNT(*)
                 FROM asistencias a
@@ -581,19 +591,23 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 ";
                 $notificaciones_tardanzas = $pdo->query($sql_tardes)->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
+        } catch (Throwable $e) {
+            error_log('Notif tardanzas error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            &&
-            admin_table_exists($pdo, 'usuarios')
-            && admin_table_exists($pdo, 'roles')
-            && admin_table_exists($pdo, 'ecommerce_produccion_items_barcode')
-            && admin_column_exists($pdo, 'usuarios', 'rol_id')
-            && admin_column_exists($pdo, 'usuarios', 'activo')
-            && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'usuario_inicio')
-            && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'estado')
-        ) {
+    // --- Sección 4: Empleados sin tareas activas ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'usuarios')
+        && admin_table_exists($pdo, 'roles')
+        && admin_table_exists($pdo, 'ecommerce_produccion_items_barcode')
+        && admin_column_exists($pdo, 'usuarios', 'rol_id')
+        && admin_column_exists($pdo, 'usuarios', 'activo')
+        && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'usuario_inicio')
+        && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'estado')
+    ) {
+        try {
             $sql_sin_tareas_count = "
                 SELECT COUNT(*)
                 FROM usuarios u
@@ -630,41 +644,62 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 ";
                 $notificaciones_sin_tareas = $pdo->query($sql_sin_tareas)->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
+        } catch (Throwable $e) {
+            error_log('Notif sin tareas error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            &&
-            admin_table_exists($pdo, 'ecommerce_admin_mensajes')
-            && isset($_SESSION['user']['id'])
-            && is_numeric($_SESSION['user']['id'])
-        ) {
+    // --- Sección 5: Mensajes no leídos ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'ecommerce_admin_mensajes')
+        && isset($_SESSION['user']['id'])
+        && is_numeric($_SESSION['user']['id'])
+    ) {
+        try {
             $admin_id_actual = (int)$_SESSION['user']['id'];
 
-            $stmt = $pdo->prepare("\n                SELECT COUNT(*)\n                FROM ecommerce_admin_mensajes\n                WHERE destinatario_id = ? AND leido = 0\n            ");
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_admin_mensajes WHERE destinatario_id = ? AND leido = 0");
             $stmt->execute([$admin_id_actual]);
             $notificaciones_mensajes_total = (int)$stmt->fetchColumn();
 
             if ($notificaciones_mensajes_total > 0) {
-                $stmt = $pdo->prepare("\n                    SELECT\n                        m.id,\n                        m.asunto,\n                        m.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS remitente_nombre\n                    FROM ecommerce_admin_mensajes m\n                    INNER JOIN usuarios u ON u.id = m.remitente_id\n                    WHERE m.destinatario_id = ?\n                      AND m.leido = 0\n                    ORDER BY m.fecha_creacion DESC\n                    LIMIT 5\n                ");
+                $stmt = $pdo->prepare("
+                    SELECT
+                        m.id,
+                        m.asunto,
+                        m.fecha_creacion,
+                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario) AS remitente_nombre
+                    FROM ecommerce_admin_mensajes m
+                    INNER JOIN usuarios u ON u.id = m.remitente_id
+                    WHERE m.destinatario_id = ?
+                      AND m.leido = 0
+                    ORDER BY m.fecha_creacion DESC
+                    LIMIT 5
+                ");
                 $stmt->execute([$admin_id_actual]);
                 $notificaciones_mensajes = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
+        } catch (Throwable $e) {
+            error_log('Notif mensajes error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            && admin_table_exists($pdo, 'ecommerce_pedidos')
-            && admin_column_exists($pdo, 'ecommerce_pedidos', 'id')
-            && admin_column_exists($pdo, 'ecommerce_pedidos', 'numero_pedido')
-        ) {
+    // --- Sección 6: Pedidos nuevos (últimas 24h) ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'ecommerce_pedidos')
+        && admin_column_exists($pdo, 'ecommerce_pedidos', 'id')
+        && admin_column_exists($pdo, 'ecommerce_pedidos', 'numero_pedido')
+    ) {
+        try {
             $fechaPedidoCol = admin_pick_date_column($pdo, 'ecommerce_pedidos', ['fecha_pedido', 'fecha_creacion']);
             if ($fechaPedidoCol !== null) {
                 $sqlPedidosCount = "
                     SELECT COUNT(*)
                     FROM ecommerce_pedidos p
                     WHERE p.{$fechaPedidoCol} IS NOT NULL
-                        AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                      AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                       AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
                 ";
                 $notificaciones_pedidos_recientes_total = (int)$pdo->query($sqlPedidosCount)->fetchColumn();
@@ -681,7 +716,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         FROM ecommerce_pedidos p
                         LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                         WHERE p.{$fechaPedidoCol} IS NOT NULL
-                                                    AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                          AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                           AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
                         ORDER BY p.{$fechaPedidoCol} DESC, p.id DESC
                         LIMIT 6
@@ -689,9 +724,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     $notificaciones_pedidos_recientes = $pdo->query($sqlPedidosLista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 }
             }
+        } catch (Throwable $e) {
+            error_log('Notif pedidos error: ' . $e->getMessage());
         }
+    }
 
-        if ($notificaciones_permiso_admin && admin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
+    // --- Sección 7: Pagos cargados (últimas 24h) ---
+    if ($notificaciones_permiso_admin && admin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
+        try {
             if (!admin_column_exists($pdo, 'ecommerce_pedido_pagos', 'fecha_creacion')) {
                 try {
                     $pdo->exec("ALTER TABLE ecommerce_pedido_pagos ADD COLUMN fecha_creacion DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER creado_por");
@@ -707,7 +747,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     SELECT COUNT(*)
                     FROM ecommerce_pedido_pagos pp
                     WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
-                        AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                      AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                       AND COALESCE(pp.monto, 0) > 0
                 ";
                 $notificaciones_pagos_recientes_total = (int)$pdo->query($sqlPagosCount)->fetchColumn();
@@ -727,7 +767,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         LEFT JOIN ecommerce_pedidos p ON p.id = pp.pedido_id
                         LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                         WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
-                                                    AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                          AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                           AND COALESCE(pp.monto, 0) > 0
                         ORDER BY pp.{$fechaPagoNotifCol} DESC, pp.id DESC
                         LIMIT 6
@@ -735,83 +775,58 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     $notificaciones_pagos_recientes = $pdo->query($sqlPagosLista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 }
             }
+        } catch (Throwable $e) {
+            error_log('Notif pagos error: ' . $e->getMessage());
         }
+    }
 
-        if (
-            $notificaciones_permiso_admin
-            && admin_table_exists($pdo, 'ecommerce_cotizaciones')
-            && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
-            && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total')
-        ) {
+    // --- Sección 8: Cotizaciones de alto valor (últimas 24h) ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'ecommerce_cotizaciones')
+        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
+        && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total')
+    ) {
+        try {
             $stmtCotCount = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_cotizaciones WHERE fecha_creacion >= DATE_SUB(NOW(), INTERVAL 1 DAY) AND COALESCE(total, 0) >= ?");
             $stmtCotCount->execute([$notificaciones_cotizacion_alta_monto]);
             $notificaciones_cotizaciones_altas_total = (int)$stmtCotCount->fetchColumn();
 
             if ($notificaciones_cotizaciones_altas_total > 0) {
-                $stmtCotLista = $pdo->prepare("\n                    SELECT\n                        c.id,\n                        c.numero_cotizacion,\n                        c.nombre_cliente,\n                        c.total,\n                        c.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin vendedor') AS vendedor_nombre\n                    FROM ecommerce_cotizaciones c\n                    LEFT JOIN usuarios u ON u.id = c.creado_por\n                    WHERE c.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 1 DAY)\n                      AND COALESCE(c.total, 0) >= ?\n                    ORDER BY c.total DESC, c.fecha_creacion DESC\n                    LIMIT 6\n                ");
+                $stmtCotLista = $pdo->prepare("
+                    SELECT
+                        c.id,
+                        c.numero_cotizacion,
+                        c.nombre_cliente,
+                        c.total,
+                        c.fecha_creacion,
+                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin vendedor') AS vendedor_nombre
+                    FROM ecommerce_cotizaciones c
+                    LEFT JOIN usuarios u ON u.id = c.creado_por
+                    WHERE c.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                      AND COALESCE(c.total, 0) >= ?
+                    ORDER BY c.total DESC, c.fecha_creacion DESC
+                    LIMIT 6
+                ");
                 $stmtCotLista->execute([$notificaciones_cotizacion_alta_monto]);
                 $notificaciones_cotizaciones_altas = $stmtCotLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
+        } catch (Throwable $e) {
+            error_log('Notif cotizaciones error: ' . $e->getMessage());
         }
+    }
 
-        $notificaciones_total = (int)$notificaciones_atrasos_total;
-        if ($notificaciones_permiso_admin) {
-            $notificaciones_total +=
-                (int)$notificaciones_tareas_vencidas_total
-                + (int)$notificaciones_tardanzas_total
-                + (int)$notificaciones_sin_tareas_total
-                + (int)$notificaciones_mensajes_total
-                + (int)$notificaciones_pedidos_recientes_total
-                + (int)$notificaciones_pagos_recientes_total
-                + (int)$notificaciones_cotizaciones_altas_total;
-        }
-    } catch (Throwable $e) {
-        if (!is_array($notificaciones_atrasos)) {
-            $notificaciones_atrasos = [];
-            $notificaciones_atrasos_total = 0;
-        }
-        if (!is_array($notificaciones_tardanzas)) {
-            $notificaciones_tardanzas = [];
-            $notificaciones_tardanzas_total = 0;
-        }
-        if (!is_array($notificaciones_sin_tareas)) {
-            $notificaciones_sin_tareas = [];
-            $notificaciones_sin_tareas_total = 0;
-        }
-        if (!is_array($notificaciones_tareas_vencidas)) {
-            $notificaciones_tareas_vencidas = [];
-            $notificaciones_tareas_vencidas_total = 0;
-        }
-        if (!is_array($notificaciones_mensajes)) {
-            $notificaciones_mensajes = [];
-            $notificaciones_mensajes_total = 0;
-        }
-        if (!is_array($notificaciones_pedidos_recientes)) {
-            $notificaciones_pedidos_recientes = [];
-            $notificaciones_pedidos_recientes_total = 0;
-        }
-        if (!is_array($notificaciones_pagos_recientes)) {
-            $notificaciones_pagos_recientes = [];
-            $notificaciones_pagos_recientes_total = 0;
-        }
-        if (!is_array($notificaciones_cotizaciones_altas)) {
-            $notificaciones_cotizaciones_altas = [];
-            $notificaciones_cotizaciones_altas_total = 0;
-        }
-
-        $notificaciones_total = (int)$notificaciones_atrasos_total;
-        if ($notificaciones_permiso_admin) {
-            $notificaciones_total +=
-                (int)$notificaciones_tareas_vencidas_total
-                + (int)$notificaciones_tardanzas_total
-                + (int)$notificaciones_sin_tareas_total
-                + (int)$notificaciones_mensajes_total
-                + (int)$notificaciones_pedidos_recientes_total
-                + (int)$notificaciones_pagos_recientes_total
-                + (int)$notificaciones_cotizaciones_altas_total;
-        }
-
-        error_log('Header notificaciones warning: ' . $e->getMessage());
+    // --- Totales finales ---
+    $notificaciones_total = (int)$notificaciones_atrasos_total;
+    if ($notificaciones_permiso_admin) {
+        $notificaciones_total +=
+            (int)$notificaciones_tareas_vencidas_total
+            + (int)$notificaciones_tardanzas_total
+            + (int)$notificaciones_sin_tareas_total
+            + (int)$notificaciones_mensajes_total
+            + (int)$notificaciones_pedidos_recientes_total
+            + (int)$notificaciones_pagos_recientes_total
+            + (int)$notificaciones_cotizaciones_altas_total;
     }
 }
 ?>
@@ -1151,6 +1166,16 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 </button>
                 <div class="dropdown-menu dropdown-menu-end notif-dropdown">
                     <div class="notif-header">Notificaciones Admin</div>
+                    <?php if (isset($_GET['debug_notif'])): ?>
+                        <div class="notif-section-title" style="background:#fff3cd;color:#856404;">
+                            DEBUG — rol: <?= htmlspecialchars($role) ?> | total: <?= (int)$notificaciones_total ?>
+                            | pedidos: <?= (int)$notificaciones_pedidos_recientes_total ?>
+                            | pagos: <?= (int)$notificaciones_pagos_recientes_total ?>
+                            | cot: <?= (int)$notificaciones_cotizaciones_altas_total ?>
+                            | tareas: <?= (int)$notificaciones_tareas_vencidas_total ?>
+                            | mensajes: <?= (int)$notificaciones_mensajes_total ?>
+                        </div>
+                    <?php endif; ?>
                     <?php if ($notificaciones_total <= 0): ?>
                         <div class="notif-empty">No hay notificaciones nuevas en este momento.</div>
                     <?php else: ?>
