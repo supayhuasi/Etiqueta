@@ -3,9 +3,10 @@ require 'includes/header.php';
 
 // Obtener lista de usuarios
 $stmt = $pdo->query("
-    SELECT u.id, u.usuario, u.nombre, u.activo, r.nombre as rol_nombre
+    SELECT u.id, u.usuario, u.nombre, u.activo, u.empleado_id, r.nombre as rol_nombre, e.nombre AS empleado_nombre
     FROM usuarios u
     LEFT JOIN roles r ON u.rol_id = r.id
+    LEFT JOIN empleados e ON e.id = u.empleado_id
     ORDER BY u.usuario
 ");
 $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -28,6 +29,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <th>ID</th>
                         <th>Usuario</th>
                         <th>Nombre</th>
+                        <th>Empleado</th>
                         <th>Rol</th>
                         <th>Estado</th>
                         <th>Acciones</th>
@@ -36,7 +38,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <tbody>
                     <?php if (empty($usuarios)): ?>
                         <tr>
-                            <td colspan="6" class="text-center text-muted">No hay usuarios registrados</td>
+                            <td colspan="7" class="text-center text-muted">No hay usuarios registrados</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($usuarios as $user): ?>
@@ -44,6 +46,13 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= (int)$user['id'] ?></td>
                                 <td><?= htmlspecialchars($user['usuario']) ?></td>
                                 <td><?= htmlspecialchars($user['nombre']) ?></td>
+                                <td>
+                                    <?php if (!empty($user['empleado_id'])): ?>
+                                        <span class="badge bg-light text-dark border">#<?= (int)$user['empleado_id'] ?> · <?= htmlspecialchars($user['empleado_nombre'] ?? 'Empleado') ?></span>
+                                    <?php else: ?>
+                                        <span class="text-muted">Sin vincular</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <span class="badge bg-<?= ($user['rol_nombre'] ?? '') === 'admin' ? 'danger' : 'info' ?>">
                                         <?= htmlspecialchars($user['rol_nombre'] ?? 'Sin rol') ?>
