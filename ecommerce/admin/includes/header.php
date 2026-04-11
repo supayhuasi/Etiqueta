@@ -398,6 +398,8 @@ $notificaciones_cotizaciones_altas_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
 $notificaciones_total = 0;
 $notificaciones_atrasos_clientes_texto = '';
+$notif_debug_errors = [];
+$notif_debug_info = [];
 
 $notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes_produccion');
 $notificaciones_permiso_admin = ($role === 'admin');
@@ -502,6 +504,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif produccion error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[produccion] ' . $e->getMessage();
         }
     }
 
@@ -553,6 +556,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif tareas vencidas error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[tareas] ' . $e->getMessage();
         }
     }
 
@@ -593,6 +597,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif tardanzas error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[tardanzas] ' . $e->getMessage();
         }
     }
 
@@ -646,6 +651,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif sin tareas error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[sin_tareas] ' . $e->getMessage();
         }
     }
 
@@ -682,6 +688,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif mensajes error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[mensajes] ' . $e->getMessage();
         }
     }
 
@@ -694,6 +701,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     ) {
         try {
             $fechaPedidoCol = admin_pick_date_column($pdo, 'ecommerce_pedidos', ['fecha_pedido', 'fecha_creacion']);
+            $notif_debug_info['pedidos_col'] = $fechaPedidoCol ?? 'NINGUNA';
             if ($fechaPedidoCol !== null) {
                 $sqlPedidosCount = "
                     SELECT COUNT(*)
@@ -726,12 +734,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif pedidos error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[pedidos] ' . $e->getMessage();
         }
     }
 
     // --- Sección 7: Pagos cargados (últimas 24h) ---
     if ($notificaciones_permiso_admin && admin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
         try {
+            $notif_debug_info['pagos_tabla_existe'] = true;
             if (!admin_column_exists($pdo, 'ecommerce_pedido_pagos', 'fecha_creacion')) {
                 try {
                     $pdo->exec("ALTER TABLE ecommerce_pedido_pagos ADD COLUMN fecha_creacion DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER creado_por");
@@ -742,6 +752,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
 
             $fechaPagoNotifCol = admin_pick_date_column($pdo, 'ecommerce_pedido_pagos', ['fecha_creacion', 'fecha_pago']);
+            $notif_debug_info['pagos_col'] = $fechaPagoNotifCol ?? 'NINGUNA';
             if ($fechaPagoNotifCol !== null) {
                 $sqlPagosCount = "
                     SELECT COUNT(*)
@@ -777,6 +788,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif pagos error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[pagos] ' . $e->getMessage();
         }
     }
 
@@ -813,6 +825,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             }
         } catch (Throwable $e) {
             error_log('Notif cotizaciones error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[cotizaciones] ' . $e->getMessage();
         }
     }
 
@@ -1167,13 +1180,18 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <div class="dropdown-menu dropdown-menu-end notif-dropdown">
                     <div class="notif-header">Notificaciones Admin</div>
                     <?php if (isset($_GET['debug_notif'])): ?>
-                        <div class="notif-section-title" style="background:#fff3cd;color:#856404;">
-                            DEBUG — rol: <?= htmlspecialchars($role) ?> | total: <?= (int)$notificaciones_total ?>
-                            | pedidos: <?= (int)$notificaciones_pedidos_recientes_total ?>
-                            | pagos: <?= (int)$notificaciones_pagos_recientes_total ?>
-                            | cot: <?= (int)$notificaciones_cotizaciones_altas_total ?>
-                            | tareas: <?= (int)$notificaciones_tareas_vencidas_total ?>
-                            | mensajes: <?= (int)$notificaciones_mensajes_total ?>
+                        <div style="background:#fff3cd;color:#856404;padding:6px 10px;font-size:11px;border-bottom:1px solid #ffc107;white-space:pre-wrap;">
+                            <strong>DEBUG NOTIF</strong><br>
+                            rol=<?= htmlspecialchars($role) ?> total=<?= (int)$notificaciones_total ?><br>
+                            pedidos=<?= (int)$notificaciones_pedidos_recientes_total ?> (col=<?= htmlspecialchars($notif_debug_info['pedidos_col'] ?? '?') ?>)<br>
+                            pagos=<?= (int)$notificaciones_pagos_recientes_total ?> (col=<?= htmlspecialchars($notif_debug_info['pagos_col'] ?? '?') ?>, tabla=<?= isset($notif_debug_info['pagos_tabla_existe']) ? 'SI' : 'NO' ?>)<br>
+                            cot=<?= (int)$notificaciones_cotizaciones_altas_total ?> (umbral>=<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)<br>
+                            tareas=<?= (int)$notificaciones_tareas_vencidas_total ?> tard=<?= (int)$notificaciones_tardanzas_total ?> mensajes=<?= (int)$notificaciones_mensajes_total ?><br>
+                            NOW()=<?= htmlspecialchars((string)$pdo->query("SELECT NOW()")->fetchColumn()) ?><br>
+                            <?php foreach ($notif_debug_errors as $de): ?>
+                                <span style="color:red;">ERR: <?= htmlspecialchars($de) ?></span><br>
+                            <?php endforeach; ?>
+                            <?php if (empty($notif_debug_errors)): ?><span style="color:green;">Sin errores PHP</span><?php endif; ?>
                         </div>
                     <?php endif; ?>
                     <?php if ($notificaciones_total <= 0): ?>
