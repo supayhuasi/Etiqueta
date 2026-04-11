@@ -371,9 +371,33 @@ if (!empty($listasParaPdf)) {
     $pdf->Cell(65, 7, 'IMPORTE POR CUOTA', 1, 1, 'C', true);
 
     $pdf->SetFont('Arial', '', 9);
-    $subtotalCotizacionBase = (float)($cotizacion['subtotal'] ?? 0);
     $totalCotizacionBase = (float)($cotizacion['total'] ?? 0);
     $listaSeleccionadaCotizacion = (int)($cotizacion['lista_precio_id'] ?? 0);
+    $cuponCotizacion = (float)($cotizacion['cupon_descuento'] ?? 0);
+
+    $baseCotizacionSinImpuestos = max(
+        0,
+        (float)($cotizacion['subtotal'] ?? 0)
+        - (float)($cotizacion['descuento'] ?? 0)
+        - $cuponCotizacion
+    );
+
+    $impuestosAdicionalesMonto = 0.0;
+    if (!empty($impuestosCotizacion) && is_array($impuestosCotizacion)) {
+        foreach ($impuestosCotizacion as $impuesto) {
+            if (!empty($impuesto['incluido_en_precio'])) {
+                continue;
+            }
+            $impuestosAdicionalesMonto += max(0, (float)($impuesto['monto'] ?? 0));
+        }
+    }
+    if ($impuestosAdicionalesMonto <= 0 && $baseCotizacionSinImpuestos > 0) {
+        $impuestosAdicionalesMonto = max(0, $totalCotizacionBase - $baseCotizacionSinImpuestos);
+    }
+    $factorImpuestosAdicionales = $baseCotizacionSinImpuestos > 0
+        ? ($impuestosAdicionalesMonto / $baseCotizacionSinImpuestos)
+        : 0;
+
     foreach ($listasParaPdf as $listaPdf) {
         $listaId = (int)($listaPdf['id'] ?? 0);
         $cuotas = max(1, (int)($listaPdf['cantidad_cuotas'] ?? 1));
@@ -391,10 +415,10 @@ if (!empty($listasParaPdf)) {
                 $productoPrecioBaseMap,
                 $productoTipoPrecioMap
             );
-            if ($subtotalCotizacionBase > 0 && $subtotalLista > 0) {
-                $totalLista = $totalCotizacionBase * ($subtotalLista / $subtotalCotizacionBase);
-            } elseif ($subtotalLista > 0) {
-                $totalLista = $subtotalLista;
+
+            if ($subtotalLista > 0) {
+                $baseListaSinImpuestos = max(0, $subtotalLista - $cuponCotizacion);
+                $totalLista = $baseListaSinImpuestos * (1 + $factorImpuestosAdicionales);
             } else {
                 $totalLista = $totalCotizacionBase;
             }
