@@ -17,6 +17,58 @@ $items = json_decode($cotizacion['items'], true) ?? [];
 $impuestosCotizacion = !empty($cotizacion['impuestos_json']) ? (json_decode((string)$cotizacion['impuestos_json'], true) ?: []) : [];
 
 $listasParaPdf = [];
+$listaItemsMap = [];
+$listaCategoriasMap = [];
+$productoCategoriaMap = [];
+
+function calcular_subtotal_items_para_lista(array $items, int $listaId, array $listaItemsMap, array $listaCategoriasMap, array $productoCategoriaMap): float {
+    $subtotal = 0.0;
+
+    foreach ($items as $item) {
+        $cantidad = max(1, (int)($item['cantidad'] ?? 1));
+        $productoId = !empty($item['producto_id']) ? (int)$item['producto_id'] : 0;
+
+        $precioBase = isset($item['precio_base'])
+            ? (float)$item['precio_base']
+            : (float)($item['precio_unitario'] ?? 0);
+
+        $costoAtributos = 0.0;
+        // Solo sumar atributos cuando hay precio_base para evitar duplicar costo adicional.
+        if (isset($item['precio_base']) && !empty($item['atributos']) && is_array($item['atributos'])) {
+            foreach ($item['atributos'] as $attr) {
+                $costoAtributos += (float)($attr['costo_adicional'] ?? 0);
+            }
+        }
+
+        $precioLista = $precioBase;
+
+        if ($productoId > 0 && isset($listaItemsMap[$listaId][$productoId])) {
+            $cfg = $listaItemsMap[$listaId][$productoId];
+            $precioNuevo = (float)($cfg['precio_nuevo'] ?? 0);
+            $descItem = (float)($cfg['descuento_porcentaje'] ?? 0);
+
+            if ($precioNuevo > 0) {
+                $precioLista = $precioNuevo;
+            } elseif ($descItem > 0) {
+                $precioLista = $precioBase * (1 - ($descItem / 100));
+            }
+        } elseif ($productoId > 0) {
+            $categoriaId = (int)($productoCategoriaMap[$productoId] ?? 0);
+            if ($categoriaId > 0 && isset($listaCategoriasMap[$listaId][$categoriaId])) {
+                $descCat = (float)$listaCategoriasMap[$listaId][$categoriaId];
+                if ($descCat > 0) {
+                    $precioLista = $precioBase * (1 - ($descCat / 100));
+                }
+            }
+        }
+
+        $precioUnitarioFinal = max(0, $precioLista + $costoAtributos);
+        $subtotal += $precioUnitarioFinal * $cantidad;
+    }
+
+    return round($subtotal, 2);
+}
+
 try {
     $columnasListas = $pdo->query("SHOW COLUMNS FROM ecommerce_listas_precios")->fetchAll(PDO::FETCH_COLUMN);
     $tieneMostrarEnPdf = in_array('mostrar_en_cotizacion_pdf', $columnasListas, true);
@@ -27,6 +79,60 @@ try {
 
     $stmt = $pdo->query("SELECT id, nombre, {$selectCuotas} AS cantidad_cuotas FROM ecommerce_listas_precios WHERE activo = 1{$whereMostrar} ORDER BY nombre ASC");
     $listasParaPdf = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    if (!empty($listasParaPdf)) {
+        $listasIds = array_values(array_unique(array_map(static function ($row) {
+            return (int)($row['id'] ?? 0);
+        }, $listasParaPdf)));
+        $listasIds = array_values(array_filter($listasIds, static function ($id) {
+            return $id > 0;
+        }));
+
+        if (!empty($listasIds)) {
+            $placeholdersListas = implode(',', array_fill(0, count($listasIds), '?'));
+
+            $stmt = $pdo->prepare("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1 AND lista_precio_id IN ($placeholdersListas)");
+            $stmt->execute($listasIds);
+            $rowsItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsItems as $row) {
+                $lp = (int)$row['lista_precio_id'];
+                $pid = (int)$row['producto_id'];
+                $listaItemsMap[$lp][$pid] = [
+                    'precio_nuevo' => (float)($row['precio_nuevo'] ?? 0),
+                    'descuento_porcentaje' => (float)($row['descuento_porcentaje'] ?? 0),
+                ];
+            }
+
+            $stmt = $pdo->prepare("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1 AND lista_precio_id IN ($placeholdersListas)");
+            $stmt->execute($listasIds);
+            $rowsCats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsCats as $row) {
+                $lp = (int)$row['lista_precio_id'];
+                $cid = (int)$row['categoria_id'];
+                $listaCategoriasMap[$lp][$cid] = (float)($row['descuento_porcentaje'] ?? 0);
+            }
+        }
+
+        $productoIds = [];
+        foreach ($items as $item) {
+            if (!empty($item['producto_id'])) {
+                $productoIds[] = (int)$item['producto_id'];
+            }
+        }
+        $productoIds = array_values(array_unique(array_filter($productoIds, static function ($id) {
+            return $id > 0;
+        })));
+
+        if (!empty($productoIds)) {
+            $placeholdersProductos = implode(',', array_fill(0, count($productoIds), '?'));
+            $stmt = $pdo->prepare("SELECT id, categoria_id FROM ecommerce_productos WHERE id IN ($placeholdersProductos)");
+            $stmt->execute($productoIds);
+            $rowsProductos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsProductos as $row) {
+                $productoCategoriaMap[(int)$row['id']] = (int)($row['categoria_id'] ?? 0);
+            }
+        }
+    }
 } catch (Exception $e) {
     $listasParaPdf = [];
 }
@@ -241,9 +347,22 @@ if (!empty($listasParaPdf)) {
     $pdf->Cell(65, 7, 'IMPORTE POR CUOTA', 1, 1, 'C', true);
 
     $pdf->SetFont('Arial', '', 9);
+    $subtotalCotizacionBase = (float)($cotizacion['subtotal'] ?? 0);
+    $totalCotizacionBase = (float)($cotizacion['total'] ?? 0);
     foreach ($listasParaPdf as $listaPdf) {
+        $listaId = (int)($listaPdf['id'] ?? 0);
         $cuotas = max(1, (int)($listaPdf['cantidad_cuotas'] ?? 1));
-        $importeCuota = ((float)$cotizacion['total']) / $cuotas;
+
+        $subtotalLista = calcular_subtotal_items_para_lista($items, $listaId, $listaItemsMap, $listaCategoriasMap, $productoCategoriaMap);
+        if ($subtotalCotizacionBase > 0 && $subtotalLista > 0) {
+            $totalLista = $totalCotizacionBase * ($subtotalLista / $subtotalCotizacionBase);
+        } elseif ($subtotalLista > 0) {
+            $totalLista = $subtotalLista;
+        } else {
+            $totalLista = $totalCotizacionBase;
+        }
+
+        $importeCuota = $totalLista / $cuotas;
 
         $pdf->Cell(90, 6, utf8_decode((string)($listaPdf['nombre'] ?? 'Lista')), 1);
         $pdf->Cell(35, 6, (string)$cuotas, 1, 0, 'C');
