@@ -41,6 +41,19 @@ if (!$lista) {
                     </label>
                 </div>
 
+                <div class="form-check mb-3">
+                    <input type="checkbox" name="mostrar_en_cotizacion_pdf" class="form-check-input" id="mostrar_en_cotizacion_pdf" <?= !empty($lista['mostrar_en_cotizacion_pdf']) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="mostrar_en_cotizacion_pdf">
+                        Mostrar esta lista en el PDF de cotizacion
+                    </label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cantidad de cuotas</label>
+                    <input type="number" name="cantidad_cuotas" class="form-control" min="1" step="1" value="<?= max(1, intval($lista['cantidad_cuotas'] ?? 1)) ?>">
+                    <small class="text-muted">Se usara para calcular el importe de cada cuota en el PDF de cotizacion.</small>
+                </div>
+
                 <button type="submit" class="btn btn-primary">💾 Actualizar</button>
                 <a href="listas_precios.php" class="btn btn-secondary">Cancelar</a>
             </form>
