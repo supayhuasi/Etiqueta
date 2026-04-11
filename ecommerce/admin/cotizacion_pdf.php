@@ -16,6 +16,21 @@ if (!$cotizacion) {
 $items = json_decode($cotizacion['items'], true) ?? [];
 $impuestosCotizacion = !empty($cotizacion['impuestos_json']) ? (json_decode((string)$cotizacion['impuestos_json'], true) ?: []) : [];
 
+$listasParaPdf = [];
+try {
+    $columnasListas = $pdo->query("SHOW COLUMNS FROM ecommerce_listas_precios")->fetchAll(PDO::FETCH_COLUMN);
+    $tieneMostrarEnPdf = in_array('mostrar_en_cotizacion_pdf', $columnasListas, true);
+    $tieneCantidadCuotas = in_array('cantidad_cuotas', $columnasListas, true);
+
+    $selectCuotas = $tieneCantidadCuotas ? 'COALESCE(cantidad_cuotas, 1)' : '1';
+    $whereMostrar = $tieneMostrarEnPdf ? ' AND mostrar_en_cotizacion_pdf = 1' : '';
+
+    $stmt = $pdo->query("SELECT id, nombre, {$selectCuotas} AS cantidad_cuotas FROM ecommerce_listas_precios WHERE activo = 1{$whereMostrar} ORDER BY nombre ASC");
+    $listasParaPdf = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Exception $e) {
+    $listasParaPdf = [];
+}
+
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -213,6 +228,28 @@ $pdf->SetFont('Arial', 'B', 12);
 $pdf->SetFillColor(200, 230, 255);
 $pdf->Cell(35, 8, 'TOTAL:', 1, 0, 'R', true);
 $pdf->Cell(35, 8, '$' . number_format($cotizacion['total'], 2), 1, 1, 'R', true);
+
+if (!empty($listasParaPdf)) {
+    $pdf->Ln(5);
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->Cell(0, 6, utf8_decode('Opciones por Lista de Precios'), 0, 1);
+
+    $pdf->SetFont('Arial', 'B', 9);
+    $pdf->SetFillColor(230, 230, 230);
+    $pdf->Cell(90, 7, 'LISTA', 1, 0, 'C', true);
+    $pdf->Cell(35, 7, 'CUOTAS', 1, 0, 'C', true);
+    $pdf->Cell(65, 7, 'IMPORTE POR CUOTA', 1, 1, 'C', true);
+
+    $pdf->SetFont('Arial', '', 9);
+    foreach ($listasParaPdf as $listaPdf) {
+        $cuotas = max(1, (int)($listaPdf['cantidad_cuotas'] ?? 1));
+        $importeCuota = ((float)$cotizacion['total']) / $cuotas;
+
+        $pdf->Cell(90, 6, utf8_decode((string)($listaPdf['nombre'] ?? 'Lista')), 1);
+        $pdf->Cell(35, 6, (string)$cuotas, 1, 0, 'C');
+        $pdf->Cell(65, 6, '$' . number_format($importeCuota, 2), 1, 1, 'R');
+    }
+}
 
 // Observaciones
 if ($cotizacion['observaciones']) {
