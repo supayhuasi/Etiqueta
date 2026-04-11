@@ -31,8 +31,6 @@ if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])
 </style>
 </head>
 <body>
-	<?php include __DIR__ . '/typebot_widget.php'; ?>
-
 <div id="topPromoBar" class="top-promo-bar" role="region" aria-label="Promociones principales">
 	<span>🚚 <strong>ENVÍO GRATIS</strong></span>
 	<span class="sep">|</span>
