@@ -395,6 +395,8 @@ $notificaciones_pagos_recientes = [];
 $notificaciones_pagos_recientes_total = 0;
 $notificaciones_cotizaciones_altas = [];
 $notificaciones_cotizaciones_altas_total = 0;
+$notificacion_prueba_manual = [];
+$notificacion_prueba_manual_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
 $notificaciones_total = 0;
 $notificaciones_atrasos_clientes_texto = '';
@@ -403,6 +405,17 @@ $notif_debug_info = [];
 
 $notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes_produccion');
 $notificaciones_permiso_admin = ($role === 'admin');
+
+if ($notificaciones_permiso_admin && isset($_GET['test_notif'])) {
+    $notificacion_prueba_manual_total = 1;
+    $notificacion_prueba_manual = [
+        'titulo' => 'Notificacion manual de prueba',
+        'detalle' => 'La campana y el dropdown estan funcionando correctamente.',
+        'fecha_evento' => date('Y-m-d H:i:s'),
+        'url' => $admin_url . 'index.php?test_notif=1&debug_notif=1'
+    ];
+    $notif_debug_info['test_notif'] = 'ACTIVA';
+}
 
 if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 
@@ -839,7 +852,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_mensajes_total
             + (int)$notificaciones_pedidos_recientes_total
             + (int)$notificaciones_pagos_recientes_total
-            + (int)$notificaciones_cotizaciones_altas_total;
+            + (int)$notificaciones_cotizaciones_altas_total
+            + (int)$notificacion_prueba_manual_total;
     }
 }
 ?>
@@ -1186,7 +1200,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             pedidos=<?= (int)$notificaciones_pedidos_recientes_total ?> (col=<?= htmlspecialchars($notif_debug_info['pedidos_col'] ?? '?') ?>)<br>
                             pagos=<?= (int)$notificaciones_pagos_recientes_total ?> (col=<?= htmlspecialchars($notif_debug_info['pagos_col'] ?? '?') ?>, tabla=<?= isset($notif_debug_info['pagos_tabla_existe']) ? 'SI' : 'NO' ?>)<br>
                             cot=<?= (int)$notificaciones_cotizaciones_altas_total ?> (umbral>=<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)<br>
-                            tareas=<?= (int)$notificaciones_tareas_vencidas_total ?> tard=<?= (int)$notificaciones_tardanzas_total ?> mensajes=<?= (int)$notificaciones_mensajes_total ?><br>
+                            tareas=<?= (int)$notificaciones_tareas_vencidas_total ?> tard=<?= (int)$notificaciones_tardanzas_total ?> mensajes=<?= (int)$notificaciones_mensajes_total ?> test=<?= (int)$notificacion_prueba_manual_total ?><br>
                             NOW()=<?= htmlspecialchars((string)$pdo->query("SELECT NOW()")->fetchColumn()) ?><br>
                             DB=<?= htmlspecialchars((string)$pdo->query("SELECT DATABASE()")->fetchColumn()) ?><br>
                             <?php
@@ -1202,6 +1216,15 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     <?php if ($notificaciones_total <= 0): ?>
                         <div class="notif-empty">No hay notificaciones nuevas en este momento.</div>
                     <?php else: ?>
+                        <?php if ($notificaciones_permiso_admin && $notificacion_prueba_manual_total > 0): ?>
+                            <div class="notif-section-title">Prueba del modulo (<?= (int)$notificacion_prueba_manual_total ?>)</div>
+                            <a class="notif-item" href="<?= htmlspecialchars($notificacion_prueba_manual['url'] ?? ($admin_url . 'index.php?test_notif=1&debug_notif=1')) ?>">
+                                <div class="fw-semibold"><?= htmlspecialchars($notificacion_prueba_manual['titulo'] ?? 'Notificacion de prueba') ?></div>
+                                <div class="small text-muted"><?= htmlspecialchars($notificacion_prueba_manual['detalle'] ?? '') ?></div>
+                                <div class="small text-primary"><?= !empty($notificacion_prueba_manual['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$notificacion_prueba_manual['fecha_evento']))) : '-' ?></div>
+                            </a>
+                        <?php endif; ?>
+
                         <?php if ($notificaciones_permiso_admin && $notificaciones_mensajes_total > 0): ?>
                             <div class="notif-section-title">Mensajes sin leer (<?= (int)$notificaciones_mensajes_total ?>)</div>
                             <?php foreach ($notificaciones_mensajes as $msg): ?>
