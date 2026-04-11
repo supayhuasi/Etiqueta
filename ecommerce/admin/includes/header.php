@@ -152,6 +152,10 @@ if (!isset($_SESSION['rol'])) {
 // Ajustar según tus necesidades
 $role = strtolower(trim((string)($_SESSION['rol'] ?? 'usuario')));
 $role_aliases = [
+    'administrador' => 'admin',
+    'administrador del sistema' => 'admin',
+    'superadmin' => 'admin',
+    'super_admin' => 'admin',
     'vendedor' => 'ventas',
     'vendedores' => 'ventas',
     'venta' => 'ventas',
@@ -660,7 +664,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     SELECT COUNT(*)
                     FROM ecommerce_pedidos p
                     WHERE p.{$fechaPedidoCol} IS NOT NULL
-                      AND DATE(p.{$fechaPedidoCol}) = CURDATE()
+                        AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                       AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
                 ";
                 $notificaciones_pedidos_recientes_total = (int)$pdo->query($sqlPedidosCount)->fetchColumn();
@@ -677,7 +681,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         FROM ecommerce_pedidos p
                         LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                         WHERE p.{$fechaPedidoCol} IS NOT NULL
-                          AND DATE(p.{$fechaPedidoCol}) = CURDATE()
+                                                    AND p.{$fechaPedidoCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                           AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
                         ORDER BY p.{$fechaPedidoCol} DESC, p.id DESC
                         LIMIT 6
@@ -703,7 +707,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     SELECT COUNT(*)
                     FROM ecommerce_pedido_pagos pp
                     WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
-                      AND DATE(pp.{$fechaPagoNotifCol}) = CURDATE()
+                        AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                       AND COALESCE(pp.monto, 0) > 0
                 ";
                 $notificaciones_pagos_recientes_total = (int)$pdo->query($sqlPagosCount)->fetchColumn();
@@ -723,7 +727,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         LEFT JOIN ecommerce_pedidos p ON p.id = pp.pedido_id
                         LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
                         WHERE pp.{$fechaPagoNotifCol} IS NOT NULL
-                          AND DATE(pp.{$fechaPagoNotifCol}) = CURDATE()
+                                                    AND pp.{$fechaPagoNotifCol} >= DATE_SUB(NOW(), INTERVAL 1 DAY)
                           AND COALESCE(pp.monto, 0) > 0
                         ORDER BY pp.{$fechaPagoNotifCol} DESC, pp.id DESC
                         LIMIT 6
@@ -739,12 +743,12 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'fecha_creacion')
             && admin_column_exists($pdo, 'ecommerce_cotizaciones', 'total')
         ) {
-            $stmtCotCount = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_cotizaciones WHERE DATE(fecha_creacion) = CURDATE() AND COALESCE(total, 0) >= ?");
+            $stmtCotCount = $pdo->prepare("SELECT COUNT(*) FROM ecommerce_cotizaciones WHERE fecha_creacion >= DATE_SUB(NOW(), INTERVAL 1 DAY) AND COALESCE(total, 0) >= ?");
             $stmtCotCount->execute([$notificaciones_cotizacion_alta_monto]);
             $notificaciones_cotizaciones_altas_total = (int)$stmtCotCount->fetchColumn();
 
             if ($notificaciones_cotizaciones_altas_total > 0) {
-                $stmtCotLista = $pdo->prepare("\n                    SELECT\n                        c.id,\n                        c.numero_cotizacion,\n                        c.nombre_cliente,\n                        c.total,\n                        c.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin vendedor') AS vendedor_nombre\n                    FROM ecommerce_cotizaciones c\n                    LEFT JOIN usuarios u ON u.id = c.creado_por\n                    WHERE DATE(c.fecha_creacion) = CURDATE()\n                      AND COALESCE(c.total, 0) >= ?\n                    ORDER BY c.total DESC, c.fecha_creacion DESC\n                    LIMIT 6\n                ");
+                $stmtCotLista = $pdo->prepare("\n                    SELECT\n                        c.id,\n                        c.numero_cotizacion,\n                        c.nombre_cliente,\n                        c.total,\n                        c.fecha_creacion,\n                        COALESCE(NULLIF(TRIM(u.nombre), ''), u.usuario, 'Sin vendedor') AS vendedor_nombre\n                    FROM ecommerce_cotizaciones c\n                    LEFT JOIN usuarios u ON u.id = c.creado_por\n                    WHERE c.fecha_creacion >= DATE_SUB(NOW(), INTERVAL 1 DAY)\n                      AND COALESCE(c.total, 0) >= ?\n                    ORDER BY c.total DESC, c.fecha_creacion DESC\n                    LIMIT 6\n                ");
                 $stmtCotLista->execute([$notificaciones_cotizacion_alta_monto]);
                 $notificaciones_cotizaciones_altas = $stmtCotLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
@@ -1163,7 +1167,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0): ?>
-                            <div class="notif-section-title">Pedidos nuevos hoy (<?= (int)$notificaciones_pedidos_recientes_total ?>)</div>
+                            <div class="notif-section-title">Pedidos nuevos (ultimas 24h) (<?= (int)$notificaciones_pedidos_recientes_total ?>)</div>
                             <?php foreach ($notificaciones_pedidos_recientes as $pedidoNotif): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>pedidos_detalle.php?pedido_id=<?= (int)($pedidoNotif['id'] ?? 0) ?>">
                                     <div class="fw-semibold"><?= htmlspecialchars($pedidoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pedidoNotif['id'] ?? 0))) ?></div>
@@ -1178,7 +1182,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
-                            <div class="notif-section-title">Pagos cargados hoy (<?= (int)$notificaciones_pagos_recientes_total ?>)</div>
+                            <div class="notif-section-title">Pagos cargados (ultimas 24h) (<?= (int)$notificaciones_pagos_recientes_total ?>)</div>
                             <?php foreach ($notificaciones_pagos_recientes as $pagoNotif): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>pedidos_detalle.php?pedido_id=<?= (int)($pagoNotif['pedido_id'] ?? 0) ?>#pagos">
                                     <div class="fw-semibold"><?= htmlspecialchars($pagoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pagoNotif['pedido_id'] ?? 0))) ?></div>
@@ -1194,7 +1198,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
-                            <div class="notif-section-title">Cotizaciones grandes hoy (<?= (int)$notificaciones_cotizaciones_altas_total ?>)</div>
+                            <div class="notif-section-title">Cotizaciones grandes (ultimas 24h) (<?= (int)$notificaciones_cotizaciones_altas_total ?>)</div>
                             <?php foreach ($notificaciones_cotizaciones_altas as $cotNotif): ?>
                                 <a class="notif-item" href="<?= $admin_url ?>cotizacion_detalle.php?id=<?= (int)($cotNotif['id'] ?? 0) ?>">
                                     <div class="fw-semibold"><?= htmlspecialchars($cotNotif['numero_cotizacion'] ?? ('Cotización #' . (int)($cotNotif['id'] ?? 0))) ?></div>
@@ -1306,10 +1310,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             <?= (int)$notificaciones_mensajes_total ?> mensaje(s) sin leer
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0): ?>
-            <?= $notificaciones_mensajes_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_pedidos_recientes_total ?> pedido(s) nuevo(s) hoy
+            <?= $notificaciones_mensajes_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_pedidos_recientes_total ?> pedido(s) nuevo(s) (ultimas 24h)
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_pagos_recientes_total ?> pago(s) cargado(s) hoy
+            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_pagos_recientes_total ?> pago(s) cargado(s) (ultimas 24h)
         <?php endif; ?>
         <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
             <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_cotizaciones_altas_total ?> cotización(es) alta(s) (>$<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)

@@ -475,9 +475,6 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
           <a class="nav-link" href="distribuidores.php">Distribuidores</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="/admin/" target="_blank" rel="noopener">Admin</a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link position-relative" href="carrito.php">
              Carrito
             <?php if (!empty($_SESSION['carrito']) && count($_SESSION['carrito']) > 0): ?>
@@ -496,13 +493,20 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
               <li><a class="dropdown-item" href="mis_pedidos.php">Mis pedidos</a></li>
               <li><a class="dropdown-item" href="cliente_perfil.php">Editar datos</a></li>
               <li><a class="dropdown-item" href="cliente_cambiar_clave.php">Cambiar clave</a></li>
+              <li><a class="dropdown-item" href="/admin/" target="_blank" rel="noopener">Admin Ecommerce</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="cliente_logout.php">Salir</a></li>
             </ul>
           </li>
         <?php else: ?>
-          <li class="nav-item">
-            <a class="nav-link" href="cliente_login.php">Ingresar</a>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="ingresarMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Ingresar
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="ingresarMenu">
+              <li><a class="dropdown-item" href="cliente_login.php">Ingreso cliente</a></li>
+              <li><a class="dropdown-item" href="/admin/" target="_blank" rel="noopener">Ingreso admin ecommerce</a></li>
+            </ul>
           </li>
         <?php endif; ?>
       </ul>
