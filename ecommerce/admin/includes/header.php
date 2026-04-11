@@ -269,6 +269,10 @@ $page_permissions = [
     'faq.php' => 'faq',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
+    'slideshow.php' => 'slideshow',
+    'slideshow_crear.php' => 'slideshow',
+    'slideshow_editar.php' => 'slideshow',
+    'slideshow_eliminar.php' => 'slideshow',
     'mp_config.php' => 'mp_config',
     'mp_link_pago.php' => 'mp_config',
     'admin_mensajes.php' => 'admin_mensajes',
@@ -982,6 +986,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <title>Admin - Tucu Roller</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script>
+        (function () {
+            const storedTheme = localStorage.getItem('admin-theme');
+            const theme = storedTheme === 'dark' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-admin-theme', theme);
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
     <style>
         :root {
             --admin-bg: #f3f6fb;
@@ -993,17 +1005,82 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             --admin-primary-soft: #eff6ff;
             --admin-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
             --admin-radius: 14px;
+            --admin-bg-accent: #eef4ff;
+            --admin-bg-end: #f8fafc;
+            --admin-sidebar-start: #f8fbff;
+            --admin-sidebar-end: #eef2f7;
+            --admin-sidebar-highlight: rgba(255, 255, 255, 0.7);
+            --admin-menu-rail: #e4ecfb;
+            --admin-menu-dot: #a3b7da;
+            --admin-menu-hover: #edf2ff;
+            --admin-menu-active-border: #b7cdfc;
+            --admin-menu-active-surface: #eff5ff;
+            --admin-menu-active-text: #1e40af;
+            --admin-navbar-bg: rgba(255, 255, 255, 0.9);
+            --admin-navbar-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+            --admin-title: #007bff;
+            --admin-notif-header: #f8fbff;
+            --admin-notif-section-bg: #f8fafc;
+            --admin-notif-item-border: #eef2f7;
+            --admin-notif-hover: #f8fbff;
+            --admin-card-header-bg: #f8fbff;
+            --admin-table-head: #334155;
+            --admin-table-row-border: #edf1f7;
+            --admin-table-hover: #f7faff;
+            --admin-input-border: #d9e1ec;
+            --admin-input-focus: #8ab0ff;
+            --admin-alert-bg: #fff3cd;
+            --admin-alert-border: #ffe69c;
+            --admin-alert-text: #664d03;
+        }
+        html[data-admin-theme="dark"] {
+            --admin-bg: #0f172a;
+            --admin-surface: #111827;
+            --admin-border: #243041;
+            --admin-text: #e5edf7;
+            --admin-muted: #94a3b8;
+            --admin-primary: #60a5fa;
+            --admin-primary-soft: rgba(96, 165, 250, 0.12);
+            --admin-shadow: 0 18px 38px rgba(2, 8, 23, 0.38);
+            --admin-bg-accent: #16233b;
+            --admin-bg-end: #0b1220;
+            --admin-sidebar-start: #111a2e;
+            --admin-sidebar-end: #0f172a;
+            --admin-sidebar-highlight: rgba(148, 163, 184, 0.08);
+            --admin-menu-rail: #223149;
+            --admin-menu-dot: #4b6386;
+            --admin-menu-hover: #18253a;
+            --admin-menu-active-border: #2d4f78;
+            --admin-menu-active-surface: #14233a;
+            --admin-menu-active-text: #93c5fd;
+            --admin-navbar-bg: rgba(15, 23, 42, 0.82);
+            --admin-navbar-shadow: 0 10px 26px rgba(2, 8, 23, 0.42);
+            --admin-title: #93c5fd;
+            --admin-notif-header: #172132;
+            --admin-notif-section-bg: #131c2c;
+            --admin-notif-item-border: #243041;
+            --admin-notif-hover: #162338;
+            --admin-card-header-bg: #172132;
+            --admin-table-head: #cbd5e1;
+            --admin-table-row-border: #223149;
+            --admin-table-hover: #162338;
+            --admin-input-border: #314155;
+            --admin-input-focus: #60a5fa;
+            --admin-alert-bg: #3b2f11;
+            --admin-alert-border: #6a5417;
+            --admin-alert-text: #f5deb3;
         }
         body {
-            background: radial-gradient(circle at top right, #eef4ff 0%, var(--admin-bg) 45%, #f8fafc 100%);
+            background: radial-gradient(circle at top right, var(--admin-bg-accent) 0%, var(--admin-bg) 45%, var(--admin-bg-end) 100%);
             color: var(--admin-text);
+            transition: background-color 0.25s ease, color 0.25s ease;
         }
         .sidebar {
-            background: linear-gradient(180deg, #f8fbff 0%, #eef2f7 100%);
+            background: linear-gradient(180deg, var(--admin-sidebar-start) 0%, var(--admin-sidebar-end) 100%);
             min-height: 100vh;
             padding: 0;
             border-right: 1px solid var(--admin-border);
-            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7);
+            box-shadow: inset -1px 0 0 var(--admin-sidebar-highlight);
             position: sticky;
             top: 0;
             max-height: 100vh;
@@ -1053,7 +1130,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .menu-header:hover {
             background: var(--admin-primary-soft);
             color: var(--admin-primary);
-            border-color: #cfe0ff;
+            border-color: color-mix(in srgb, var(--admin-primary) 30%, var(--admin-border));
             transform: translateX(3px);
         }
         .menu-header.collapsed {
@@ -1063,11 +1140,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .menu-items {
             padding: 8px 6px 4px;
             margin-top: 4px;
-            border-left: 2px solid #e4ecfb;
+            border-left: 2px solid var(--admin-menu-rail);
             margin-left: 8px;
         }
         .menu-items a {
-            color: #4b5563;
+            color: color-mix(in srgb, var(--admin-text) 82%, transparent);
             text-decoration: none;
             padding: 8px 15px 8px 35px;
             display: block;
@@ -1082,14 +1159,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             width: 6px;
             height: 6px;
             border-radius: 999px;
-            background: #a3b7da;
+            background: var(--admin-menu-dot);
             position: absolute;
             left: 18px;
             top: 50%;
             transform: translateY(-50%);
         }
         .menu-items a:hover {
-            background-color: #edf2ff;
+            background-color: var(--admin-menu-hover);
             color: var(--admin-primary);
             padding-left: 40px;
         }
@@ -1106,15 +1183,15 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             background: #fff;
         }
         .menu-section.has-active > .menu-header {
-            border-color: #b7cdfc;
-            background: #eff5ff;
-            color: #1e40af;
+            border-color: var(--admin-menu-active-border);
+            background: var(--admin-menu-active-surface);
+            color: var(--admin-menu-active-text);
         }
         .main-content {
             padding: 30px;
         }
         .top-navbar {
-            background: rgba(255, 255, 255, 0.9);
+            background: var(--admin-navbar-bg);
             backdrop-filter: blur(6px);
             color: var(--admin-text);
             padding: 15px 30px;
@@ -1122,7 +1199,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--admin-border);
-            box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+            box-shadow: var(--admin-navbar-shadow);
             position: sticky;
             top: 0;
             z-index: 50;
@@ -1175,28 +1252,28 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             padding: 10px 14px;
             font-weight: 700;
             border-bottom: 1px solid var(--admin-border);
-            background: #f8fbff;
+            background: var(--admin-notif-header);
         }
         .notif-section-title {
             padding: 8px 14px;
             font-size: .78rem;
             text-transform: uppercase;
             letter-spacing: .04em;
-            color: #64748b;
-            background: #f8fafc;
-            border-top: 1px solid #eef2f7;
-            border-bottom: 1px solid #eef2f7;
+            color: var(--admin-muted);
+            background: var(--admin-notif-section-bg);
+            border-top: 1px solid var(--admin-notif-item-border);
+            border-bottom: 1px solid var(--admin-notif-item-border);
             font-weight: 700;
         }
         .notif-item {
             display: block;
             padding: 10px 14px;
-            border-bottom: 1px solid #eef2f7;
+            border-bottom: 1px solid var(--admin-notif-item-border);
             color: inherit;
             text-decoration: none;
         }
         .notif-item:hover {
-            background: #f8fbff;
+            background: var(--admin-notif-hover);
             color: inherit;
         }
         .notif-item:last-child {
@@ -1208,9 +1285,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             font-size: .92rem;
         }
         .notif-alert-strip {
-            background: #fff3cd;
-            border-bottom: 1px solid #ffe69c;
-            color: #664d03;
+            background: var(--admin-alert-bg);
+            border-bottom: 1px solid var(--admin-alert-border);
+            color: var(--admin-alert-text);
             padding: 8px 16px;
             font-size: .92rem;
         }
@@ -1223,7 +1300,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .card-header {
             border-bottom: 1px solid var(--admin-border);
             font-weight: 600;
-            background: #f8fbff;
+            background: var(--admin-card-header-bg);
         }
         .btn {
             border-radius: 10px;
@@ -1240,28 +1317,60 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
         .table {
             --bs-table-bg: transparent;
-        }
+            color: var(--admin-table-head);
         .table thead th {
             border-bottom-width: 1px;
             color: #334155;
             font-size: .82rem;
             text-transform: uppercase;
-            letter-spacing: .03em;
+            border-color: var(--admin-table-row-border);
         }
         .table tbody tr {
-            border-color: #edf1f7;
+            background: var(--admin-table-hover);
         }
         .table-hover tbody tr:hover {
             background: #f7faff;
         }
-        .form-control,
+            border: 1px solid var(--admin-input-border);
         .form-select {
             border-radius: 10px;
             border: 1px solid #d9e1ec;
             box-shadow: none;
-        }
+            border-color: var(--admin-input-focus);
         .form-control:focus,
         .form-select:focus {
+        .theme-toggle {
+            min-width: 124px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-radius: 999px;
+        }
+        .theme-toggle .theme-toggle-label {
+            font-size: .86rem;
+            white-space: nowrap;
+        }
+        html[data-admin-theme="dark"] .btn-outline-primary {
+            --bs-btn-color: #93c5fd;
+            --bs-btn-border-color: #35537b;
+            --bs-btn-hover-bg: #1d3658;
+            --bs-btn-hover-border-color: #5277a7;
+            --bs-btn-hover-color: #fff;
+            --bs-btn-active-bg: #244168;
+            --bs-btn-active-border-color: #5d86ba;
+            --bs-btn-active-color: #fff;
+        }
+        html[data-admin-theme="dark"] .btn-outline-danger {
+            --bs-btn-color: #fca5a5;
+            --bs-btn-border-color: #7f3640;
+            --bs-btn-hover-bg: #742a35;
+            --bs-btn-hover-border-color: #8c3744;
+            --bs-btn-hover-color: #fff;
+        }
+        html[data-admin-theme="dark"] .text-muted {
+            color: var(--admin-muted) !important;
+        }
             border-color: #8ab0ff;
             box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
         }
@@ -1292,14 +1401,24 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             .btn {
                 padding: .45rem .7rem;
             }
+            .theme-toggle {
+                min-width: auto;
+            }
+            .theme-toggle .theme-toggle-label {
+                display: none;
+            }
         }
     </style>
 </head>
 <body>
 
 <div class="top-navbar">
-    <h5 style="margin: 0; color: #007bff;"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
+    <h5 style="margin: 0; color: var(--admin-title);"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
     <div class="top-navbar-right">
+        <button class="btn btn-outline-primary btn-sm theme-toggle" type="button" id="themeToggleBtn" aria-label="Cambiar tema del panel">
+            <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
+            <span class="theme-toggle-label" id="themeToggleLabel">Modo oscuro</span>
+        </button>
         <?php if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin): ?>
             <div class="dropdown">
                 <button class="btn btn-outline-danger btn-sm notif-btn" type="button" data-bs-toggle="dropdown" aria-label="Notificaciones">
@@ -1624,7 +1743,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -1636,6 +1755,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('trabajos')): ?>
                         <a href="<?= $admin_url ?>trabajos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'trabajos.php' ? 'active' : '' ?>"><i class="bi bi-images"></i> Trabajos Realizados</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('slideshow')): ?>
+                        <a href="<?= $admin_url ?>slideshow.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['slideshow.php', 'slideshow_crear.php', 'slideshow_editar.php', 'slideshow_eliminar.php'], true) ? 'active' : '' ?>"><i class="bi bi-card-image"></i> Slider Principal</a>
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
@@ -1652,9 +1774,6 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('google_analytics')): ?>
                         <a href="<?= $admin_url ?>google_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) === 'google_analytics.php' ? 'active' : '' ?>"><i class="bi bi-graph-up"></i> Google Analytics</a>
-                        <?php endif; ?>
-                        <?php if ($can_access('google_analytics') || $can_access('empresa')): ?>
-                        <a href="<?= $admin_url ?>typebot_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'typebot_config.php' ? 'active' : '' ?>"><i class="bi bi-chat-dots"></i> Typebot</a>
                         <?php endif; ?>
                         <?php if ($can_access('email_config')): ?>
                         <a href="<?= $admin_url ?>email_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'email_config.php' ? 'active' : '' ?>"><i class="bi bi-envelope"></i> Email (SMTP)</a>
@@ -1840,7 +1959,39 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const root = document.documentElement;
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const themeToggleIcon = document.getElementById('themeToggleIcon');
+    const themeToggleLabel = document.getElementById('themeToggleLabel');
     const menuSections = document.querySelectorAll('.menu-section');
+
+    function applyTheme(theme) {
+        const nextTheme = theme === 'dark' ? 'dark' : 'light';
+        root.setAttribute('data-admin-theme', nextTheme);
+        root.setAttribute('data-bs-theme', nextTheme);
+
+        if (themeToggleIcon) {
+            themeToggleIcon.className = nextTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+        }
+        if (themeToggleLabel) {
+            themeToggleLabel.textContent = nextTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+        }
+        if (themeToggleBtn) {
+            themeToggleBtn.setAttribute('aria-label', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+            themeToggleBtn.setAttribute('title', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+        }
+    }
+
+    applyTheme(root.getAttribute('data-admin-theme') || 'light');
+
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', function () {
+            const currentTheme = root.getAttribute('data-admin-theme') === 'dark' ? 'dark' : 'light';
+            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('admin-theme', nextTheme);
+            applyTheme(nextTheme);
+        });
+    }
 
     menuSections.forEach(function (section) {
         const activeItem = section.querySelector('.menu-items a.active');
