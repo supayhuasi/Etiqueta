@@ -1188,6 +1188,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             cot=<?= (int)$notificaciones_cotizaciones_altas_total ?> (umbral>=<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)<br>
                             tareas=<?= (int)$notificaciones_tareas_vencidas_total ?> tard=<?= (int)$notificaciones_tardanzas_total ?> mensajes=<?= (int)$notificaciones_mensajes_total ?><br>
                             NOW()=<?= htmlspecialchars((string)$pdo->query("SELECT NOW()")->fetchColumn()) ?><br>
+                            DB=<?= htmlspecialchars((string)$pdo->query("SELECT DATABASE()")->fetchColumn()) ?><br>
+                            <?php
+                            $dbg_tables = $pdo->query("SHOW TABLES LIKE 'ecommerce_%'")->fetchAll(PDO::FETCH_COLUMN);
+                            echo 'TABLAS: ' . (empty($dbg_tables) ? 'NINGUNA' : implode(', ', array_slice($dbg_tables, 0, 15)));
+                            ?><br>
                             <?php foreach ($notif_debug_errors as $de): ?>
                                 <span style="color:red;">ERR: <?= htmlspecialchars($de) ?></span><br>
                             <?php endforeach; ?>
