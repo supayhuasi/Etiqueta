@@ -6,7 +6,17 @@ if (!isset($can_access) || !$can_access('usuarios')) {
 }
 
 $msg = '';
-$usuarios_tienen_empleado = admin_table_exists($pdo, 'empleados') && admin_column_exists($pdo, 'usuarios', 'empleado_id');
+$usuarios_tienen_empleado = false;
+if (admin_table_exists($pdo, 'empleados')) {
+    if (!admin_column_exists($pdo, 'usuarios', 'empleado_id')) {
+        try {
+            $pdo->exec("ALTER TABLE usuarios ADD COLUMN empleado_id INT NULL AFTER rol_id");
+        } catch (Throwable $e) {
+            // Si no se puede alterar en este entorno, mantener pantalla funcional sin romper.
+        }
+    }
+    $usuarios_tienen_empleado = admin_column_exists($pdo, 'usuarios', 'empleado_id');
+}
 
 // Obtener roles disponibles
 $stmt = $pdo->query("SELECT * FROM roles ORDER BY nombre");

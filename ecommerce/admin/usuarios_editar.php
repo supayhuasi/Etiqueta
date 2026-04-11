@@ -5,7 +5,17 @@ if (!isset($can_access) || !$can_access('usuarios')) {
     die("Acceso denegado.");
 }
 
-$usuarios_tienen_empleado = admin_table_exists($pdo, 'empleados') && admin_column_exists($pdo, 'usuarios', 'empleado_id');
+$usuarios_tienen_empleado = false;
+if (admin_table_exists($pdo, 'empleados')) {
+    if (!admin_column_exists($pdo, 'usuarios', 'empleado_id')) {
+        try {
+            $pdo->exec("ALTER TABLE usuarios ADD COLUMN empleado_id INT NULL AFTER rol_id");
+        } catch (Throwable $e) {
+            // Si falla la migración en este entorno, evitar romper la edición.
+        }
+    }
+    $usuarios_tienen_empleado = admin_column_exists($pdo, 'usuarios', 'empleado_id');
+}
 
 $id = intval($_GET['id'] ?? 0);
 if ($id <= 0) {
