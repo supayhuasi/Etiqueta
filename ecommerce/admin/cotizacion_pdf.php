@@ -20,27 +20,48 @@ $listasParaPdf = [];
 $listaItemsMap = [];
 $listaCategoriasMap = [];
 $productoCategoriaMap = [];
+$productoPrecioBaseMap = [];
+$productoTipoPrecioMap = [];
 
-function calcular_subtotal_items_para_lista(array $items, int $listaId, array $listaItemsMap, array $listaCategoriasMap, array $productoCategoriaMap): float {
+function calcular_subtotal_items_para_lista(
+    array $items,
+    int $listaId,
+    array $listaItemsMap,
+    array $listaCategoriasMap,
+    array $productoCategoriaMap,
+    array $productoPrecioBaseMap,
+    array $productoTipoPrecioMap
+): float {
     $subtotal = 0.0;
 
     foreach ($items as $item) {
         $cantidad = max(1, (int)($item['cantidad'] ?? 1));
         $productoId = !empty($item['producto_id']) ? (int)$item['producto_id'] : 0;
 
-        $precioBase = isset($item['precio_base'])
+        $precioItemGuardado = isset($item['precio_base'])
             ? (float)$item['precio_base']
             : (float)($item['precio_unitario'] ?? 0);
 
         $costoAtributos = 0.0;
-        // Solo sumar atributos cuando hay precio_base para evitar duplicar costo adicional.
-        if (isset($item['precio_base']) && !empty($item['atributos']) && is_array($item['atributos'])) {
+        if (!empty($item['atributos']) && is_array($item['atributos'])) {
             foreach ($item['atributos'] as $attr) {
                 $costoAtributos += (float)($attr['costo_adicional'] ?? 0);
             }
         }
 
-        $precioLista = $precioBase;
+        // Si el precio unitario ya incluye atributos, los quitamos para trabajar sobre base del producto.
+        if (!isset($item['precio_base']) && isset($item['precio_unitario'])) {
+            $precioItemGuardado = max(0, $precioItemGuardado - $costoAtributos);
+        }
+
+        $precioBaseOriginal = $precioItemGuardado;
+        $tipoPrecioProducto = (string)($productoTipoPrecioMap[$productoId] ?? '');
+        if ($productoId > 0 && $tipoPrecioProducto === 'fijo' && isset($productoPrecioBaseMap[$productoId])) {
+            // Para precio fijo usamos el precio original del producto y evitamos dobles descuentos.
+            $precioBaseOriginal = (float)$productoPrecioBaseMap[$productoId];
+        }
+
+        $precioLista = $precioBaseOriginal;
 
         if ($productoId > 0 && isset($listaItemsMap[$listaId][$productoId])) {
             $cfg = $listaItemsMap[$listaId][$productoId];
@@ -50,14 +71,14 @@ function calcular_subtotal_items_para_lista(array $items, int $listaId, array $l
             if ($precioNuevo > 0) {
                 $precioLista = $precioNuevo;
             } elseif ($descItem > 0) {
-                $precioLista = $precioBase * (1 - ($descItem / 100));
+                $precioLista = $precioBaseOriginal * (1 - ($descItem / 100));
             }
         } elseif ($productoId > 0) {
             $categoriaId = (int)($productoCategoriaMap[$productoId] ?? 0);
             if ($categoriaId > 0 && isset($listaCategoriasMap[$listaId][$categoriaId])) {
                 $descCat = (float)$listaCategoriasMap[$listaId][$categoriaId];
                 if ($descCat > 0) {
-                    $precioLista = $precioBase * (1 - ($descCat / 100));
+                    $precioLista = $precioBaseOriginal * (1 - ($descCat / 100));
                 }
             }
         }
@@ -125,11 +146,14 @@ try {
 
         if (!empty($productoIds)) {
             $placeholdersProductos = implode(',', array_fill(0, count($productoIds), '?'));
-            $stmt = $pdo->prepare("SELECT id, categoria_id FROM ecommerce_productos WHERE id IN ($placeholdersProductos)");
+            $stmt = $pdo->prepare("SELECT id, categoria_id, precio_base, tipo_precio FROM ecommerce_productos WHERE id IN ($placeholdersProductos)");
             $stmt->execute($productoIds);
             $rowsProductos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rowsProductos as $row) {
-                $productoCategoriaMap[(int)$row['id']] = (int)($row['categoria_id'] ?? 0);
+                $pid = (int)$row['id'];
+                $productoCategoriaMap[$pid] = (int)($row['categoria_id'] ?? 0);
+                $productoPrecioBaseMap[$pid] = (float)($row['precio_base'] ?? 0);
+                $productoTipoPrecioMap[$pid] = (string)($row['tipo_precio'] ?? '');
             }
         }
     }
@@ -349,17 +373,31 @@ if (!empty($listasParaPdf)) {
     $pdf->SetFont('Arial', '', 9);
     $subtotalCotizacionBase = (float)($cotizacion['subtotal'] ?? 0);
     $totalCotizacionBase = (float)($cotizacion['total'] ?? 0);
+    $listaSeleccionadaCotizacion = (int)($cotizacion['lista_precio_id'] ?? 0);
     foreach ($listasParaPdf as $listaPdf) {
         $listaId = (int)($listaPdf['id'] ?? 0);
         $cuotas = max(1, (int)($listaPdf['cantidad_cuotas'] ?? 1));
 
-        $subtotalLista = calcular_subtotal_items_para_lista($items, $listaId, $listaItemsMap, $listaCategoriasMap, $productoCategoriaMap);
-        if ($subtotalCotizacionBase > 0 && $subtotalLista > 0) {
-            $totalLista = $totalCotizacionBase * ($subtotalLista / $subtotalCotizacionBase);
-        } elseif ($subtotalLista > 0) {
-            $totalLista = $subtotalLista;
-        } else {
+        if ($listaSeleccionadaCotizacion > 0 && $listaId === $listaSeleccionadaCotizacion) {
+            // Nunca recalcular la misma lista de la cotización para evitar doble descuento.
             $totalLista = $totalCotizacionBase;
+        } else {
+            $subtotalLista = calcular_subtotal_items_para_lista(
+                $items,
+                $listaId,
+                $listaItemsMap,
+                $listaCategoriasMap,
+                $productoCategoriaMap,
+                $productoPrecioBaseMap,
+                $productoTipoPrecioMap
+            );
+            if ($subtotalCotizacionBase > 0 && $subtotalLista > 0) {
+                $totalLista = $totalCotizacionBase * ($subtotalLista / $subtotalCotizacionBase);
+            } elseif ($subtotalLista > 0) {
+                $totalLista = $subtotalLista;
+            } else {
+                $totalLista = $totalCotizacionBase;
+            }
         }
 
         $importeCuota = $totalLista / $cuotas;
