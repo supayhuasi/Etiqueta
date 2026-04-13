@@ -1911,7 +1911,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     const formCot = document.getElementById('formCotizacion');
     if (formCot) {
+        let envioEnCurso = false;
         formCot.addEventListener('submit', function(e) {
+            if (envioEnCurso) {
+                return true;
+            }
             e.preventDefault();
             const rows = document.querySelectorAll('.item-row');
             if (!rows || rows.length === 0) {
@@ -1962,11 +1966,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
+            envioEnCurso = true;
+            const btnSubmit = formCot.querySelector('button[type="submit"]');
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.textContent = 'Guardando...';
+            }
+
             const nativeSubmit = HTMLFormElement.prototype.submit;
-            if (typeof nativeSubmit === 'function') {
-                nativeSubmit.call(formCot);
-            } else {
-                formCot.submit();
+            try {
+                if (typeof nativeSubmit === 'function') {
+                    nativeSubmit.call(formCot);
+                } else {
+                    formCot.submit();
+                }
+            } catch (submitError) {
+                envioEnCurso = false;
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = '💾 Guardar Cambios';
+                }
+                alert('No se pudo enviar la cotización. Intenta nuevamente.');
             }
         });
     }

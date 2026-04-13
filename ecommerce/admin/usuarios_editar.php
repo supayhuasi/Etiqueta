@@ -5,12 +5,24 @@ if (!isset($can_access) || !$can_access('usuarios')) {
     die("Acceso denegado.");
 }
 
+$usuarios_tienen_empleado = false;
+if (admin_table_exists($pdo, 'empleados')) {
+    if (!admin_column_exists($pdo, 'usuarios', 'empleado_id')) {
+        try {
+            $pdo->exec("ALTER TABLE usuarios ADD COLUMN empleado_id INT NULL AFTER rol_id");
+        } catch (Throwable $e) {
+            // Si falla la migración en este entorno, evitar romper la edición.
+        }
+    }
+    $usuarios_tienen_empleado = admin_column_exists($pdo, 'usuarios', 'empleado_id');
+}
+
 $id = intval($_GET['id'] ?? 0);
 if ($id <= 0) {
     die("Usuario no encontrado");
 }
 
-$stmt = $pdo->prepare("SELECT id, usuario, nombre, rol_id, activo FROM usuarios WHERE id = ?");
+$stmt = $pdo->prepare("SELECT id, usuario, nombre, rol_id" . ($usuarios_tienen_empleado ? ", empleado_id" : ", NULL AS empleado_id") . ", activo FROM usuarios WHERE id = ?");
 $stmt->execute([$id]);
 $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -22,12 +34,27 @@ if (!$usuario) {
 $stmt = $pdo->query("SELECT * FROM roles ORDER BY nombre");
 $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$empleados = [];
+if ($usuarios_tienen_empleado) {
+        $stmt = $pdo->prepare("
+                SELECT e.id, e.nombre
+                FROM empleados e
+                LEFT JOIN usuarios u ON u.empleado_id = e.id AND u.id <> ?
+                WHERE COALESCE(e.activo, 1) = 1
+                    AND u.id IS NULL
+                ORDER BY e.nombre ASC
+        ");
+        $stmt->execute([$id]);
+        $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usuario_nuevo = trim($_POST['usuario'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $rol_id = intval($_POST['rol_id'] ?? 0);
+    $empleado_id = $usuarios_tienen_empleado ? intval($_POST['empleado_id'] ?? 0) : 0;
     $activo = isset($_POST['activo']) ? 1 : 0;
     $password = $_POST['password'] ?? '';
 
@@ -45,18 +72,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$msg) {
+                if ($usuarios_tienen_empleado && $empleado_id > 0) {
+                    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE empleado_id = ? AND id != ? LIMIT 1");
+                    $stmt->execute([$empleado_id, $id]);
+                    if ($stmt->fetch()) {
+                        $msg = '<div class="alert alert-danger">Ese empleado ya está vinculado a otro usuario</div>';
+                    }
+                }
+            }
+
+            if (!$msg) {
                 if (!empty($password)) {
                     $hash = password_hash($password, PASSWORD_BCRYPT);
-                    $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, activo = ?, password = ? WHERE id = ?");
-                    $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $activo, $hash, $id]);
+                    if ($usuarios_tienen_empleado) {
+                        $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, empleado_id = ?, activo = ?, password = ? WHERE id = ?");
+                        $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $empleado_id > 0 ? $empleado_id : null, $activo, $hash, $id]);
+                    } else {
+                        $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, activo = ?, password = ? WHERE id = ?");
+                        $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $activo, $hash, $id]);
+                    }
                 } else {
-                    $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, activo = ? WHERE id = ?");
-                    $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $activo, $id]);
+                    if ($usuarios_tienen_empleado) {
+                        $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, empleado_id = ?, activo = ? WHERE id = ?");
+                        $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $empleado_id > 0 ? $empleado_id : null, $activo, $id]);
+                    } else {
+                        $stmt = $pdo->prepare("UPDATE usuarios SET usuario = ?, nombre = ?, rol_id = ?, activo = ? WHERE id = ?");
+                        $stmt->execute([$usuario_nuevo, $nombre, $rol_id, $activo, $id]);
+                    }
                 }
                 $msg = '<div class="alert alert-success">Usuario actualizado correctamente</div>';
 
                 // Recargar datos
-                $stmt = $pdo->prepare("SELECT id, usuario, nombre, rol_id, activo FROM usuarios WHERE id = ?");
+                $stmt = $pdo->prepare("SELECT id, usuario, nombre, rol_id" . ($usuarios_tienen_empleado ? ", empleado_id" : ", NULL AS empleado_id") . ", activo FROM usuarios WHERE id = ?");
                 $stmt->execute([$id]);
                 $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
             }
@@ -109,6 +156,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label class="form-label">Contraseña (opcional)</label>
                     <input type="password" name="password" class="form-control" placeholder="Dejar en blanco para no cambiar">
                 </div>
+
+                <?php if ($usuarios_tienen_empleado): ?>
+                    <div class="mb-3">
+                        <label class="form-label">Empleado relacionado</label>
+                        <select name="empleado_id" class="form-select">
+                            <option value="0">Sin vincular</option>
+                            <?php foreach ($empleados as $empleado): ?>
+                                <option value="<?= (int)$empleado['id'] ?>" <?= (int)($usuario['empleado_id'] ?? 0) === (int)$empleado['id'] ? 'selected' : '' ?>><?= htmlspecialchars($empleado['nombre']) ?></option>
+                            <?php endforeach; ?>
+                            <?php if (!empty($usuario['empleado_id']) && empty(array_filter($empleados, static function ($empleado) use ($usuario) { return (int)$empleado['id'] === (int)$usuario['empleado_id']; }))): ?>
+                                <option value="<?= (int)$usuario['empleado_id'] ?>" selected>Empleado actual #<?= (int)$usuario['empleado_id'] ?></option>
+                            <?php endif; ?>
+                        </select>
+                        <div class="form-text">Cada empleado puede quedar vinculado a un solo usuario.</div>
+                    </div>
+                <?php endif; ?>
 
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" name="activo" id="activo" <?= $usuario['activo'] ? 'checked' : '' ?>>

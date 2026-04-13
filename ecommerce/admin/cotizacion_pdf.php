@@ -16,6 +16,151 @@ if (!$cotizacion) {
 $items = json_decode($cotizacion['items'], true) ?? [];
 $impuestosCotizacion = !empty($cotizacion['impuestos_json']) ? (json_decode((string)$cotizacion['impuestos_json'], true) ?: []) : [];
 
+$listasParaPdf = [];
+$listaItemsMap = [];
+$listaCategoriasMap = [];
+$productoCategoriaMap = [];
+$productoPrecioBaseMap = [];
+$productoTipoPrecioMap = [];
+
+function calcular_subtotal_items_para_lista(
+    array $items,
+    int $listaId,
+    array $listaItemsMap,
+    array $listaCategoriasMap,
+    array $productoCategoriaMap,
+    array $productoPrecioBaseMap,
+    array $productoTipoPrecioMap
+): float {
+    $subtotal = 0.0;
+
+    foreach ($items as $item) {
+        $cantidad = max(1, (int)($item['cantidad'] ?? 1));
+        $productoId = !empty($item['producto_id']) ? (int)$item['producto_id'] : 0;
+
+        $precioItemGuardado = isset($item['precio_base'])
+            ? (float)$item['precio_base']
+            : (float)($item['precio_unitario'] ?? 0);
+
+        $costoAtributos = 0.0;
+        if (!empty($item['atributos']) && is_array($item['atributos'])) {
+            foreach ($item['atributos'] as $attr) {
+                $costoAtributos += (float)($attr['costo_adicional'] ?? 0);
+            }
+        }
+
+        // Si el precio unitario ya incluye atributos, los quitamos para trabajar sobre base del producto.
+        if (!isset($item['precio_base']) && isset($item['precio_unitario'])) {
+            $precioItemGuardado = max(0, $precioItemGuardado - $costoAtributos);
+        }
+
+        $precioBaseOriginal = $precioItemGuardado;
+        $tipoPrecioProducto = (string)($productoTipoPrecioMap[$productoId] ?? '');
+        if ($productoId > 0 && $tipoPrecioProducto === 'fijo' && isset($productoPrecioBaseMap[$productoId])) {
+            // Para precio fijo usamos el precio original del producto y evitamos dobles descuentos.
+            $precioBaseOriginal = (float)$productoPrecioBaseMap[$productoId];
+        }
+
+        $precioLista = $precioBaseOriginal;
+
+        if ($productoId > 0 && isset($listaItemsMap[$listaId][$productoId])) {
+            $cfg = $listaItemsMap[$listaId][$productoId];
+            $precioNuevo = (float)($cfg['precio_nuevo'] ?? 0);
+            $descItem = (float)($cfg['descuento_porcentaje'] ?? 0);
+
+            if ($precioNuevo > 0) {
+                $precioLista = $precioNuevo;
+            } elseif ($descItem > 0) {
+                $precioLista = $precioBaseOriginal * (1 - ($descItem / 100));
+            }
+        } elseif ($productoId > 0) {
+            $categoriaId = (int)($productoCategoriaMap[$productoId] ?? 0);
+            if ($categoriaId > 0 && isset($listaCategoriasMap[$listaId][$categoriaId])) {
+                $descCat = (float)$listaCategoriasMap[$listaId][$categoriaId];
+                if ($descCat > 0) {
+                    $precioLista = $precioBaseOriginal * (1 - ($descCat / 100));
+                }
+            }
+        }
+
+        $precioUnitarioFinal = max(0, $precioLista + $costoAtributos);
+        $subtotal += $precioUnitarioFinal * $cantidad;
+    }
+
+    return round($subtotal, 2);
+}
+
+try {
+    $columnasListas = $pdo->query("SHOW COLUMNS FROM ecommerce_listas_precios")->fetchAll(PDO::FETCH_COLUMN);
+    $tieneMostrarEnPdf = in_array('mostrar_en_cotizacion_pdf', $columnasListas, true);
+    $tieneCantidadCuotas = in_array('cantidad_cuotas', $columnasListas, true);
+
+    $selectCuotas = $tieneCantidadCuotas ? 'COALESCE(cantidad_cuotas, 1)' : '1';
+    $whereMostrar = $tieneMostrarEnPdf ? ' AND mostrar_en_cotizacion_pdf = 1' : '';
+
+    $stmt = $pdo->query("SELECT id, nombre, {$selectCuotas} AS cantidad_cuotas FROM ecommerce_listas_precios WHERE activo = 1{$whereMostrar} ORDER BY nombre ASC");
+    $listasParaPdf = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    if (!empty($listasParaPdf)) {
+        $listasIds = array_values(array_unique(array_map(static function ($row) {
+            return (int)($row['id'] ?? 0);
+        }, $listasParaPdf)));
+        $listasIds = array_values(array_filter($listasIds, static function ($id) {
+            return $id > 0;
+        }));
+
+        if (!empty($listasIds)) {
+            $placeholdersListas = implode(',', array_fill(0, count($listasIds), '?'));
+
+            $stmt = $pdo->prepare("SELECT lista_precio_id, producto_id, precio_nuevo, descuento_porcentaje FROM ecommerce_lista_precio_items WHERE activo = 1 AND lista_precio_id IN ($placeholdersListas)");
+            $stmt->execute($listasIds);
+            $rowsItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsItems as $row) {
+                $lp = (int)$row['lista_precio_id'];
+                $pid = (int)$row['producto_id'];
+                $listaItemsMap[$lp][$pid] = [
+                    'precio_nuevo' => (float)($row['precio_nuevo'] ?? 0),
+                    'descuento_porcentaje' => (float)($row['descuento_porcentaje'] ?? 0),
+                ];
+            }
+
+            $stmt = $pdo->prepare("SELECT lista_precio_id, categoria_id, descuento_porcentaje FROM ecommerce_lista_precio_categorias WHERE activo = 1 AND lista_precio_id IN ($placeholdersListas)");
+            $stmt->execute($listasIds);
+            $rowsCats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsCats as $row) {
+                $lp = (int)$row['lista_precio_id'];
+                $cid = (int)$row['categoria_id'];
+                $listaCategoriasMap[$lp][$cid] = (float)($row['descuento_porcentaje'] ?? 0);
+            }
+        }
+
+        $productoIds = [];
+        foreach ($items as $item) {
+            if (!empty($item['producto_id'])) {
+                $productoIds[] = (int)$item['producto_id'];
+            }
+        }
+        $productoIds = array_values(array_unique(array_filter($productoIds, static function ($id) {
+            return $id > 0;
+        })));
+
+        if (!empty($productoIds)) {
+            $placeholdersProductos = implode(',', array_fill(0, count($productoIds), '?'));
+            $stmt = $pdo->prepare("SELECT id, categoria_id, precio_base, tipo_precio FROM ecommerce_productos WHERE id IN ($placeholdersProductos)");
+            $stmt->execute($productoIds);
+            $rowsProductos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rowsProductos as $row) {
+                $pid = (int)$row['id'];
+                $productoCategoriaMap[$pid] = (int)($row['categoria_id'] ?? 0);
+                $productoPrecioBaseMap[$pid] = (float)($row['precio_base'] ?? 0);
+                $productoTipoPrecioMap[$pid] = (string)($row['tipo_precio'] ?? '');
+            }
+        }
+    }
+} catch (Exception $e) {
+    $listasParaPdf = [];
+}
+
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -213,6 +358,79 @@ $pdf->SetFont('Arial', 'B', 12);
 $pdf->SetFillColor(200, 230, 255);
 $pdf->Cell(35, 8, 'TOTAL:', 1, 0, 'R', true);
 $pdf->Cell(35, 8, '$' . number_format($cotizacion['total'], 2), 1, 1, 'R', true);
+
+if (!empty($listasParaPdf)) {
+    $pdf->Ln(5);
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->Cell(0, 6, utf8_decode('Opciones por Lista de Precios'), 0, 1);
+
+    $pdf->SetFont('Arial', 'B', 9);
+    $pdf->SetFillColor(230, 230, 230);
+    $pdf->Cell(90, 7, 'LISTA', 1, 0, 'C', true);
+    $pdf->Cell(35, 7, 'CUOTAS', 1, 0, 'C', true);
+    $pdf->Cell(65, 7, 'IMPORTE POR CUOTA', 1, 1, 'C', true);
+
+    $pdf->SetFont('Arial', '', 9);
+    $totalCotizacionBase = (float)($cotizacion['total'] ?? 0);
+    $listaSeleccionadaCotizacion = (int)($cotizacion['lista_precio_id'] ?? 0);
+    $cuponCotizacion = (float)($cotizacion['cupon_descuento'] ?? 0);
+
+    $baseCotizacionSinImpuestos = max(
+        0,
+        (float)($cotizacion['subtotal'] ?? 0)
+        - (float)($cotizacion['descuento'] ?? 0)
+        - $cuponCotizacion
+    );
+
+    $impuestosAdicionalesMonto = 0.0;
+    if (!empty($impuestosCotizacion) && is_array($impuestosCotizacion)) {
+        foreach ($impuestosCotizacion as $impuesto) {
+            if (!empty($impuesto['incluido_en_precio'])) {
+                continue;
+            }
+            $impuestosAdicionalesMonto += max(0, (float)($impuesto['monto'] ?? 0));
+        }
+    }
+    if ($impuestosAdicionalesMonto <= 0 && $baseCotizacionSinImpuestos > 0) {
+        $impuestosAdicionalesMonto = max(0, $totalCotizacionBase - $baseCotizacionSinImpuestos);
+    }
+    $factorImpuestosAdicionales = $baseCotizacionSinImpuestos > 0
+        ? ($impuestosAdicionalesMonto / $baseCotizacionSinImpuestos)
+        : 0;
+
+    foreach ($listasParaPdf as $listaPdf) {
+        $listaId = (int)($listaPdf['id'] ?? 0);
+        $cuotas = max(1, (int)($listaPdf['cantidad_cuotas'] ?? 1));
+
+        if ($listaSeleccionadaCotizacion > 0 && $listaId === $listaSeleccionadaCotizacion) {
+            // Nunca recalcular la misma lista de la cotización para evitar doble descuento.
+            $totalLista = $totalCotizacionBase;
+        } else {
+            $subtotalLista = calcular_subtotal_items_para_lista(
+                $items,
+                $listaId,
+                $listaItemsMap,
+                $listaCategoriasMap,
+                $productoCategoriaMap,
+                $productoPrecioBaseMap,
+                $productoTipoPrecioMap
+            );
+
+            if ($subtotalLista > 0) {
+                $baseListaSinImpuestos = max(0, $subtotalLista - $cuponCotizacion);
+                $totalLista = $baseListaSinImpuestos * (1 + $factorImpuestosAdicionales);
+            } else {
+                $totalLista = $totalCotizacionBase;
+            }
+        }
+
+        $importeCuota = $totalLista / $cuotas;
+
+        $pdf->Cell(90, 6, utf8_decode((string)($listaPdf['nombre'] ?? 'Lista')), 1);
+        $pdf->Cell(35, 6, (string)$cuotas, 1, 0, 'C');
+        $pdf->Cell(65, 6, '$' . number_format($importeCuota, 2), 1, 1, 'R');
+    }
+}
 
 // Observaciones
 if ($cotizacion['observaciones']) {

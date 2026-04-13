@@ -1,6 +1,18 @@
 <?php
 require 'includes/header.php';
 
+try {
+    $cols = $pdo->query("SHOW COLUMNS FROM ecommerce_listas_precios")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('mostrar_en_cotizacion_pdf', $cols, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_listas_precios ADD COLUMN mostrar_en_cotizacion_pdf TINYINT(1) NOT NULL DEFAULT 0 AFTER activo");
+    }
+    if (!in_array('cantidad_cuotas', $cols, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_listas_precios ADD COLUMN cantidad_cuotas INT NOT NULL DEFAULT 1 AFTER mostrar_en_cotizacion_pdf");
+    }
+} catch (Exception $e) {
+    // Si la migracion falla, el formulario sigue funcionando con valores por defecto.
+}
+
 // Si llega ID, es edición
 $editar = false;
 $lista = null;
@@ -21,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = $_POST['nombre'] ?? '';
     $descripcion = $_POST['descripcion'] ?? '';
     $activo = isset($_POST['activo']) ? 1 : 0;
+    $mostrar_en_cotizacion_pdf = isset($_POST['mostrar_en_cotizacion_pdf']) ? 1 : 0;
+    $cantidad_cuotas = max(1, intval($_POST['cantidad_cuotas'] ?? 1));
 
     // Validar nombre único
     if (!$editar) {
@@ -35,17 +49,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($editar) {
             $stmt = $pdo->prepare("
                 UPDATE ecommerce_listas_precios 
-                SET nombre = ?, descripcion = ?, activo = ?
+                SET nombre = ?, descripcion = ?, activo = ?, mostrar_en_cotizacion_pdf = ?, cantidad_cuotas = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$nombre, $descripcion, $activo, $_GET['id']]);
+            $stmt->execute([$nombre, $descripcion, $activo, $mostrar_en_cotizacion_pdf, $cantidad_cuotas, $_GET['id']]);
             $mensaje = "✓ Lista de precios actualizada correctamente";
         } else {
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_listas_precios (nombre, descripcion, activo)
-                VALUES (?, ?, ?)
+                INSERT INTO ecommerce_listas_precios (nombre, descripcion, activo, mostrar_en_cotizacion_pdf, cantidad_cuotas)
+                VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$nombre, $descripcion, $activo]);
+            $stmt->execute([$nombre, $descripcion, $activo, $mostrar_en_cotizacion_pdf, $cantidad_cuotas]);
             $mensaje = "✓ Lista de precios creada correctamente";
         }
         echo "<div class='alert alert-success'>$mensaje</div>";
@@ -85,6 +99,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label class="form-check-label" for="activo">
                         Activa
                     </label>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input type="checkbox" name="mostrar_en_cotizacion_pdf" class="form-check-input" id="mostrar_en_cotizacion_pdf" <?= !empty($lista['mostrar_en_cotizacion_pdf']) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="mostrar_en_cotizacion_pdf">
+                        Mostrar esta lista en el PDF de cotizacion
+                    </label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cantidad de cuotas</label>
+                    <input type="number" name="cantidad_cuotas" class="form-control" min="1" step="1" value="<?= max(1, intval($lista['cantidad_cuotas'] ?? 1)) ?>">
+                    <small class="text-muted">Se usara para calcular el importe de cada cuota en el PDF de cotizacion.</small>
                 </div>
 
                 <button type="submit" class="btn btn-primary">💾 Guardar</button>

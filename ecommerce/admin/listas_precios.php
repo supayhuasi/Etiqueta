@@ -30,6 +30,8 @@ $listas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <tr>
                                 <th>Nombre</th>
                                 <th>Descripción</th>
+                                <th>PDF Cotizacion</th>
+                                <th>Cuotas</th>
                                 <th width="150">Estado</th>
                                 <th width="300">Acciones</th>
                             </tr>
@@ -42,6 +44,16 @@ $listas = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     </td>
                                     <td>
                                         <?= htmlspecialchars(substr($lista['descripcion'] ?? '', 0, 60)) ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($lista['mostrar_en_cotizacion_pdf'])): ?>
+                                            <span class="badge bg-primary">Mostrar</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-light text-dark">Oculta</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?= max(1, intval($lista['cantidad_cuotas'] ?? 1)) ?>
                                     </td>
                                     <td>
                                         <?php if ($lista['activo']): ?>
