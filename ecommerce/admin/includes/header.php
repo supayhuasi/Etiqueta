@@ -405,6 +405,8 @@ $notificaciones_tareas_vencidas_total = 0;
 $notificaciones_tareas_vencidas_criticas_total = 0;
 $notificaciones_tareas_recientes = [];
 $notificaciones_tareas_recientes_total = 0;
+$notificaciones_tareas_personales = [];
+$notificaciones_tareas_personales_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_pedidos_recientes = [];
@@ -962,6 +964,58 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- Sección: Tareas personales pendientes del usuario actual ---
+    if (
+        admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'usuario_id')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'titulo')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'estado')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_asignacion')
+    ) {
+        try {
+            $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
+            if ($usuario_actual_id > 0) {
+                $sql_tareas_personales_count = "
+                    SELECT COUNT(*)
+                    FROM ecommerce_tareas_usuarios t
+                    WHERE t.usuario_id = ?
+                      AND LOWER(COALESCE(t.estado, '')) NOT IN ('completada', 'cancelada')
+                ";
+                $stmt = $pdo->prepare($sql_tareas_personales_count);
+                $stmt->execute([$usuario_actual_id]);
+                $notificaciones_tareas_personales_total = (int)$stmt->fetchColumn();
+
+                if ($notificaciones_tareas_personales_total > 0) {
+                    $sql_tareas_personales = "
+                        SELECT
+                            t.id,
+                            t.titulo,
+                            t.descripcion,
+                            t.estado,
+                            t.fecha_asignacion,
+                            t.fecha_limite,
+                            COALESCE(NULLIF(TRIM(a.nombre), ''), a.usuario, 'Sistema') AS asignada_por_nombre
+                        FROM ecommerce_tareas_usuarios t
+                        LEFT JOIN usuarios a ON a.id = t.asignada_por
+                        WHERE t.usuario_id = ?
+                          AND LOWER(COALESCE(t.estado, '')) NOT IN ('completada', 'cancelada')
+                        ORDER BY 
+                            CASE WHEN t.estado = 'en_progreso' THEN 0 ELSE 1 END,
+                            CASE WHEN t.fecha_limite IS NOT NULL THEN DATE(t.fecha_limite) ELSE DATE('2099-12-31') END ASC,
+                            t.fecha_asignacion DESC
+                        LIMIT 10
+                    ";
+                    $stmt = $pdo->prepare($sql_tareas_personales);
+                    $stmt->execute([$usuario_actual_id]);
+                    $notificaciones_tareas_personales = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('Notif tareas personales error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[tareas_personales] ' . $e->getMessage();
+        }
+    }
+
     // --- Totales finales ---
     $notificaciones_total = (int)$notificaciones_atrasos_total;
     if ($notificaciones_permiso_admin) {
@@ -976,6 +1030,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_cotizaciones_altas_total
             + (int)$notificacion_prueba_manual_total;
     }
+    
+    // Agregar tareas personales al total para todos los usuarios (no solo admin)
+    $notificaciones_total += (int)$notificaciones_tareas_personales_total;
 }
 ?>
 <!DOCTYPE html>
@@ -1518,6 +1575,46 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                 </a>
                             <?php endforeach; ?>
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">Ver tareas manuales</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_tareas_personales_total > 0): ?>
+                            <div class="notif-section-title" style="background-color: #e8f4fd; border-left: 4px solid #0dcaf0;">👤 Mis tareas pendientes (<?= (int)$notificaciones_tareas_personales_total ?>)</div>
+                            <?php foreach ($notificaciones_tareas_personales as $tareaMia): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php" style="border-left: 4px solid <?= $tareaMia['estado'] === 'en_progreso' ? '#ffc107' : '#e9ecef' ?>;">
+                                    <div class="fw-semibold"><?= htmlspecialchars($tareaMia['titulo'] ?? 'Tarea sin título') ?></div>
+                                    <div class="small text-muted">
+                                        <?php 
+                                            $estado_badge = '';
+                                            if ($tareaMia['estado'] === 'en_progreso') {
+                                                $estado_badge = '<span class="badge bg-warning text-dark">En Progreso</span>';
+                                            } elseif ($tareaMia['estado'] === 'pendiente') {
+                                                $estado_badge = '<span class="badge bg-secondary">Pendiente</span>';
+                                            } else {
+                                                $estado_badge = '<span class="badge bg-secondary">' . htmlspecialchars(ucfirst($tareaMia['estado'])) . '</span>';
+                                            }
+                                            echo $estado_badge;
+                                        ?>
+                                        · Por: <?= htmlspecialchars($tareaMia['asignada_por_nombre'] ?? 'Sistema') ?>
+                                    </div>
+                                    <?php if (!empty($tareaMia['descripcion'])): ?>
+                                        <div class="small text-muted" style="margin-top: 4px; font-style: italic;">
+                                            <?= htmlspecialchars(substr($tareaMia['descripcion'], 0, 80)) . (strlen($tareaMia['descripcion']) > 80 ? '...' : '') ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="small" style="margin-top: 4px;">
+                                        <?php if (!empty($tareaMia['fecha_limite'])): ?>
+                                            <span style="color: <?= strtotime($tareaMia['fecha_limite']) < time() ? '#dc3545' : '#0dcaf0' ?>;">
+                                                📅 Vence: <?= htmlspecialchars(date('d/m/Y', strtotime((string)$tareaMia['fecha_limite']))) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #6c757d;">📅 Sin fecha límite</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-info fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
+                                <i class="bi bi-arrow-right"></i> Ver todas mis tareas
+                            </a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>

@@ -1,46 +1,29 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/usuarios_empleados_helper.php';
 
 if (!isset($can_access) || !$can_access('usuarios')) {
     die("Acceso denegado.");
 }
 
 $msg = '';
-$usuarios_tienen_empleado = false;
-if (admin_table_exists($pdo, 'empleados')) {
-    if (!admin_column_exists($pdo, 'usuarios', 'empleado_id')) {
-        try {
-            $pdo->exec("ALTER TABLE usuarios ADD COLUMN empleado_id INT NULL AFTER rol_id");
-        } catch (Throwable $e) {
-            // Si no se puede alterar en este entorno, mantener pantalla funcional sin romper.
-        }
-    }
-    $usuarios_tienen_empleado = admin_column_exists($pdo, 'usuarios', 'empleado_id');
-}
+
+// Asegurar migración y verificar disponibilidad
+$tiene_empleados = usuarios_empleados_asegurar_migracion($pdo);
 
 // Obtener roles disponibles
 $stmt = $pdo->query("SELECT * FROM roles ORDER BY nombre");
 $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$empleados = [];
-if ($usuarios_tienen_empleado) {
-        $stmt = $pdo->query("
-                SELECT e.id, e.nombre
-                FROM empleados e
-                LEFT JOIN usuarios u ON u.empleado_id = e.id
-                WHERE COALESCE(e.activo, 1) = 1
-                    AND u.id IS NULL
-                ORDER BY e.nombre ASC
-        ");
-        $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
+// Obtener empleados disponibles si la migración está OK
+$empleados = $tiene_empleados ? usuarios_empleados_obtener_disponibles($pdo) : [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usuario = trim($_POST['usuario'] ?? '');
     $nombre  = trim($_POST['nombre'] ?? '');
     $pass    = $_POST['password'] ?? '';
     $rol_id  = intval($_POST['rol_id'] ?? 0);
-    $empleado_id = $usuarios_tienen_empleado ? intval($_POST['empleado_id'] ?? 0) : 0;
+    $empleado_id = $tiene_empleados ? intval($_POST['empleado_id'] ?? 0) : 0;
 
     if ($usuario && $pass && $rol_id) {
         $hash = password_hash($pass, PASSWORD_BCRYPT);
@@ -52,36 +35,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt->rowCount() > 0) {
                 $msg = '<div class="alert alert-danger">El usuario ya existe</div>';
             } else {
-                if ($usuarios_tienen_empleado && $empleado_id > 0) {
-                    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE empleado_id = ? LIMIT 1");
-                    $stmt->execute([$empleado_id]);
-                    if ($stmt->fetch()) {
-                        $msg = '<div class="alert alert-danger">Ese empleado ya está vinculado a otro usuario</div>';
-                    }
-                }
-            }
+                // Intentar insertar
+                $stmt = $pdo->prepare("
+                    INSERT INTO usuarios (usuario, password, nombre, rol_id, empleado_id, activo)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([$usuario, $hash, $nombre, $rol_id, $empleado_id > 0 ? $empleado_id : null]);
+                $nuevo_usuario_id = (int)$pdo->lastInsertId();
 
-            if (!$msg) {
-                if ($usuarios_tienen_empleado) {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO usuarios (usuario, password, nombre, rol_id, empleado_id, activo)
-                        VALUES (?, ?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([$usuario, $hash, $nombre, $rol_id, $empleado_id > 0 ? $empleado_id : null]);
+                // Si se seleccionó un empleado, vincular
+                if ($tiene_empleados && $empleado_id > 0) {
+                    $resultado = usuarios_empleados_vincular($pdo, $nuevo_usuario_id, $empleado_id);
+                    if (!$resultado['ok']) {
+                        $msg = '<div class="alert alert-warning">Usuario creado pero sin vincular empleado: ' . htmlspecialchars($resultado['error']) . '</div>';
+                    } else {
+                        $msg = '<div class="alert alert-success">Usuario creado y vinculado a empleado correctamente</div>';
+                    }
                 } else {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO usuarios (usuario, password, nombre, rol_id, activo)
-                        VALUES (?, ?, ?, ?, 1)
-                    ");
-                    $stmt->execute([$usuario, $hash, $nombre, $rol_id]);
+                    $msg = '<div class="alert alert-success">Usuario creado correctamente</div>';
                 }
-                $msg = '<div class="alert alert-success">Usuario creado correctamente</div>';
             }
         } catch (PDOException $e) {
             $msg = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
     } else {
-        $msg = '<div class="alert alert-warning">Completá todos los campos</div>';
+        $msg = '<div class="alert alert-warning">Completá todos los campos obligatorios</div>';
     }
 }
 ?>
@@ -126,16 +104,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </select>
                 </div>
 
-                <?php if ($usuarios_tienen_empleado): ?>
+                <?php if ($tiene_empleados): ?>
                     <div class="mb-3">
-                        <label class="form-label">Empleado relacionado</label>
+                        <label class="form-label">Empleado relacionado (opcional)</label>
                         <select name="empleado_id" class="form-select">
-                            <option value="0">Sin vincular</option>
+                            <option value="0">-- Sin vincular --</option>
                             <?php foreach ($empleados as $empleado): ?>
-                                <option value="<?= (int)$empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?></option>
+                                <option value="<?= (int)$empleado['id'] ?>">
+                                    <?= htmlspecialchars($empleado['nombre']) ?>
+                                    <?php if (!empty($empleado['documento'])): ?>
+                                        (<?= htmlspecialchars($empleado['documento']) ?>)
+                                    <?php endif; ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text">Cada empleado puede quedar vinculado a un solo usuario.</div>
+                        <div class="form-text">✓ Cada empleado puede vincularse a un solo usuario del sistema</div>
+                    </div>
+                <?php elseif (admin_table_exists($pdo, 'empleados')): ?>
+                    <div class="alert alert-info">
+                        ⓘ La tabla de empleados existe pero la relación aún no está disponible. Intenta actualizar la página.
                     </div>
                 <?php endif; ?>
 

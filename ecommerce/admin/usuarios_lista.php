@@ -1,18 +1,12 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/usuarios_empleados_helper.php';
 
-$usuarios_tienen_empleado = admin_table_exists($pdo, 'empleados') && admin_column_exists($pdo, 'usuarios', 'empleado_id');
+// Asegurar migración
+$tiene_empleados = usuarios_empleados_asegurar_migracion($pdo);
 
-// Obtener lista de usuarios
-$sql_usuarios = "
-    SELECT u.id, u.usuario, u.nombre, u.activo, r.nombre as rol_nombre" . ($usuarios_tienen_empleado ? ", u.empleado_id, e.nombre AS empleado_nombre" : ", NULL AS empleado_id, NULL AS empleado_nombre") . "
-    FROM usuarios u
-    LEFT JOIN roles r ON u.rol_id = r.id
-" . ($usuarios_tienen_empleado ? "    LEFT JOIN empleados e ON e.id = u.empleado_id
-" : "") . "    ORDER BY u.usuario
-";
-$stmt = $pdo->query($sql_usuarios);
-$usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Obtener usuarios con relación a empleados
+$usuarios = usuarios_listar_con_empleados($pdo);
 ?>
 
 <h2>Usuarios</h2>
@@ -32,7 +26,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <th>ID</th>
                         <th>Usuario</th>
                         <th>Nombre</th>
-                        <?php if ($usuarios_tienen_empleado): ?>
+                        <?php if ($tiene_empleados): ?>
                             <th>Empleado</th>
                         <?php endif; ?>
                         <th>Rol</th>
@@ -43,7 +37,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <tbody>
                     <?php if (empty($usuarios)): ?>
                         <tr>
-                            <td colspan="<?= $usuarios_tienen_empleado ? '7' : '6' ?>" class="text-center text-muted">No hay usuarios registrados</td>
+                            <td colspan="<?= $tiene_empleados ? '7' : '6' ?>" class="text-center text-muted">No hay usuarios registrados</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($usuarios as $user): ?>
@@ -51,7 +45,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= (int)$user['id'] ?></td>
                                 <td><?= htmlspecialchars($user['usuario']) ?></td>
                                 <td><?= htmlspecialchars($user['nombre']) ?></td>
-                                <?php if ($usuarios_tienen_empleado): ?>
+                                <?php if ($tiene_empleados): ?>
                                     <td>
                                         <?php if (!empty($user['empleado_id'])): ?>
                                             <span class="badge bg-light text-dark border">#<?= (int)$user['empleado_id'] ?> · <?= htmlspecialchars($user['empleado_nombre'] ?? 'Empleado') ?></span>

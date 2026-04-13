@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once 'includes/tareas_notificaciones_helper.php';
 
 function ensure_produccion_scans_schema(PDO $pdo): void {
     static $initialized = false;
@@ -228,6 +229,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $fecha_limite_tarea !== '' ? $fecha_limite_tarea : null,
             ]);
 
+            // Obtener ID de la tarea insertada
+            $tarea_id_nueva = (int)$pdo->lastInsertId();
+            
+            // Enviar notificación al usuario destinatario
+            enviar_notificacion_tarea_asignada($pdo, $tarea_id_nueva, $usuario_destino, (int)($_SESSION['user']['id'] ?? 0));
+
             $mensaje_tareas = 'Tarea asignada correctamente.';
         }
 
@@ -272,6 +279,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $recordatorio_fecha !== '' ? $recordatorio_fecha : null,
             ]);
 
+            // Obtener ID del recordatorio insertado
+            $recordatorio_id_nuevo = (int)$pdo->lastInsertId();
+            
+            // Enviar notificación si se asignó a un usuario
+            if ($recordatorio_usuario_id > 0) {
+                enviar_notificacion_recordatorio_creado($pdo, $recordatorio_id_nuevo, $recordatorio_usuario_id);
+            }
+
             $mensaje_recordatorios = 'Recordatorio creado correctamente.';
         }
 
@@ -307,6 +322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare("INSERT INTO ecommerce_recordatorios_usuarios (usuario_id, creado_por, titulo, estado, fecha_recordatorio) VALUES (?, ?, ?, 'pendiente', CURDATE())");
             $stmt->execute([$usuario_actual_id, $usuario_actual_id, $recordatorio_titulo]);
+
+            // Obtener ID del recordatorio insertado
+            $recordatorio_id_nuevo = (int)$pdo->lastInsertId();
+            
+            // Enviar notificación al usuario actual
+            enviar_notificacion_recordatorio_creado($pdo, $recordatorio_id_nuevo, $usuario_actual_id);
 
             $mensaje_recordatorios = 'Recordatorio rápido guardado.';
         }
