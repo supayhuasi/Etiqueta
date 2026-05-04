@@ -168,6 +168,24 @@ if (isset($role_aliases[$role])) {
 
 $role_permissions = [
     'admin' => ['*'],
+    'sin_sueldos' => [
+        'dashboard',
+        'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
+        'pedidos', 'ordenes_produccion', 'instalaciones',
+        'recordatorios',
+        'crm',
+        'clientes_web',
+        'inventario',
+        'finanzas',
+        'flujo_caja',
+        'cheques',
+        'gastos',
+        'encuestas',
+        'calidad',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda',
+        'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
+        // No incluye 'sueldos'
+    ],
     'usuario' => [
         'dashboard',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
