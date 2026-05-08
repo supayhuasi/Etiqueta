@@ -47,10 +47,16 @@ $colores = [
     'enviado' => 'secondary',
     'entregado' => 'success',
     'cancelado' => 'danger',
-                $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
-                $stmt->execute([$pedido_id]);
-                $orden_id = $pdo->lastInsertId();
-                $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
+    // El siguiente bloque debe ir dentro de la lógica de cambio de estado a 'confirmado', no aquí:
+    // $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
+    // $stmt->execute([$pedido_id]);
+];
+
+// El siguiente bloque debe ir dentro de la lógica de cambio de estado a 'confirmado', no aquí:
+// $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
+// $stmt->execute([$pedido_id]);
+// $orden_id = $pdo->lastInsertId();
+// $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
 
             if (empty($orden['materiales_descontados'])) {
                 // Descontar materiales según receta
@@ -71,21 +77,19 @@ $colores = [
                     if (empty($it['usa_receta'])) {
                         continue;
                     }
-                                $color_val = $valor_attr;
-                        // DEBUG: Solo echo para aislar el problema
-                        echo "DEBUG: pedidos.php ejecuta OK";
-                                }
-                                $op = $opcion_color_cache[$opcion_id_attr];
-                                if (!empty($op['color']) && preg_match('/^#[0-9a-f]{6}$/i', $op['color'])) {
-                                    $color_val = $op['color'];
-                                    break;
-                                }
-                                if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && !empty($op['nombre'])) {
-                                    $color_val = $op['nombre'];
-                                    break;
-                                }
-                            }
-                    }
+                    // Aquí debería ir la lógica de $color_val, $op, etc. Si no está definida, comentar o eliminar.
+                    // $color_val = $valor_attr;
+                    // echo "DEBUG: pedidos.php ejecuta OK";
+                    // $op = $opcion_color_cache[$opcion_id_attr];
+                    // if (!empty($op['color']) && preg_match('/^#[0-9a-f]{6}$/i', $op['color'])) {
+                    //     $color_val = $op['color'];
+                    //     break;
+                    // }
+                    // if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && !empty($op['nombre'])) {
+                    //     $color_val = $op['nombre'];
+                    //     break;
+                    // }
+                }
                     
                     // Obtener receta con condiciones evaluadas
                     $recetas = obtener_receta_con_condiciones(
@@ -175,7 +179,7 @@ $colores = [
 
                 $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
                 $stmt->execute([$orden['id']]);
-        }
+}
         
         // Recargar
         header("Location: pedidos.php");
