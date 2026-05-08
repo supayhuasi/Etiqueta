@@ -261,12 +261,6 @@ $page = max(1, intval($_GET['pagina'] ?? 1));
 $query_from = "
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    LEFT JOIN (
-        SELECT pedido_id, SUM(monto) AS total_pagado
-        FROM ecommerce_pedido_pagos
-        GROUP BY pedido_id
-    ) pp ON pp.pedido_id = p.id
-    LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
@@ -325,19 +319,47 @@ $total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
 $page = min($page, $total_paginas);
 $offset = ($page - 1) * $per_page;
 
-$query = "SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
-           COALESCE(pp.total_pagado, 0) AS total_pagado,
-           ci.id AS calidad_inspeccion_id,
-           ci.estado_calidad,
-           ci.prueba_aprobada,
-           ci.detalle_revision,
-           ci.observaciones,
-           ci.fecha_revision AS calidad_fecha_revision
-    " . $query_from . " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 
+$query = "SELECT p.id, p.numero_pedido, p.fecha_pedido, p.total, p.estado, p.public_token, c.nombre as cliente_nombre, c.email as cliente_email
+    FROM ecommerce_pedidos p
+    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    WHERE p.estado != 'cancelado'";
+if (!empty($estado_filter)) {
+    $query .= " AND p.estado = ?";
+}
+if (!empty($fecha_desde)) {
+    $query .= " AND DATE(p.fecha_pedido) >= ?";
+}
+if (!empty($fecha_hasta)) {
+    $query .= " AND DATE(p.fecha_pedido) <= ?";
+}
+if (!empty($cliente_busqueda)) {
+    $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+}
+$query .= " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 $stmt = $pdo->prepare($query);
 $stmt->execute(array_merge($params, [$per_page, $offset]));
 $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Obtener totales pagados y calidad solo para los pedidos de la página actual
+$pedido_ids = array_column($pedidos, 'id');
+$pagos_map = [];
+$calidad_map = [];
+if (!empty($pedido_ids)) {
+    $placeholders = implode(',', array_fill(0, count($pedido_ids), '?'));
+    // Pagos
+    $stmt = $pdo->prepare("SELECT pedido_id, SUM(monto) AS total_pagado FROM ecommerce_pedido_pagos WHERE pedido_id IN ($placeholders) GROUP BY pedido_id");
+    $stmt->execute($pedido_ids);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $pagos_map[$row['pedido_id']] = (float)$row['total_pagado'];
+    }
+    // Calidad
+    $stmt = $pdo->prepare("SELECT pedido_id, id, estado_calidad, prueba_aprobada, detalle_revision, observaciones, fecha_revision FROM ecommerce_calidad_inspecciones WHERE pedido_id IN ($placeholders)");
+    $stmt->execute($pedido_ids);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $calidad_map[$row['pedido_id']] = $row;
+    }
+}
 
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
@@ -348,21 +370,23 @@ if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $base_url = $request_scheme . '://' . $host . $public_base;
 
-// Marcar pedidos como pagados si corresponde
+// Marcar pedidos como pagados si corresponde y agregar datos de pagos/calidad
 foreach ($pedidos as &$pedido) {
-    $total_pagado = (float)($pedido['total_pagado'] ?? 0);
+    $pedido_id = $pedido['id'];
+    $pedido['total_pagado'] = $pagos_map[$pedido_id] ?? 0;
+    $pedido['calidad'] = $calidad_map[$pedido_id] ?? null;
+    $total_pagado = (float)$pedido['total_pagado'];
     $total_pedido = (float)($pedido['total'] ?? 0);
     if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
         $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?");
-        $stmt->execute([$pedido['id']]);
+        $stmt->execute([$pedido_id]);
         $pedido['estado'] = 'pagado';
     }
-
     if (empty($pedido['public_token'])) {
         $nuevo_token = bin2hex(random_bytes(16));
         try {
             $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?");
-            $stmt->execute([$nuevo_token, $pedido['id']]);
+            $stmt->execute([$nuevo_token, $pedido_id]);
             $pedido['public_token'] = $nuevo_token;
         } catch (Exception $e) {
             // Si falla, continuar sin token
@@ -555,12 +579,13 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                         <td>
                             <?php
                                 $remito_resumen = $pedido_remito_resumen[(int)$pedido['id']] ?? ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0];
-                                $calidadEstado = strtolower(trim((string)($pedido['estado_calidad'] ?? '')));
+                                $calidad = $pedido['calidad'] ?? [];
+                                $calidadEstado = strtolower(trim((string)($calidad['estado_calidad'] ?? '')));
                                 $calidadBadge = 'secondary';
                                 $calidadTexto = 'Sin control';
                                 if ($calidadEstado === 'aprobado') {
                                     $calidadBadge = 'success';
-                                    $calidadTexto = ((int)($pedido['prueba_aprobada'] ?? 0) === 1) ? 'Calidad OK' : 'Aprobado';
+                                    $calidadTexto = ((int)($calidad['prueba_aprobada'] ?? 0) === 1) ? 'Calidad OK' : 'Aprobado';
                                 } elseif ($calidadEstado === 'observado') {
                                     $calidadBadge = 'warning text-dark';
                                     $calidadTexto = 'Observado';
@@ -589,8 +614,8 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                             </div>
                             <div class="mt-1">
                                 <span class="badge bg-<?= $calidadBadge ?>"><?= htmlspecialchars($calidadTexto) ?></span>
-                                <?php if (!empty($pedido['calidad_fecha_revision'])): ?>
-                                    <small class="text-muted ms-1">Revisado: <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$pedido['calidad_fecha_revision']))) ?></small>
+                                <?php if (!empty($calidad['fecha_revision'])): ?>
+                                    <small class="text-muted ms-1">Revisado: <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$calidad['fecha_revision']))) ?></small>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($pedido_items_map[(int)$pedido['id']])): ?>
