@@ -133,43 +133,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                     if (empty($it['usa_receta'])) {
                         continue;
                     }
-                    
-                    // Obtener atributos del item
-                    $atributos_seleccionados = [];
-                    if (!empty($it['atributos'])) {
-                        $atributos_seleccionados = json_decode($it['atributos'], true) ?: [];
-                    }
-                    
-                    $producto_id = (int)$it['producto_id'];
-                    $ancho_cm = floatval($it['ancho_cm'] ?? 0);
-                    $alto_cm = floatval($it['alto_cm'] ?? 0);
-
-                    // Buscar atributo de color seleccionado (si existe)
-                    $color_val = null;
-                    if (is_array($atributos_seleccionados)) {
-                        foreach ($atributos_seleccionados as $attr) {
-                            $nombre_attr = (string)($attr['nombre'] ?? '');
-                            $valor_attr = (string)($attr['valor'] ?? '');
-                            $opcion_id_attr = isset($attr['opcion_id']) && $attr['opcion_id'] !== '' ? (int)$attr['opcion_id'] : null;
-
-                            // 1) Si el nombre del atributo menciona color, usar el valor
-                            if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && $valor_attr !== '') {
                                 $color_val = $valor_attr;
-                                break;
-                            }
-
-                            // 2) Si el valor parece un color HEX, usarlo
-                            if ($valor_attr !== '' && preg_match('/^#[0-9a-f]{6}$/i', $valor_attr)) {
-                                $color_val = $valor_attr;
-                                break;
-                            }
-
-                            // 3) Si hay opción y tiene color definido, usar ese color
-                            if (!empty($opcion_id_attr)) {
-                                if (!array_key_exists($opcion_id_attr, $opcion_color_cache)) {
-                                    $stmtOptColor = $pdo->prepare("SELECT color, nombre FROM ecommerce_atributo_opciones WHERE id = ? LIMIT 1");
-                                    $stmtOptColor->execute([$opcion_id_attr]);
-                                    $opcion_color_cache[$opcion_id_attr] = $stmtOptColor->fetch(PDO::FETCH_ASSOC) ?: null;
+                        // DEBUG: Solo echo para aislar el problema
+                        echo "DEBUG: pedidos.php ejecuta OK";
                                 }
                                 $op = $opcion_color_cache[$opcion_id_attr];
                                 if (!empty($op['color']) && preg_match('/^#[0-9a-f]{6}$/i', $op['color'])) {
