@@ -1,3 +1,4 @@
+echo "INICIO\n";
 // --- LOG DE ERRORES PERSONALIZADO ---
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
