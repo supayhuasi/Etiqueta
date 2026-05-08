@@ -1,3 +1,31 @@
+// --- LOG DE ERRORES PERSONALIZADO ---
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../logs/pedidos_error.log');
+
+set_exception_handler(function($e) {
+    error_log('Excepción no capturada en pedidos.php: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    http_response_code(500);
+    echo 'Ocurrió un error interno. Revise el log de errores.';
+    exit;
+});
+
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    error_log("Error PHP [$errno] $errstr en $errfile:$errline");
+    http_response_code(500);
+    echo 'Ocurrió un error interno. Revise el log de errores.';
+    exit;
+});
+
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("Error fatal: {$error['message']} en {$error['file']}:{$error['line']}");
+        http_response_code(500);
+        echo 'Ocurrió un error fatal. Revise el log de errores.';
+        exit;
+    }
+});
 <?php
 // Asegurar ruta absoluta para header.php
 require_once __DIR__ . '/includes/header.php';
