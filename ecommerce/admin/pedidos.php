@@ -347,18 +347,49 @@ if ($calidad_observacion_filter === 'con_observacion') {
 }
 
 // Contar total para paginación
-$stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
-$stmt_count->execute($params);
-$total_pedidos = (int)$stmt_count->fetchColumn();
-$total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
-$page = min($page, $total_paginas);
-$offset = ($page - 1) * $per_page;
+
+try {
+    $stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
+    $stmt_count->execute($params);
+    $total_pedidos = (int)$stmt_count->fetchColumn();
+    $total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
+    $page = min($page, $total_paginas);
+    $offset = ($page - 1) * $per_page;
+} catch (PDOException $e) {
+    echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Error SQL pedidos.php: ' . $e->getMessage());
+    exit;
+}
 
 
-$query = "SELECT p.id, p.numero_pedido, p.fecha_pedido, p.total, p.estado, p.public_token, c.nombre as cliente_nombre, c.email as cliente_email
-    FROM ecommerce_pedidos p
-    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    WHERE p.estado != 'cancelado'";
+
+// OPTIMIZACIÓN: Unir pagos y calidad en la consulta principal
+$query = "
+SELECT
+    p.id,
+    p.numero_pedido,
+    p.fecha_pedido,
+    p.total,
+    p.estado,
+    p.public_token,
+    c.nombre as cliente_nombre,
+    c.email as cliente_email,
+    COALESCE(pagos.total_pagado, 0) as total_pagado,
+    ci.id as calidad_id,
+    ci.estado_calidad,
+    ci.prueba_aprobada,
+    ci.detalle_revision,
+    ci.observaciones,
+    ci.fecha_revision
+FROM ecommerce_pedidos p
+LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+LEFT JOIN (
+    SELECT pedido_id, SUM(monto) AS total_pagado
+    FROM ecommerce_pedido_pagos
+    GROUP BY pedido_id
+) pagos ON pagos.pedido_id = p.id
+LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
+WHERE p.estado != 'cancelado'";
 if (!empty($estado_filter)) {
     $query .= " AND p.estado = ?";
 }
@@ -372,29 +403,19 @@ if (!empty($cliente_busqueda)) {
     $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
 }
 $query .= " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
-$stmt = $pdo->prepare($query);
-$stmt->execute(array_merge($params, [$per_page, $offset]));
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener totales pagados y calidad solo para los pedidos de la página actual
-$pedido_ids = array_column($pedidos, 'id');
-$pagos_map = [];
-$calidad_map = [];
-if (!empty($pedido_ids)) {
-    $placeholders = implode(',', array_fill(0, count($pedido_ids), '?'));
-    // Pagos
-    $stmt = $pdo->prepare("SELECT pedido_id, SUM(monto) AS total_pagado FROM ecommerce_pedido_pagos WHERE pedido_id IN ($placeholders) GROUP BY pedido_id");
-    $stmt->execute($pedido_ids);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $pagos_map[$row['pedido_id']] = (float)$row['total_pagado'];
-    }
-    // Calidad
-    $stmt = $pdo->prepare("SELECT pedido_id, id, estado_calidad, prueba_aprobada, detalle_revision, observaciones, fecha_revision FROM ecommerce_calidad_inspecciones WHERE pedido_id IN ($placeholders)");
-    $stmt->execute($pedido_ids);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $calidad_map[$row['pedido_id']] = $row;
-    }
+try {
+    $stmt = $pdo->prepare($query);
+    $stmt->execute(array_merge($params, [$per_page, $offset]));
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Error SQL pedidos.php: ' . $e->getMessage());
+    exit;
 }
+
+
+// Ya no es necesario hacer consultas adicionales para pagos y calidad
 
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
