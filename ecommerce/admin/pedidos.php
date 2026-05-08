@@ -1,6 +1,4 @@
-<?php
 echo "DEBUG SOLO PHP";
-?>
 // --- LOG DE ERRORES PERSONALIZADO ---
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -13,7 +11,6 @@ set_exception_handler(function($e) {
     echo 'Ocurrió un error interno. Revise el log de errores.';
     exit;
 });
-
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
     error_log("Error PHP [$errno] $errstr en $errfile:$errline");
     http_response_code(500);
@@ -50,72 +47,10 @@ $colores = [
     'enviado' => 'secondary',
     'entregado' => 'success',
     'cancelado' => 'danger',
-    'pagado' => 'success'
-];
-
-function pedidos_tabla_existe(PDO $pdo, string $tabla): bool {
-    try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
-        $stmt->execute([$tabla]);
-        return (int)$stmt->fetchColumn() > 0;
-    } catch (Exception $e) {
-        return false;
-    }
-}
-
-function pedidos_asegurar_tablas_remitos(PDO $pdo): void {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remitos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        pedido_id INT NOT NULL,
-        numero_remito VARCHAR(50) NOT NULL,
-        tipo ENUM('completo','parcial') NOT NULL DEFAULT 'completo',
-        observaciones TEXT NULL,
-        creado_por INT NULL,
-        fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uniq_numero_remito (numero_remito),
-        KEY idx_pedido (pedido_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remito_items (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        remito_id INT NOT NULL,
-        pedido_item_id INT NOT NULL,
-        cantidad DECIMAL(10,2) NOT NULL DEFAULT 0,
-        KEY idx_remito_id (remito_id),
-        KEY idx_pedido_item_id (pedido_item_id),
-        UNIQUE KEY uniq_remito_item (remito_id, pedido_item_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-}
-
-pedidos_asegurar_tablas_remitos($pdo);
-try {
-    ensureCalidadSchema($pdo);
-} catch (Throwable $e) {
-    // Continuar aunque la tabla de calidad no pueda inicializarse.
-}
-
-// Procesar cambio de estado ANTES de consultar pedidos
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'cambiar_estado') {
-    try {
-        $pedido_id = intval($_POST['pedido_id']);
-        $nuevo_estado = $_POST['nuevo_estado'];
-        
-        if (!in_array($nuevo_estado, $estados)) die("Estado inválido");
-        
-        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?");
-        $stmt->execute([$nuevo_estado, $pedido_id]);
-
-        if ($nuevo_estado === 'confirmado') {
-            $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
-            $stmt->execute([$pedido_id]);
-            $orden = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if (!$orden) {
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
                 $stmt->execute([$pedido_id]);
                 $orden_id = $pdo->lastInsertId();
                 $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
-            }
 
             if (empty($orden['materiales_descontados'])) {
                 // Descontar materiales según receta
@@ -150,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                                     break;
                                 }
                             }
-                        }
                     }
                     
                     // Obtener receta con condiciones evaluadas
@@ -163,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                     );
                     
                     if (empty($recetas)) {
-                        continue;
+                        http_response_code(500);
                     }
 
                     $alto_m = $alto_cm / 100;
@@ -226,7 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                             $materiales[$mat_id] += $cantidad_total;
                         }
                     }
-                }
 
                 foreach ($materiales_color as $mat_id => $opciones) {
                     foreach ($opciones as $opcion_id => $qty) {
@@ -242,7 +175,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
 
                 $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
                 $stmt->execute([$orden['id']]);
-            }
         }
         
         // Recargar
@@ -251,7 +183,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     } catch (Exception $e) {
         $error = "Error: " . $e->getMessage();
     }
-}
 
 // Consultar pedidos DESPUÉS de procesar POST
 $estado_filter = $_GET['estado'] ?? '';
