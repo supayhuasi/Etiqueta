@@ -1,5 +1,12 @@
 <?php
-require 'includes/header.php';
+// Asegurar ruta absoluta para header.php
+require_once __DIR__ . '/includes/header.php';
+
+// Verificar que la conexión PDO esté disponible
+if (!isset($pdo) || !$pdo) {
+    http_response_code(500);
+    die('Error: No se pudo establecer la conexión a la base de datos.');
+}
 require '../includes/funciones_recetas.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
