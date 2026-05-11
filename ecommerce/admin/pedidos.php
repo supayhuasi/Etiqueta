@@ -180,7 +180,15 @@ $page     = max(1, intval($_GET['pagina'] ?? 1));
 $query_from = "
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
+    LEFT JOIN (
+        SELECT ci.*
+        FROM ecommerce_calidad_inspecciones ci
+        INNER JOIN (
+            SELECT pedido_id, MAX(id) AS max_id
+            FROM ecommerce_calidad_inspecciones
+            GROUP BY pedido_id
+        ) latest ON ci.id = latest.max_id
+    ) ci ON ci.pedido_id = p.id
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
@@ -226,7 +234,7 @@ if ($calidad_observacion_filter === 'con_observacion') {
 }
 
 try {
-    $stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
+    $stmt_count = $pdo->prepare("SELECT COUNT(DISTINCT p.id) " . $query_from);
     $stmt_count->execute($params);
     $total_pedidos = (int)$stmt_count->fetchColumn();
     $total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
@@ -262,7 +270,15 @@ LEFT JOIN (
     FROM ecommerce_pedido_pagos
     GROUP BY pedido_id
 ) pagos ON pagos.pedido_id = p.id
-LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
+LEFT JOIN (
+    SELECT ci.*
+    FROM ecommerce_calidad_inspecciones ci
+    INNER JOIN (
+        SELECT pedido_id, MAX(id) AS max_id
+        FROM ecommerce_calidad_inspecciones
+        GROUP BY pedido_id
+    ) latest ON ci.id = latest.max_id
+) ci ON ci.pedido_id = p.id
 WHERE p.estado != 'cancelado'";
 if (!empty($estado_filter))    $query .= " AND p.estado = ?";
 if (!empty($fecha_desde))      $query .= " AND DATE(p.fecha_pedido) >= ?";
@@ -541,6 +557,7 @@ if (!empty($pedidos)) {
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-warning" href="calidad.php?pedido_id=<?= $pedido['id'] ?>">Calidad</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
+                            <a class="btn btn-sm btn-outline-dark" href="pedido_factura_pdf.php?pedido_id=<?= $pedido['id'] ?>" target="_blank">Factura PDF</a>
                             <?php if ($calidadEstado !== ''): ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="calidad_inspeccion_pdf.php?pedido_id=<?= $pedido['id'] ?>" target="_blank">PDF calidad</a>
                             <?php endif; ?>
