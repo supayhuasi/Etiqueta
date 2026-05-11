@@ -2,6 +2,9 @@
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/../../logs/pedidos_error.log');
+if (function_exists('opcache_invalidate')) {
+    opcache_invalidate(__FILE__, true);
+}
 
 set_exception_handler(function($e) {
     error_log('Excepción no capturada en pedidos.php: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
@@ -10,6 +13,10 @@ set_exception_handler(function($e) {
     exit;
 });
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    if ($errno === E_NOTICE || $errno === E_WARNING || $errno === E_DEPRECATED || $errno === E_STRICT) {
+        error_log("PHP Warning/Notice [$errno] $errstr en $errfile:$errline");
+        return true; // No interrumpir ejecución por notices/warnings
+    }
     error_log("Error PHP [$errno] $errstr en $errfile:$errline");
     http_response_code(500);
     echo 'Ocurrió un error interno. Revise el log de errores.';
@@ -177,10 +184,15 @@ $calidad_observacion_filter = $_GET['calidad_observacion'] ?? '';
 $per_page = 50;
 $page     = max(1, intval($_GET['pagina'] ?? 1));
 
-$query_from = "
-    FROM ecommerce_pedidos p
-    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    LEFT JOIN (
+// Verificar si existe la tabla de calidad
+$tabla_calidad_existe = false;
+try {
+    $pdo->query("SELECT 1 FROM `ecommerce_calidad_inspecciones` LIMIT 1");
+    $tabla_calidad_existe = true;
+} catch (PDOException $e) { /* tabla no existe */ }
+
+$calidad_join = $tabla_calidad_existe
+    ? "LEFT JOIN (
         SELECT ci.*
         FROM ecommerce_calidad_inspecciones ci
         INNER JOIN (
@@ -188,7 +200,13 @@ $query_from = "
             FROM ecommerce_calidad_inspecciones
             GROUP BY pedido_id
         ) latest ON ci.id = latest.max_id
-    ) ci ON ci.pedido_id = p.id
+    ) ci ON ci.pedido_id = p.id"
+    : "LEFT JOIN (SELECT NULL AS pedido_id, NULL AS id, NULL AS estado_calidad, NULL AS prueba_aprobada, NULL AS detalle_revision, NULL AS observaciones, NULL AS fecha_revision WHERE 1=0) ci ON ci.pedido_id = p.id";
+
+$query_from = "
+    FROM ecommerce_pedidos p
+    LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    $calidad_join
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
@@ -270,15 +288,7 @@ LEFT JOIN (
     FROM ecommerce_pedido_pagos
     GROUP BY pedido_id
 ) pagos ON pagos.pedido_id = p.id
-LEFT JOIN (
-    SELECT ci.*
-    FROM ecommerce_calidad_inspecciones ci
-    INNER JOIN (
-        SELECT pedido_id, MAX(id) AS max_id
-        FROM ecommerce_calidad_inspecciones
-        GROUP BY pedido_id
-    ) latest ON ci.id = latest.max_id
-) ci ON ci.pedido_id = p.id
+$calidad_join
 WHERE p.estado != 'cancelado'";
 if (!empty($estado_filter))    $query .= " AND p.estado = ?";
 if (!empty($fecha_desde))      $query .= " AND DATE(p.fecha_pedido) >= ?";
@@ -317,9 +327,27 @@ try {
     $stmt->execute();
     $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    echo '<div class="alert alert-danger">Error SQL pedidos: ' . htmlspecialchars($e->getMessage()) . '</div>';
     error_log('Error SQL pedidos.php: ' . $e->getMessage());
     exit;
+}
+
+if (isset($_GET['diag'])) {
+    echo '<div style="background:#222;color:#0f0;padding:1rem;margin:1rem 0;font-family:monospace;font-size:13px;border-radius:6px;white-space:pre-wrap;">';
+    echo '<strong>DIAGNÓSTICO pedidos.php</strong>' . "\n";
+    echo 'PHP version: ' . phpversion() . "\n";
+    echo 'Archivo: ' . __FILE__ . "\n";
+    echo 'Total pedidos (COUNT): ' . $total_pedidos . "\n";
+    echo 'Pedidos en esta página: ' . count($pedidos) . "\n";
+    echo 'Per page: ' . $per_page . ' | Offset: ' . $offset . "\n";
+    echo 'Tabla calidad existe: ' . ($tabla_calidad_existe ? 'SÍ' : 'NO') . "\n";
+    echo 'Query: ' . htmlspecialchars($query) . "\n";
+    echo 'Params filtros: ' . htmlspecialchars(json_encode($params)) . "\n";
+    if (!empty($pedidos)) {
+        echo 'IDs pedidos: ' . implode(', ', array_column($pedidos, 'id')) . "\n";
+        echo 'Estados: ' . implode(', ', array_column($pedidos, 'estado')) . "\n";
+    }
+    echo '</div>';
 }
 
 $request_scheme = 'http';
@@ -533,7 +561,7 @@ if (!empty($pedidos)) {
                         <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?></td>
                         <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                         <td>
-                            <span class="badge bg-<?= $colores[$pedido['estado']] ?>">
+                            <span class="badge bg-<?= $colores[$pedido['estado']] ?? 'secondary' ?>">
                                 <?= ucfirst($pedido['estado']) ?>
                             </span>
                         </td>
