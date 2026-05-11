@@ -316,6 +316,19 @@ try {
     exit;
 }
 
+// DEBUG TEMPORAL — eliminar después de confirmar
+if (isset($_GET['debug_pedidos'])) {
+    echo '<pre style="background:#111;color:#0f0;padding:1em;font-size:12px;">';
+    echo 'Total pedidos (count query): ' . $total_pedidos . "\n";
+    echo 'Pedidos en esta página: ' . count($pedidos) . "\n";
+    echo 'Página: ' . $page . ' / ' . $total_paginas . "\n";
+    echo 'OFFSET: ' . $offset . "\n";
+    echo 'Query: ' . htmlspecialchars($query) . "\n";
+    echo 'Params: ' . htmlspecialchars(json_encode($params)) . "\n";
+    echo '</pre>';
+}
+// FIN DEBUG
+
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
     $request_scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'https' : 'http';
