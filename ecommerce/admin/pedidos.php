@@ -308,26 +308,19 @@ $query .= " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 
 try {
     $stmt = $pdo->prepare($query);
-    $stmt->execute(array_merge($params, [$per_page, $offset]));
+    $pos = 1;
+    foreach ($params as $param) {
+        $stmt->bindValue($pos++, $param);
+    }
+    $stmt->bindValue($pos++, (int)$per_page, PDO::PARAM_INT);
+    $stmt->bindValue($pos++, (int)$offset, PDO::PARAM_INT);
+    $stmt->execute();
     $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
     error_log('Error SQL pedidos.php: ' . $e->getMessage());
     exit;
 }
-
-// DEBUG TEMPORAL — eliminar después de confirmar
-if (isset($_GET['debug_pedidos'])) {
-    echo '<pre style="background:#111;color:#0f0;padding:1em;font-size:12px;">';
-    echo 'Total pedidos (count query): ' . $total_pedidos . "\n";
-    echo 'Pedidos en esta página: ' . count($pedidos) . "\n";
-    echo 'Página: ' . $page . ' / ' . $total_paginas . "\n";
-    echo 'OFFSET: ' . $offset . "\n";
-    echo 'Query: ' . htmlspecialchars($query) . "\n";
-    echo 'Params: ' . htmlspecialchars(json_encode($params)) . "\n";
-    echo '</pre>';
-}
-// FIN DEBUG
 
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
