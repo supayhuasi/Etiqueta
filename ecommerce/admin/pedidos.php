@@ -1,7 +1,5 @@
-echo "DEBUG SOLO PHP";
-// --- LOG DE ERRORES PERSONALIZADO ---
+<?php
 ini_set('display_errors', 0);
-ini_set('log_errors', 1);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/../../logs/pedidos_error.log');
 
@@ -27,11 +25,9 @@ register_shutdown_function(function() {
         exit;
     }
 });
-<?php
-// Asegurar ruta absoluta para header.php
+
 require_once __DIR__ . '/includes/header.php';
 
-// Verificar que la conexión PDO esté disponible
 if (!isset($pdo) || !$pdo) {
     http_response_code(500);
     die('Error: No se pudo establecer la conexión a la base de datos.');
@@ -41,166 +37,150 @@ require_once __DIR__ . '/includes/calidad_helper.php';
 
 $estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'pagado'];
 $colores = [
-    'pendiente' => 'warning',
+    'pendiente'  => 'warning',
     'confirmado' => 'info',
     'preparando' => 'primary',
-    'enviado' => 'secondary',
-    'entregado' => 'success',
-    'cancelado' => 'danger',
-    // El siguiente bloque debe ir dentro de la lógica de cambio de estado a 'confirmado', no aquí:
-    // $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
-    // $stmt->execute([$pedido_id]);
+    'enviado'    => 'secondary',
+    'entregado'  => 'success',
+    'cancelado'  => 'danger',
+    'pagado'     => 'success',
 ];
 
-// El siguiente bloque debe ir dentro de la lógica de cambio de estado a 'confirmado', no aquí:
-// $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
-// $stmt->execute([$pedido_id]);
-// $orden_id = $pdo->lastInsertId();
-// $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
+$error = null;
 
-            if (empty($orden['materiales_descontados'])) {
-                // Descontar materiales según receta
-                $stmt = $pdo->prepare("
-                    SELECT pi.*, p.usa_receta
-                    FROM ecommerce_pedido_items pi
-                    JOIN ecommerce_productos p ON pi.producto_id = p.id
-                    WHERE pi.pedido_id = ?
-                ");
-                $stmt->execute([$pedido_id]);
-                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pedido_id'], $_POST['nuevo_estado'])) {
+    $pedido_id    = (int)$_POST['pedido_id'];
+    $nuevo_estado = $_POST['nuevo_estado'];
+    if (!in_array($nuevo_estado, $estados)) {
+        $error = 'Estado inválido.';
+    } else {
+        try {
+            $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?")->execute([$nuevo_estado, $pedido_id]);
 
-                $materiales = [];
-                $materiales_color = [];
-                $color_cache = [];
-                $opcion_color_cache = [];
-                foreach ($items as $it) {
-                    if (empty($it['usa_receta'])) {
-                        continue;
-                    }
-                    // Aquí debería ir la lógica de $color_val, $op, etc. Si no está definida, comentar o eliminar.
-                    // $color_val = $valor_attr;
-                    // echo "DEBUG: pedidos.php ejecuta OK";
-                    // $op = $opcion_color_cache[$opcion_id_attr];
-                    // if (!empty($op['color']) && preg_match('/^#[0-9a-f]{6}$/i', $op['color'])) {
-                    //     $color_val = $op['color'];
-                    //     break;
-                    // }
-                    // if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && !empty($op['nombre'])) {
-                    //     $color_val = $op['nombre'];
-                    //     break;
-                    // }
+            if ($nuevo_estado === 'confirmado') {
+                $stmtOrden = $pdo->prepare("SELECT id, materiales_descontados FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+                $stmtOrden->execute([$pedido_id]);
+                $orden = $stmtOrden->fetch(PDO::FETCH_ASSOC);
+                if (!$orden) {
+                    $stmtIns = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
+                    $stmtIns->execute([$pedido_id]);
+                    $orden = ['id' => $pdo->lastInsertId(), 'materiales_descontados' => 0];
                 }
-                    
-                    // Obtener receta con condiciones evaluadas
-                    $recetas = obtener_receta_con_condiciones(
-                        $pdo,
-                        $producto_id,
-                        $ancho_cm,
-                        $alto_cm,
-                        $atributos_seleccionados
-                    );
-                    
-                    if (empty($recetas)) {
-                        http_response_code(500);
-                    }
 
-                    $alto_m = $alto_cm / 100;
-                    $ancho_m = $ancho_cm / 100;
-                    $area_m2 = $alto_m * $ancho_m;
+                if (empty($orden['materiales_descontados'])) {
+                    $stmtIt = $pdo->prepare("
+                        SELECT pi.*, p.usa_receta
+                        FROM ecommerce_pedido_items pi
+                        JOIN ecommerce_productos p ON pi.producto_id = p.id
+                        WHERE pi.pedido_id = ?
+                    ");
+                    $stmtIt->execute([$pedido_id]);
+                    $items = $stmtIt->fetchAll(PDO::FETCH_ASSOC);
 
-                    foreach ($recetas as $r) {
-                        $factor = (float)$r['factor'];
-                        $merma = (float)$r['merma_pct'];
-                        $cantidad_base = 0;
-                        if ($r['tipo_calculo'] === 'fijo') {
-                            $cantidad_base = $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_area') {
-                            $cantidad_base = $area_m2 * $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_ancho') {
-                            $cantidad_base = $ancho_m * $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_alto') {
-                            $cantidad_base = $alto_m * $factor;
+                    $materiales       = [];
+                    $materiales_color = [];
+                    $color_cache      = [];
+
+                    foreach ($items as $it) {
+                        if (empty($it['usa_receta'])) continue;
+                        $producto_id = (int)$it['producto_id'];
+                        $ancho_cm    = (float)($it['ancho_cm'] ?? 0);
+                        $alto_cm     = (float)($it['alto_cm'] ?? 0);
+                        $atributos_seleccionados = [];
+                        if (!empty($it['atributos'])) {
+                            $arr = json_decode((string)$it['atributos'], true);
+                            if (is_array($arr)) $atributos_seleccionados = $arr;
                         }
-                        $cantidad_total = $cantidad_base * (1 + ($merma / 100));
-                        $cantidad_total = $cantidad_total * (int)$it['cantidad'];
+                        $color_val = null;
+                        foreach ($atributos_seleccionados as $attr) {
+                            $nombre_attr = strtolower(trim((string)($attr['nombre'] ?? '')));
+                            $valor_attr  = trim((string)($attr['valor'] ?? ''));
+                            if (stripos($nombre_attr, 'color') !== false && $valor_attr !== '') {
+                                $color_val = $valor_attr;
+                                break;
+                            }
+                        }
 
-                        $mat_id = (int)$r['material_producto_id'];
+                        $recetas = obtener_receta_con_condiciones($pdo, $producto_id, $ancho_cm, $alto_cm, $atributos_seleccionados);
+                        if (empty($recetas)) continue;
 
-                        // Si hay color seleccionado, intentar descontar stock por opción de color del material
-                        $opcion_id = null;
-                        if (!empty($color_val)) {
-                            $cache_key = $mat_id . '|' . strtolower(trim($color_val));
-                            if (array_key_exists($cache_key, $color_cache)) {
-                                $opcion_id = $color_cache[$cache_key];
+                        $alto_m  = $alto_cm / 100;
+                        $ancho_m = $ancho_cm / 100;
+                        $area_m2 = $alto_m * $ancho_m;
+
+                        foreach ($recetas as $r) {
+                            $factor        = (float)$r['factor'];
+                            $merma         = (float)$r['merma_pct'];
+                            $cantidad_base = 0;
+                            if ($r['tipo_calculo'] === 'fijo')         $cantidad_base = $factor;
+                            elseif ($r['tipo_calculo'] === 'por_area')  $cantidad_base = $area_m2 * $factor;
+                            elseif ($r['tipo_calculo'] === 'por_ancho') $cantidad_base = $ancho_m * $factor;
+                            elseif ($r['tipo_calculo'] === 'por_alto')  $cantidad_base = $alto_m  * $factor;
+                            $cantidad_total = $cantidad_base * (1 + ($merma / 100)) * (int)$it['cantidad'];
+                            $mat_id = (int)$r['material_producto_id'];
+
+                            $opcion_id = null;
+                            if (!empty($color_val)) {
+                                $cache_key = $mat_id . '|' . strtolower(trim($color_val));
+                                if (array_key_exists($cache_key, $color_cache)) {
+                                    $opcion_id = $color_cache[$cache_key];
+                                } else {
+                                    $stmtOpt = $pdo->prepare("
+                                        SELECT o.id FROM ecommerce_atributo_opciones o
+                                        JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+                                        WHERE a.producto_id = ? AND a.tipo = 'select'
+                                          AND LOWER(a.nombre) LIKE '%color%'
+                                          AND (LOWER(o.nombre) = LOWER(?) OR o.color = ?)
+                                        LIMIT 1
+                                    ");
+                                    $stmtOpt->execute([$mat_id, $color_val, $color_val]);
+                                    $opcion_id = $stmtOpt->fetchColumn() ?: null;
+                                    $color_cache[$cache_key] = $opcion_id;
+                                }
+                            }
+
+                            if (!empty($opcion_id)) {
+                                $materiales_color[$mat_id][$opcion_id] = ($materiales_color[$mat_id][$opcion_id] ?? 0) + $cantidad_total;
                             } else {
-                                $stmtOpt = $pdo->prepare("
-                                    SELECT o.id
-                                    FROM ecommerce_atributo_opciones o
-                                    JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
-                                    WHERE a.producto_id = ?
-                                      AND a.tipo = 'select'
-                                      AND LOWER(a.nombre) LIKE '%color%'
-                                      AND (LOWER(o.nombre) = LOWER(?) OR o.color = ?)
-                                    LIMIT 1
-                                ");
-                                $stmtOpt->execute([$mat_id, $color_val, $color_val]);
-                                $opcion_id = $stmtOpt->fetchColumn() ?: null;
-                                $color_cache[$cache_key] = $opcion_id;
+                                $materiales[$mat_id] = ($materiales[$mat_id] ?? 0) + $cantidad_total;
                             }
-                        }
-
-                        if (!empty($opcion_id)) {
-                            if (!isset($materiales_color[$mat_id])) {
-                                $materiales_color[$mat_id] = [];
-                            }
-                            if (!isset($materiales_color[$mat_id][$opcion_id])) {
-                                $materiales_color[$mat_id][$opcion_id] = 0;
-                            }
-                            $materiales_color[$mat_id][$opcion_id] += $cantidad_total;
-                        } else {
-                            if (!isset($materiales[$mat_id])) {
-                                $materiales[$mat_id] = 0;
-                            }
-                            $materiales[$mat_id] += $cantidad_total;
                         }
                     }
 
-                foreach ($materiales_color as $mat_id => $opciones) {
-                    foreach ($opciones as $opcion_id => $qty) {
-                        $stmt = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock - ? WHERE id = ?");
-                        $stmt->execute([$qty, $opcion_id]);
+                    foreach ($materiales_color as $mat_id => $opciones) {
+                        foreach ($opciones as $opcion_id => $qty) {
+                            $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock - ? WHERE id = ?")->execute([$qty, $opcion_id]);
+                        }
                     }
+                    foreach ($materiales as $mat_id => $qty) {
+                        $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?")->execute([$qty, $mat_id]);
+                    }
+                    $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?")->execute([$orden['id']]);
                 }
+            }
 
-                foreach ($materiales as $mat_id => $qty) {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
-                    $stmt->execute([$qty, $mat_id]);
-                }
-
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
-                $stmt->execute([$orden['id']]);
-}
-        
-        // Recargar
-        header("Location: pedidos.php");
-        exit;
-    } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
+            header("Location: pedidos.php");
+            exit;
+        } catch (Exception $e) {
+            $error = "Error: " . $e->getMessage();
+        }
     }
+}
 
-// Consultar pedidos DESPUÉS de procesar POST
-$estado_filter = $_GET['estado'] ?? '';
-$fecha_desde = $_GET['fecha_desde'] ?? '';
-$fecha_hasta = $_GET['fecha_hasta'] ?? '';
-$cliente_busqueda = $_GET['cliente'] ?? '';
-$calidad_revision_filter = $_GET['calidad_revision'] ?? '';
+// Filtros
+$estado_filter              = $_GET['estado'] ?? '';
+$fecha_desde                = $_GET['fecha_desde'] ?? '';
+$fecha_hasta                = $_GET['fecha_hasta'] ?? '';
+$cliente_busqueda           = $_GET['cliente'] ?? '';
+$calidad_revision_filter    = $_GET['calidad_revision'] ?? '';
 $calidad_observacion_filter = $_GET['calidad_observacion'] ?? '';
 $per_page = 50;
-$page = max(1, intval($_GET['pagina'] ?? 1));
+$page     = max(1, intval($_GET['pagina'] ?? 1));
 
 $query_from = "
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+    LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
@@ -209,17 +189,14 @@ if (!empty($estado_filter)) {
     $query_from .= " AND p.estado = ?";
     $params[] = $estado_filter;
 }
-
 if (!empty($fecha_desde)) {
     $query_from .= " AND DATE(p.fecha_pedido) >= ?";
     $params[] = $fecha_desde;
 }
-
 if (!empty($fecha_hasta)) {
     $query_from .= " AND DATE(p.fecha_pedido) <= ?";
     $params[] = $fecha_hasta;
 }
-
 if (!empty($cliente_busqueda)) {
     $query_from .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
     $busqueda_wildcard = '%' . $cliente_busqueda . '%';
@@ -227,13 +204,11 @@ if (!empty($cliente_busqueda)) {
     $params[] = $busqueda_wildcard;
     $params[] = $busqueda_wildcard;
 }
-
 if ($calidad_revision_filter === 'chequeados') {
     $query_from .= " AND ci.id IS NOT NULL";
 } elseif ($calidad_revision_filter === 'sin_chequear') {
     $query_from .= " AND ci.id IS NULL";
 }
-
 if ($calidad_observacion_filter === 'con_observacion') {
     $query_from .= " AND (
         LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
@@ -242,8 +217,7 @@ if ($calidad_observacion_filter === 'con_observacion') {
     )";
 } elseif ($calidad_observacion_filter === 'sin_observacion') {
     $query_from .= " AND (
-        ci.id IS NULL
-        OR (
+        ci.id IS NULL OR (
             LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
             AND NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NULL
             AND NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NULL
@@ -251,14 +225,12 @@ if ($calidad_observacion_filter === 'con_observacion') {
     )";
 }
 
-// Contar total para paginación
-
 try {
     $stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
     $stmt_count->execute($params);
     $total_pedidos = (int)$stmt_count->fetchColumn();
     $total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
-    $page = min($page, $total_paginas);
+    $page   = min($page, $total_paginas);
     $offset = ($page - 1) * $per_page;
 } catch (PDOException $e) {
     echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
@@ -266,9 +238,6 @@ try {
     exit;
 }
 
-
-
-// OPTIMIZACIÓN: Unir pagos y calidad en la consulta principal
 $query = "
 SELECT
     p.id,
@@ -277,10 +246,10 @@ SELECT
     p.total,
     p.estado,
     p.public_token,
-    c.nombre as cliente_nombre,
-    c.email as cliente_email,
-    COALESCE(pagos.total_pagado, 0) as total_pagado,
-    ci.id as calidad_id,
+    c.nombre  AS cliente_nombre,
+    c.email   AS cliente_email,
+    COALESCE(pagos.total_pagado, 0) AS total_pagado,
+    ci.id              AS calidad_id,
     ci.estado_calidad,
     ci.prueba_aprobada,
     ci.detalle_revision,
@@ -295,17 +264,29 @@ LEFT JOIN (
 ) pagos ON pagos.pedido_id = p.id
 LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
 WHERE p.estado != 'cancelado'";
-if (!empty($estado_filter)) {
-    $query .= " AND p.estado = ?";
+if (!empty($estado_filter))    $query .= " AND p.estado = ?";
+if (!empty($fecha_desde))      $query .= " AND DATE(p.fecha_pedido) >= ?";
+if (!empty($fecha_hasta))      $query .= " AND DATE(p.fecha_pedido) <= ?";
+if (!empty($cliente_busqueda)) $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+if ($calidad_revision_filter === 'chequeados') {
+    $query .= " AND ci.id IS NOT NULL";
+} elseif ($calidad_revision_filter === 'sin_chequear') {
+    $query .= " AND ci.id IS NULL";
 }
-if (!empty($fecha_desde)) {
-    $query .= " AND DATE(p.fecha_pedido) >= ?";
-}
-if (!empty($fecha_hasta)) {
-    $query .= " AND DATE(p.fecha_pedido) <= ?";
-}
-if (!empty($cliente_busqueda)) {
-    $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+if ($calidad_observacion_filter === 'con_observacion') {
+    $query .= " AND (
+        LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
+        OR NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NOT NULL
+    )";
+} elseif ($calidad_observacion_filter === 'sin_observacion') {
+    $query .= " AND (
+        ci.id IS NULL OR (
+            LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
+            AND NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NULL
+            AND NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NULL
+        )
+    )";
 }
 $query .= " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 
@@ -319,51 +300,55 @@ try {
     exit;
 }
 
-
-// Ya no es necesario hacer consultas adicionales para pagos y calidad
-
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
     $request_scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'https' : 'http';
 } elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
     $request_scheme = 'https';
 }
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$base_url = $request_scheme . '://' . $host . $public_base;
+$host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_url = $request_scheme . '://' . $host . ($public_base ?? '');
 
-// Marcar pedidos como pagados si corresponde y agregar datos de pagos/calidad
 foreach ($pedidos as &$pedido) {
-    $pedido_id = $pedido['id'];
-    $pedido['total_pagado'] = $pagos_map[$pedido_id] ?? 0;
-    $pedido['calidad'] = $calidad_map[$pedido_id] ?? null;
-    $total_pagado = (float)$pedido['total_pagado'];
+    $pid          = $pedido['id'];
+    $total_pagado = (float)($pedido['total_pagado'] ?? 0);
     $total_pedido = (float)($pedido['total'] ?? 0);
     if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
-        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?");
-        $stmt->execute([$pedido_id]);
+        $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?")->execute([$pid]);
         $pedido['estado'] = 'pagado';
     }
     if (empty($pedido['public_token'])) {
         $nuevo_token = bin2hex(random_bytes(16));
         try {
-            $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?");
-            $stmt->execute([$nuevo_token, $pedido_id]);
+            $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?")->execute([$nuevo_token, $pid]);
             $pedido['public_token'] = $nuevo_token;
-        } catch (Exception $e) {
-            // Si falla, continuar sin token
-        }
+        } catch (Exception $e) { /* continuar */ }
     }
+    $pedido['calidad'] = [
+        'id'              => $pedido['calidad_id']        ?? null,
+        'estado_calidad'  => $pedido['estado_calidad']    ?? null,
+        'prueba_aprobada' => $pedido['prueba_aprobada']   ?? null,
+        'detalle_revision'=> $pedido['detalle_revision']  ?? null,
+        'observaciones'   => $pedido['observaciones']     ?? null,
+        'fecha_revision'  => $pedido['fecha_revision']    ?? null,
+    ];
 }
 unset($pedido);
 
-$pedido_items_map = [];
+$pedido_items_map      = [];
 $pedido_remito_resumen = [];
 
-if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
-    $pedido_ids = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
-    if (!empty($pedido_ids)) {
+if (!empty($pedidos)) {
+    $tabla_items_existe = false;
+    try {
+        $pdo->query("SELECT 1 FROM `ecommerce_pedido_items` LIMIT 1");
+        $tabla_items_existe = true;
+    } catch (PDOException $e) { /* tabla no existe */ }
+
+    if ($tabla_items_existe) {
+        $pedido_ids   = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
         $placeholders = implode(', ', array_fill(0, count($pedido_ids), '?'));
-        $sql_items_remito = "
+        $sql_items = "
             SELECT pi.id, pi.pedido_id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos,
                    COALESCE(pr.nombre, 'Producto') AS producto_nombre,
                    COALESCE(rem.cantidad_remitida, 0) AS cantidad_remitida
@@ -377,13 +362,13 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
             WHERE pi.pedido_id IN ($placeholders)
             ORDER BY pi.pedido_id ASC, pi.id ASC
         ";
-        $stmt = $pdo->prepare($sql_items_remito);
-        $stmt->execute($pedido_ids);
+        $stmtIt = $pdo->prepare($sql_items);
+        $stmtIt->execute($pedido_ids);
 
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $item) {
-            $pedidoId = (int)$item['pedido_id'];
-            $cantidadTotal = (float)($item['cantidad'] ?? 0);
-            $cantidadRemitida = min($cantidadTotal, (float)($item['cantidad_remitida'] ?? 0));
+        foreach ($stmtIt->fetchAll(PDO::FETCH_ASSOC) as $item) {
+            $pedidoId          = (int)$item['pedido_id'];
+            $cantidadTotal     = (float)($item['cantidad'] ?? 0);
+            $cantidadRemitida  = min($cantidadTotal, (float)($item['cantidad_remitida'] ?? 0));
             $cantidadPendiente = max(0, $cantidadTotal - $cantidadRemitida);
 
             $medidas = '';
@@ -396,40 +381,33 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
 
             $atributosTexto = '';
             if (!empty($item['atributos'])) {
-                $atributos = json_decode((string)$item['atributos'], true);
-                if (is_array($atributos)) {
+                $atrs = json_decode((string)$item['atributos'], true);
+                if (is_array($atrs)) {
                     $partes = [];
-                    foreach ($atributos as $attr) {
-                        $nombreAttr = trim((string)($attr['nombre'] ?? ''));
-                        $valorAttr = trim((string)($attr['valor'] ?? ''));
-                        if ($nombreAttr !== '' || $valorAttr !== '') {
-                            $partes[] = trim($nombreAttr . ': ' . $valorAttr, ': ');
-                        }
+                    foreach ($atrs as $attr) {
+                        $n = trim((string)($attr['nombre'] ?? ''));
+                        $v = trim((string)($attr['valor'] ?? ''));
+                        if ($n !== '' || $v !== '') $partes[] = trim($n . ': ' . $v, ': ');
                     }
                     $atributosTexto = implode(' · ', $partes);
                 }
             }
 
             $pedido_items_map[$pedidoId][] = [
-                'id' => (int)$item['id'],
+                'id'       => (int)$item['id'],
                 'producto' => (string)$item['producto_nombre'],
                 'cantidad' => $cantidadTotal,
                 'remitida' => $cantidadRemitida,
-                'pendiente' => $cantidadPendiente,
-                'medidas' => $medidas,
-                'atributos' => $atributosTexto,
+                'pendiente'=> $cantidadPendiente,
+                'medidas'  => $medidas,
+                'atributos'=> $atributosTexto,
             ];
 
             if (!isset($pedido_remito_resumen[$pedidoId])) {
-                $pedido_remito_resumen[$pedidoId] = [
-                    'cantidad_total' => 0,
-                    'cantidad_remitida' => 0,
-                    'cantidad_pendiente' => 0,
-                ];
+                $pedido_remito_resumen[$pedidoId] = ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0];
             }
-
-            $pedido_remito_resumen[$pedidoId]['cantidad_total'] += $cantidadTotal;
-            $pedido_remito_resumen[$pedidoId]['cantidad_remitida'] += $cantidadRemitida;
+            $pedido_remito_resumen[$pedidoId]['cantidad_total']     += $cantidadTotal;
+            $pedido_remito_resumen[$pedidoId]['cantidad_remitida']  += $cantidadRemitida;
             $pedido_remito_resumen[$pedidoId]['cantidad_pendiente'] += $cantidadPendiente;
         }
     }
