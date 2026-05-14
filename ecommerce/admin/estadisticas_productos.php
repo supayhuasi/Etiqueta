@@ -27,10 +27,13 @@ if ($periodo === 'mes') {
 $startStr = $start->format('Y-m-d H:i:s');
 $endStr   = $end->format('Y-m-d H:i:s');
 
-// Verificar tablas necesarias
-$tiene_items    = admin_table_exists($pdo, 'ecommerce_pedido_items');
-$tiene_productos = admin_table_exists($pdo, 'ecommerce_productos');
-$tiene_pedidos  = admin_table_exists($pdo, 'ecommerce_pedidos');
+// Verificar tablas necesarias con SELECT directo (SHOW TABLES LIKE falla con _ en el nombre)
+$tiene_items    = false;
+$tiene_productos = false;
+$tiene_pedidos  = false;
+try { $pdo->query("SELECT 1 FROM ecommerce_pedido_items LIMIT 1");  $tiene_items    = true; } catch (PDOException $e) {}
+try { $pdo->query("SELECT 1 FROM ecommerce_productos LIMIT 1");     $tiene_productos = true; } catch (PDOException $e) {}
+try { $pdo->query("SELECT 1 FROM ecommerce_pedidos LIMIT 1");       $tiene_pedidos  = true; } catch (PDOException $e) {}
 
 // ---------------------------------------------------------------
 // 1. RANKING DE PRODUCTOS MÁS VENDIDOS (por cantidad)
