@@ -46,7 +46,14 @@ if ($tiene_items && $tiene_productos && $tiene_pedidos) {
                 pr.nombre AS producto,
                 SUM(pi.cantidad) AS total_cantidad,
                 COUNT(DISTINCT pi.pedido_id) AS total_pedidos,
-                SUM(pi.precio_unitario * pi.cantidad) AS total_importe
+                SUM(
+                    COALESCE(pi.subtotal, pi.precio_unitario * pi.cantidad)
+                    * CASE
+                        WHEN COALESCE(p.subtotal, 0) > 0
+                        THEN (COALESCE(p.subtotal, 0) - COALESCE(p.descuento_monto, 0)) / p.subtotal
+                        ELSE 1
+                      END
+                ) AS total_importe
             FROM ecommerce_pedido_items pi
             JOIN ecommerce_pedidos p ON p.id = pi.pedido_id
             LEFT JOIN ecommerce_productos pr ON pr.id = pi.producto_id

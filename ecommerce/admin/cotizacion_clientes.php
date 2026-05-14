@@ -1,6 +1,8 @@
 <?php
 require 'includes/header.php';
 
+$es_revendedor = (($role ?? '') === 'revendedor');
+
 $stmt = $pdo->query("SELECT * FROM ecommerce_cotizacion_clientes ORDER BY nombre");
 $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -10,7 +12,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <h1>👥 Clientes de Cotización</h1>
         <p class="text-muted">Gestioná clientes para agrupar cotizaciones</p>
     </div>
-    <a href="cotizacion_clientes_crear.php" class="btn btn-primary">+ Nuevo Cliente</a>
+    <a href="cotizacion_clientes_crear.php" class="btn btn-primary <?= $es_revendedor ? 'd-none' : '' ?>">+ Nuevo Cliente</a>
 </div>
 
 <div class="card">
@@ -45,8 +47,12 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td>
+                                    <?php if (!$es_revendedor): ?>
                                     <a href="cotizacion_clientes_crear.php?id=<?= $cli['id'] ?>" class="btn btn-sm btn-warning">✏️ Editar</a>
                                     <a href="cotizacion_clientes_eliminar.php?id=<?= $cli['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar cliente?')">🗑️ Eliminar</a>
+                                    <?php else: ?>
+                                    <span class="text-muted small">Solo lectura</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

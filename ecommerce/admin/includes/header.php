@@ -156,6 +156,7 @@ $role_aliases = [
     'administrador del sistema' => 'admin',
     'superadmin' => 'admin',
     'super_admin' => 'admin',
+    'revendedor' => 'revendedor',
     'vendedor' => 'ventas',
     'vendedores' => 'ventas',
     'venta' => 'ventas',
@@ -237,6 +238,13 @@ $role_permissions = [
         'encuestas',
         'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+    ],
+    'revendedor' => [
+        'dashboard',
+        'cotizaciones',
+        'cotizacion_clientes',
+        'pedidos',
+        'inicio_principal', 'dashboard_principal', 'tienda'
     ]
 ];
 
@@ -308,6 +316,10 @@ $page_permissions = [
     'cotizaciones.php' => 'cotizaciones',
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
+    'cotizacion_editar.php' => 'cotizaciones',
+    'cotizacion_pdf.php' => 'cotizaciones',
+    'cotizacion_clientes_crear.php' => 'cotizacion_clientes',
+    'cotizacion_clientes_eliminar.php' => 'cotizacion_clientes',
     'recordatorios.php' => 'recordatorios',
     'crm.php' => 'crm',
     'descuentos.php' => 'descuentos',
@@ -361,6 +373,22 @@ if ($current_page === 'instalaciones.php' && !$can_access('instalaciones')) {
 }
 if (isset($page_permissions[$current_page]) && !($current_page === 'instalaciones.php') && !$can_access($page_permissions[$current_page])) {
     die("Acceso denegado. No tenés permisos para esta sección.");
+}
+
+// Revendedor no puede crear/editar/eliminar clientes de cotización
+if ($role === 'revendedor' && in_array($current_page, ['cotizacion_clientes_crear.php', 'cotizacion_clientes_eliminar.php', 'cotizacion_crear.php', 'cotizacion_editar.php'])) {
+    die("Acceso denegado. El rol revendedor no tiene permisos para esta acción.");
+}
+
+// Asegurar que el rol 'revendedor' exista en la tabla roles
+try {
+    $stmt_rol_check = $pdo->prepare("SELECT COUNT(*) FROM roles WHERE nombre = 'revendedor'");
+    $stmt_rol_check->execute();
+    if ((int)$stmt_rol_check->fetchColumn() === 0) {
+        $pdo->prepare("INSERT INTO roles (nombre) VALUES ('revendedor')")->execute();
+    }
+} catch (Throwable $e) {
+    // No interrumpir si falla (e.g. tabla sin columna nombre)
 }
 
 if (!function_exists('admin_table_exists')) {
