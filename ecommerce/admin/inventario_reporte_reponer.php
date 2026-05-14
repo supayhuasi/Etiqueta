@@ -190,7 +190,8 @@ $items_solo_compra = count(array_filter($items_reponer, fn($i) => $i['tipo_orige
             </div>
             <div>
                 <a href="inventario.php" class="btn btn-secondary">← Volver a Inventario</a>
-                <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir</button>
+                <a href="inventario_reporte_reponer_pdf.php<?= $ver_colores ? '?ver_colores=1' : '' ?>" target="_blank" class="btn btn-danger">📄 Descargar PDF</a>
+                <button onclick="window.print()" class="btn btn-outline-primary">🖨️ Imprimir pantalla</button>
                 <?php if ($tiene_opciones): ?>
                     <?php if ($ver_colores): ?>
                         <a href="inventario_reporte_reponer.php" class="btn btn-outline-secondary">Ocultar colores</a>
