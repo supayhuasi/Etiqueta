@@ -865,8 +865,17 @@ function maxDescuentoInicial(item, precioBase) {
     return Math.min(100, Math.max(0, fromList)).toFixed(2);
 }
 
+function limpiarEstadoModal() {
+    // Limpia cualquier backdrop o estado residual antes de abrir el modal
+    try { document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); }); } catch(e){}
+    try { document.body.classList.remove('modal-open'); } catch(e){}
+    try { document.body.style.removeProperty('padding-right'); } catch(e){}
+    try { document.body.style.removeProperty('overflow'); } catch(e){}
+}
+
 function abrirModalItem(editIndex = null) {
     modalEditIndex = editIndex;
+    limpiarEstadoModal();
     asegurarDatalistProductos();
     resetearModalItem();
 
@@ -919,6 +928,11 @@ function abrirModalItem(editIndex = null) {
                 modalEl.addEventListener('hidden.bs.modal', function() {
                     try { modalEl.setAttribute('aria-hidden', 'true'); } catch(e){}
                     try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+                    // Garantizar limpieza completa del estado del modal
+                    try { document.body.classList.remove('modal-open'); } catch(e){}
+                    try { document.body.style.removeProperty('padding-right'); } catch(e){}
+                    try { document.body.style.removeProperty('overflow'); } catch(e){}
+                    try { document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); }); } catch(e){}
                 });
                 modalEl._bsListenersAdded = true;
             }
@@ -1973,6 +1987,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnSubmit.textContent = 'Guardando...';
             }
 
+            // Safety: re-habilitar el botón si la navegación no ocurre en 30s
+            const safetyTimer = setTimeout(function() {
+                envioEnCurso = false;
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = '💾 Guardar Cambios';
+                }
+            }, 30000);
+
             const nativeSubmit = HTMLFormElement.prototype.submit;
             try {
                 if (typeof nativeSubmit === 'function') {
@@ -1981,6 +2004,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     formCot.submit();
                 }
             } catch (submitError) {
+                clearTimeout(safetyTimer);
                 envioEnCurso = false;
                 if (btnSubmit) {
                     btnSubmit.disabled = false;
