@@ -318,6 +318,7 @@ $page_permissions = [
     'calidad.php' => 'calidad',
     'calidad_reporte.php' => 'calidad',
     'ventas_reportes.php' => 'ventas_reportes',
+    'estadisticas_productos.php' => 'ventas_reportes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
@@ -1953,6 +1954,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('ventas_reportes')): ?>
                         <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
+                        <a href="<?= $admin_url ?>estadisticas_productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'estadisticas_productos.php' ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Estadísticas de Productos</a>
                         <?php endif; ?>
                     </div>
                 </div>
