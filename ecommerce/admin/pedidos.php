@@ -469,7 +469,21 @@ if (!empty($pedidos)) {
         <h1 class="mb-1">Pedidos</h1>
         <p class="text-muted mb-0">Gestión de pedidos y seguimiento de estados</p>
     </div>
-    <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= $total_pedidos ?></div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= $total_pedidos ?></div>
+        <?php
+            $pdf_params = http_build_query(array_filter([
+                'estado'      => $estado_filter,
+                'fecha_desde' => $fecha_desde,
+                'fecha_hasta' => $fecha_hasta,
+                'cliente'     => $cliente_busqueda,
+            ]));
+        ?>
+        <a href="pedidos_lista_pdf.php<?= $pdf_params ? '?' . htmlspecialchars($pdf_params) : '' ?>"
+           class="btn btn-danger btn-sm" target="_blank" title="Descargar PDF con los filtros actuales">
+            📄 Descargar PDF
+        </a>
+    </div>
 </div>
 
 <?php if (isset($error)): ?>
