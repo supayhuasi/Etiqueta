@@ -6,6 +6,14 @@ function get_columns($pdo, $tabla) {
     return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 }
 
+// Auto-migración: agregar columna ubicacion si no existe
+foreach (['ecommerce_materiales', 'ecommerce_productos'] as $_tabla) {
+    try {
+        $pdo->query("ALTER TABLE `{$_tabla}` ADD COLUMN `ubicacion` VARCHAR(120) NULL DEFAULT NULL AFTER `stock_minimo`");
+    } catch (Throwable $_e) { /* columna ya existe */ }
+}
+unset($_tabla, $_e);
+
 $cols_materiales = get_columns($pdo, 'ecommerce_materiales');
 $cols_productos = get_columns($pdo, 'ecommerce_productos');
 
@@ -28,6 +36,7 @@ foreach (['stock','stock_minimo','tipo_origen','proveedor_habitual_id'] as $col)
 $tipo_filtro = $_GET['tipo'] ?? 'todos'; // todos, materiales, productos
 $alerta_filtro = $_GET['alerta'] ?? 'todos'; // todos, bajo_minimo, negativo, sin_alerta
 $origen_filtro = $_GET['origen'] ?? 'todos'; // todos, fabricacion_propia, compra
+$ubicacion_filtro = trim($_GET['ubicacion'] ?? '');
 $buscar = $_GET['buscar'] ?? '';
 $ver_colores = !empty($_GET['ver_colores']);
 
@@ -38,6 +47,11 @@ $params_materiales = [];
 if ($buscar) {
     $where_materiales[] = "nombre LIKE ?";
     $params_materiales[] = "%$buscar%";
+}
+
+if ($ubicacion_filtro !== '' && in_array('ubicacion', $cols_materiales, true)) {
+    $where_materiales[] = "ubicacion = ?";
+    $params_materiales[] = $ubicacion_filtro;
 }
 
 if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_materiales, true)) {
@@ -54,6 +68,7 @@ $sql_materiales = "
         " . (in_array('stock_minimo', $cols_materiales, true) ? "stock_minimo" : "0") . " as stock_minimo,
         " . (in_array('tipo_origen', $cols_materiales, true) ? "tipo_origen" : "'compra'") . " as tipo_origen,
         " . (in_array('unidad_medida', $cols_materiales, true) ? "unidad_medida" : "'unidad'") . " as unidad_medida,
+        " . (in_array('ubicacion', $cols_materiales, true) ? "ubicacion" : "''") . " as ubicacion,
         " . (in_array('proveedor_habitual_id', $cols_materiales, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
             WHEN " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " < 0 THEN 'negativo'
@@ -77,6 +92,11 @@ if ($buscar) {
     $params_productos[] = "%$buscar%";
 }
 
+if ($ubicacion_filtro !== '' && in_array('ubicacion', $cols_productos, true)) {
+    $where_productos[] = "ubicacion = ?";
+    $params_productos[] = $ubicacion_filtro;
+}
+
 if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_productos, true)) {
     $where_productos[] = "tipo_origen = ?";
     $params_productos[] = $origen_filtro;
@@ -91,6 +111,7 @@ $sql_productos = "
         " . (in_array('stock_minimo', $cols_productos, true) ? "stock_minimo" : "0") . " as stock_minimo,
         " . (in_array('tipo_origen', $cols_productos, true) ? "tipo_origen" : "'fabricacion_propia'") . " as tipo_origen,
         'unidad' as unidad_medida,
+        " . (in_array('ubicacion', $cols_productos, true) ? "ubicacion" : "''") . " as ubicacion,
         " . (in_array('proveedor_habitual_id', $cols_productos, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
             WHEN " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " < 0 THEN 'negativo'
@@ -134,6 +155,22 @@ $proveedores_map = [];
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $prov) {
     $proveedores_map[$prov['id']] = $prov['nombre'];
 }
+
+// Obtener ubicaciones únicas para el filtro
+$ubicaciones_disponibles = [];
+try {
+    $ubs = [];
+    if (in_array('ubicacion', $cols_materiales, true)) {
+        $rows = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_materiales WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+        $ubs = array_merge($ubs, $rows);
+    }
+    if (in_array('ubicacion', $cols_productos, true)) {
+        $rows = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_productos WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+        $ubs = array_merge($ubs, $rows);
+    }
+    $ubicaciones_disponibles = array_unique($ubs);
+    sort($ubicaciones_disponibles);
+} catch (Throwable $e) {}
 
 // Stock por color (opciones de atributos)
 $opciones_color = [];
@@ -269,6 +306,17 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Ubicación / Sector</label>
+                <select name="ubicacion" class="form-select">
+                    <option value="">Todas</option>
+                    <?php foreach ($ubicaciones_disponibles as $ub): ?>
+                        <option value="<?= htmlspecialchars($ub) ?>" <?= $ubicacion_filtro === $ub ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($ub) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Stock por color</label>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="ver_colores" name="ver_colores" value="1" <?= $ver_colores ? 'checked' : '' ?>>
@@ -295,6 +343,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                         <tr>
                             <th>Tipo</th>
                             <th>Nombre</th>
+                            <th>Ubicación</th>
                             <th>Stock Actual</th>
                             <th>Stock Mínimo</th>
                             <th>Estado</th>
@@ -314,6 +363,13 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                     <?php endif; ?>
                                 </td>
                                 <td><strong><?= htmlspecialchars($item['nombre']) ?></strong></td>
+                                <td>
+                                    <?php if (!empty($item['ubicacion'])): ?>
+                                        <span class="badge bg-light text-dark border">📍 <?= htmlspecialchars($item['ubicacion']) ?></span>
+                                    <?php else: ?>
+                                        <small class="text-muted">-</small>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <strong class="<?= $item['stock'] < 0 ? 'text-danger' : ($item['stock'] == 0 ? 'text-secondary' : '') ?>">
                                         <?= number_format($item['stock'], 2) ?> <?= htmlspecialchars($item['unidad_medida']) ?>

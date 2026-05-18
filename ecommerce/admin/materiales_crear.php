@@ -15,6 +15,15 @@ if (isset($_GET['id'])) {
     }
 }
 
+// Auto-migración ubicacion
+try { $pdo->query("ALTER TABLE `ecommerce_materiales` ADD COLUMN `ubicacion` VARCHAR(120) NULL DEFAULT NULL"); } catch (Throwable $e) {}
+
+// Ubicaciones existentes para autocomplete
+$ubicaciones_existentes = [];
+try {
+    $ubicaciones_existentes = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_materiales WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $unidad = trim($_POST['unidad'] ?? '');
@@ -24,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stock_minimo = floatval($_POST['stock_minimo'] ?? 0);
     $proveedor_habitual_id = !empty($_POST['proveedor_habitual_id']) ? intval($_POST['proveedor_habitual_id']) : null;
     $unidad_medida = trim($_POST['unidad_medida'] ?? $unidad);
+    $ubicacion = trim($_POST['ubicacion'] ?? '');
 
     if ($nombre === '' || $unidad === '') {
         echo "<div class='alert alert-danger'>Nombre y unidad son obligatorios</div>";
@@ -32,17 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($editar) {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_materiales
-                    SET nombre = ?, unidad = ?, costo = ?, activo = ?, tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?, unidad_medida = ?
+                    SET nombre = ?, unidad = ?, costo = ?, activo = ?, tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?, unidad_medida = ?, ubicacion = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida, $_GET['id']]);
+                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida, $ubicacion ?: null, $_GET['id']]);
                 $mensaje = "✓ Material actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_materiales (nombre, unidad, costo, activo, tipo_origen, stock_minimo, proveedor_habitual_id, unidad_medida)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_materiales (nombre, unidad, costo, activo, tipo_origen, stock_minimo, proveedor_habitual_id, unidad_medida, ubicacion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida]);
+                $stmt->execute([$nombre, $unidad, $costo, $activo, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $unidad_medida, $ubicacion ?: null]);
                 $mensaje = "✓ Material creado";
             }
             echo "<div class='alert alert-success'>$mensaje</div>";
@@ -93,6 +103,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Unidad de Medida</label>
                     <input type="text" name="unidad_medida" class="form-control" placeholder="metros, kg, unidades" value="<?= htmlspecialchars($material['unidad_medida'] ?? $material['unidad'] ?? '') ?>">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">📍 Ubicación / Sector</label>
+                    <input type="text" name="ubicacion" class="form-control" placeholder="Ej: Estante A, Depósito 2"
+                        value="<?= htmlspecialchars($material['ubicacion'] ?? '') ?>"
+                        list="ubicaciones_list">
+                    <datalist id="ubicaciones_list">
+                        <?php foreach ($ubicaciones_existentes as $ub): ?>
+                            <option value="<?= htmlspecialchars($ub) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                    <small class="text-muted">Sector o lugar donde está guardado</small>
                 </div>
                 <div class="col-md-3 mb-3" id="proveedor_container">
                     <label class="form-label">Proveedor Habitual</label>
