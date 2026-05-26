@@ -2,6 +2,11 @@
 require 'includes/header.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
 
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('Conexion PDO no disponible en detalle de cotizacion.');
+}
+
 try {
     $cols_cot = $pdo->query("SHOW COLUMNS FROM ecommerce_cotizaciones")->fetchAll(PDO::FETCH_COLUMN, 0);
     if (!in_array('dni', $cols_cot, true)) {
@@ -39,8 +44,14 @@ try {
 } catch (Exception $e) {
 }
 
+$cols_ped = [];
 try {
     $cols_ped = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (!in_array('creado_por', $cols_ped, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN creado_por INT NULL AFTER cliente_id");
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD INDEX idx_creado_por (creado_por)");
+        $cols_ped[] = 'creado_por';
+    }
     if (!in_array('factura_archivo', $cols_ped, true)) {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_archivo VARCHAR(255) NULL AFTER public_token");
     }
@@ -48,6 +59,7 @@ try {
         $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN factura_nombre_original VARCHAR(255) NULL AFTER factura_archivo");
     }
 } catch (Exception $e) {
+    $cols_ped = [];
 }
 
 if (!function_exists('cotizacion_detalle_table_exists')) {
@@ -453,6 +465,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (in_array('observaciones', $cols_ped, true)) {
                     $pedidoCols[] = 'observaciones';
                     $pedidoVals[] = $pedidoObservaciones;
+                }
+                if (in_array('creado_por', $cols_ped, true)) {
+                    $pedidoCols[] = 'creado_por';
+                    $pedidoVals[] = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+                } elseif (in_array('usuario_id', $cols_ped, true)) {
+                    $pedidoCols[] = 'usuario_id';
+                    $pedidoVals[] = (int)($_SESSION['user']['id'] ?? 0) ?: null;
+                } elseif (in_array('vendedor_id', $cols_ped, true)) {
+                    $pedidoCols[] = 'vendedor_id';
+                    $pedidoVals[] = (int)($_SESSION['user']['id'] ?? 0) ?: null;
                 }
                 if (in_array('impuestos_json', $cols_ped, true)) {
                     $pedidoCols[] = 'impuestos_json';

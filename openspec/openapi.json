@@ -1,0 +1,1021 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Etiqueta API",
+        "version": "2026.05.22.140422",
+        "description": "OpenSpec generated automatically from current PHP endpoints."
+    },
+    "servers": [
+        {
+            "url": "/",
+            "description": "Project root"
+        }
+    ],
+    "paths": {
+        "/api/asistencias_empleado.php": {
+            "get": {
+                "operationId": "get_api_asistencias_empleado",
+                "summary": "GET Asistencias empleado",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/asistencias_usuario.php": {
+            "get": {
+                "operationId": "get_api_asistencias_usuario",
+                "summary": "GET Asistencias usuario",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/ecommerce/api/asistencias_empleado.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_asistencias_empleado",
+                "summary": "GET Asistencias empleado",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "empleado_nombre",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "fecha_desde",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "fecha_hasta",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "limite",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "nombre",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/asistencias_usuario.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_asistencias_usuario",
+                "summary": "GET Asistencias usuario",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "fecha_desde",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "fecha_hasta",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "limite",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "nombre_usuario",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "usuario",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/consultar_precios.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_consultar_precios",
+                "summary": "GET Consultar precios",
+                "description": "API REST para consultar precios de productos. Autenticaci\u00f3n: session PHP activa O header X-API-KEY con la clave configurada. \u2500\u2500 Consultar un producto por ID \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 GET /ecommerce/api/consultar_precios.php?producto_id=5 GET /ecommerce/api/consultar_precios.php?producto_id=5&alto=120&ancho=200 \u2500\u2500 Consultar un producto por c\u00f3digo \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 GET /ecommerce/api/consultar_precios.php?codigo=ETQ-001 GET /ecommerce/api/consultar_precios.php?codigo=ETQ-001&alto=120&ancho=200 \u2500\u2500 Listar todos los productos activos con precios \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 GET /ecommerce/api/consultar_precios.php?todos=1 Respuesta de producto \u00fanico: { \"producto_id\": 5, \"codigo\": \"ETQ-001\", \"nombre\": \"Cortina Roller\", \"categoria_id\": 2, \"categoria\": \"Cortinas\", \"tipo_precio\": \"variable\", \"precio_base\": 1500.00, \"precio_final\": 1275.00, \"descuento_pct\": 15.0, \"moneda\": \"ARS\", \"alto\": 120, \"ancho\": 200, \"medidas_usadas\": { \"alto_cm\": 120, \"ancho_cm\": 200 } } Respuesta lista completa: { \"productos\": [ { ...mismo esquema... }, ... ], \"total\": 12 } Errores posibles: 400 \u2013 Par\u00e1metros inv\u00e1lidos o faltantes 403 \u2013 Autenticaci\u00f3n fallida 404 \u2013 Producto no encontrado 500 \u2013 Error interno",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "alto",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "ancho",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "codigo",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "producto_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "todos",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/ordenes_produccion.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_ordenes_produccion",
+                "summary": "GET Ordenes produccion",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "estado",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pedido_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/precio_producto.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_precio_producto",
+                "summary": "GET Precio producto",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "alto",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "ancho",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "producto_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/produccion_tareas_usuarios.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_produccion_tareas_usuarios",
+                "summary": "GET Produccion tareas usuarios",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "solo_activos",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "usuario_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/sistema.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_sistema",
+                "summary": "GET Sistema",
+                "description": "API unificada para robot (consultas + escritura controlada + perfil de persona). Autenticaci\u00f3n: - Sesi\u00f3n activa, o - Header X-API-KEY con la clave definida en config.php / GASTOS_API_KEY. Uso: GET /ecommerce/api/sistema.php?modulo=empleados GET /ecommerce/api/sistema.php?modulo=gastos&mes=2026-03&page=1&per_page=50 GET /ecommerce/api/sistema.php?modulo=pedidos&id=123 GET /ecommerce/api/sistema.php?persona=1&q=juan GET /ecommerce/api/sistema.php?modulos=1 Escritura (JSON): POST /ecommerce/api/sistema.php { \"accion\":\"crear|actualizar\", \"modulo\":\"gastos\", \"id\":123, \"data\":{...} }",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "campos",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "desde",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "hasta",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "mes",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "modulo",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "modulos",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "nombre",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "origen",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "persona",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "persona_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "post_ecommerce_api_sistema",
+                "summary": "POST Sistema",
+                "description": "API unificada para robot (consultas + escritura controlada + perfil de persona). Autenticaci\u00f3n: - Sesi\u00f3n activa, o - Header X-API-KEY con la clave definida en config.php / GASTOS_API_KEY. Uso: GET /ecommerce/api/sistema.php?modulo=empleados GET /ecommerce/api/sistema.php?modulo=gastos&mes=2026-03&page=1&per_page=50 GET /ecommerce/api/sistema.php?modulo=pedidos&id=123 GET /ecommerce/api/sistema.php?persona=1&q=juan GET /ecommerce/api/sistema.php?modulos=1 Escritura (JSON): POST /ecommerce/api/sistema.php { \"accion\":\"crear|actualizar\", \"modulo\":\"gastos\", \"id\":123, \"data\":{...} }",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/stock_faltante.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_stock_faltante",
+                "summary": "GET Stock faltante",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "alerta",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "buscar",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "tipo",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/sueldos_faltantes.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_sueldos_faltantes",
+                "summary": "GET Sueldos faltantes",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "mes",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "nombre",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/ecommerce/api/ventas_mes.php": {
+            "get": {
+                "operationId": "get_ecommerce_api_ventas_mes",
+                "summary": "GET Ventas mes",
+                "description": "Endpoint auto-detected from source code.",
+                "tags": [
+                    "ecommerce-api"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "mes",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/scan_api.php": {
+            "post": {
+                "operationId": "post_scan_api",
+                "summary": "POST Scan api",
+                "description": "API unificada de escaneo detecta el tipo de c\u00f3digo y delega al m\u00f3dulo correspondiente: - asistencias (c\u00f3digo EMP...) - producci\u00f3n (tabla ecommerce_produccion_items_barcode) - entrega de productos (tabla productos) - detalles adicionales (placeholder) Tambi\u00e9n maneja acciones de producci\u00f3n (iniciar, terminar, rechazar) cuando se env\u00eda el campo `accion`.",
+                "tags": [
+                    "misc"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Client error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BaseSuccess"
+                                }
+                            }
+                        }
+                    }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "accion": {
+                                        "type": "string"
+                                    },
+                                    "codigo": {
+                                        "type": "string"
+                                    },
+                                    "item_id": {
+                                        "type": "integer"
+                                    },
+                                    "observaciones": {
+                                        "type": "string"
+                                    }
+                                },
+                                "additionalProperties": true,
+                                "required": [
+                                    "codigo"
+                                ]
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "accion": {
+                                        "type": "string"
+                                    },
+                                    "codigo": {
+                                        "type": "string"
+                                    },
+                                    "item_id": {
+                                        "type": "integer"
+                                    },
+                                    "observaciones": {
+                                        "type": "string"
+                                    }
+                                },
+                                "additionalProperties": true,
+                                "required": [
+                                    "codigo"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-KEY"
+            },
+            "SessionCookie": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "PHPSESSID"
+            }
+        },
+        "schemas": {
+            "BaseSuccess": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    },
+    "x-generatedAt": "2026-05-22T14:04:22+02:00",
+    "x-source": "openspec/generate_openapi.php"
+}

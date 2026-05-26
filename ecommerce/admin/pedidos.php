@@ -42,6 +42,21 @@ if (!isset($pdo) || !$pdo) {
 require '../includes/funciones_recetas.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
+$es_revendedor = (($role ?? '') === 'revendedor');
+$usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
+$pedido_owner_col = '';
+try {
+    $cols_pedidos_owner = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    foreach (['creado_por', 'usuario_id', 'vendedor_id'] as $col_owner_candidate) {
+        if (in_array($col_owner_candidate, $cols_pedidos_owner, true)) {
+            $pedido_owner_col = $col_owner_candidate;
+            break;
+        }
+    }
+} catch (Throwable $e) {
+    $pedido_owner_col = '';
+}
+
 $estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'pagado'];
 $colores = [
     'pendiente'  => 'warning',
@@ -62,7 +77,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pedido_id'], $_POST['
         $error = 'Estado inválido.';
     } else {
         try {
-            $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?")->execute([$nuevo_estado, $pedido_id]);
+            if ($es_revendedor) {
+                if ($pedido_owner_col === '' || $usuario_id_actual <= 0) {
+                    throw new Exception('No tenes permisos para cambiar estados de pedidos en esta instalacion.');
+                }
+                $stmt_upd = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ? AND `{$pedido_owner_col}` = ?");
+                $stmt_upd->execute([$nuevo_estado, $pedido_id, $usuario_id_actual]);
+                if ($stmt_upd->rowCount() === 0) {
+                    throw new Exception('No tenes permisos para cambiar este pedido.');
+                }
+            } else {
+                $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?")->execute([$nuevo_estado, $pedido_id]);
+            }
 
             if ($nuevo_estado === 'confirmado') {
                 $stmtOrden = $pdo->prepare("SELECT id, materiales_descontados FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
@@ -211,6 +237,16 @@ $query_from = "
 ";
 $params = [];
 
+if ($es_revendedor) {
+    if ($pedido_owner_col !== '' && $usuario_id_actual > 0) {
+        $query_from .= " AND p.`{$pedido_owner_col}` = ?";
+        $params[] = $usuario_id_actual;
+    } else {
+        // Si no hay forma de identificar dueño del pedido, un revendedor no debe ver pedidos de terceros.
+        $query_from .= " AND 1 = 0";
+    }
+}
+
 if (!empty($estado_filter)) {
     $query_from .= " AND p.estado = ?";
     $params[] = $estado_filter;
@@ -290,6 +326,13 @@ LEFT JOIN (
 ) pagos ON pagos.pedido_id = p.id
 $calidad_join
 WHERE p.estado != 'cancelado'";
+if ($es_revendedor) {
+    if ($pedido_owner_col !== '' && $usuario_id_actual > 0) {
+        $query .= " AND p.`{$pedido_owner_col}` = ?";
+    } else {
+        $query .= " AND 1 = 0";
+    }
+}
 if (!empty($estado_filter))    $query .= " AND p.estado = ?";
 if (!empty($fecha_desde))      $query .= " AND DATE(p.fecha_pedido) >= ?";
 if (!empty($fecha_hasta))      $query .= " AND DATE(p.fecha_pedido) <= ?";

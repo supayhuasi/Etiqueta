@@ -1,5 +1,9 @@
 {
     "require": {
         "phpmailer/phpmailer": "^7.0"
+    },
+    "scripts": {
+        "openspec:generate": "php openspec/generate_openapi.php",
+        "openspec:watch": "php openspec/generate_openapi.php --watch"
     }
 }

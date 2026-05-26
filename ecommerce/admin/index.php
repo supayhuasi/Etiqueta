@@ -1,6 +1,11 @@
 <?php
 require 'includes/header.php';
 
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('Conexion PDO no disponible en dashboard admin.');
+}
+
 function dashboard_table_exists(PDO $pdo, $table)
 {
     try {
@@ -76,6 +81,7 @@ if (dashboard_table_exists($pdo, 'ecommerce_pedidos')) {
 }
 
 $modulos = [
+    ['perm' => 'kpis', 'titulo' => 'KPIs Dinámicos', 'desc' => 'Constructor de indicadores por tabla y filtros', 'url' => 'kpis.php', 'icon' => 'bi-speedometer2'],
     ['perm' => 'pedidos', 'titulo' => 'Pedidos', 'desc' => 'Ventas y estados de compra', 'url' => 'pedidos.php', 'icon' => 'bi-cart-check'],
     ['perm' => 'nota_credito', 'titulo' => 'Notas de Crédito', 'desc' => 'Devoluciones y ajustes de facturación', 'url' => 'nota_credito.php', 'icon' => 'bi-receipt'],
     ['perm' => 'ordenes_produccion', 'titulo' => 'Producción', 'desc' => 'Órdenes y fabricación', 'url' => 'ordenes_produccion.php', 'icon' => 'bi-gear-wide-connected'],

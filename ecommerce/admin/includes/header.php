@@ -96,6 +96,12 @@ if (!function_exists('admin_require_csrf_post')) {
 $base_path = dirname(dirname(dirname(dirname(__FILE__))));
 require $base_path . '/config.php';
 
+// Normaliza la conexion en este scope para evitar referencias ambiguas a $pdo.
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('No se pudo inicializar la conexion PDO en el admin.');
+}
+
 // Crear variables para las rutas relativas en HTML
 // $relative_root: cantidad de ../ para llegar a la raíz del proyecto
 // $admin_url: URL base del admin para usar en enlaces (absoluta desde la raíz del servidor)
@@ -171,6 +177,7 @@ $role_permissions = [
     'admin' => ['*'],
     'sin_sueldos' => [
         'dashboard',
+        'kpis',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
         'pedidos', 'ordenes_produccion', 'instalaciones',
         'recordatorios',
@@ -189,6 +196,7 @@ $role_permissions = [
     ],
     'usuario' => [
         'dashboard',
+        'kpis',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
         'pedidos', 'ordenes_produccion', 'instalaciones',
         'recordatorios',
@@ -205,6 +213,7 @@ $role_permissions = [
     ],
     'operario' => [
         'dashboard',
+        'kpis',
         'ordenes_produccion',
         'recordatorios',
         'inventario',
@@ -213,6 +222,7 @@ $role_permissions = [
     ],
     'ventas' => [
         'dashboard',
+        'kpis',
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
@@ -227,6 +237,7 @@ $role_permissions = [
     ],
     'vendedor' => [
         'dashboard',
+        'kpis',
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
@@ -241,6 +252,7 @@ $role_permissions = [
     ],
     'revendedor' => [
         'dashboard',
+        'kpis',
         'cotizaciones',
         'cotizacion_clientes',
         'pedidos',
@@ -279,6 +291,7 @@ $can_access_any = function (array $keys) use ($can_access): bool {
 // Control de acceso por página
 $page_permissions = [
     'index.php' => 'dashboard',
+    'kpis.php' => 'kpis',
     'categorias.php' => 'categorias',
     'categorias_crear.php' => 'categorias',
     'categorias_editar.php' => 'categorias',
@@ -1091,6 +1104,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script>
+        // @ts-nocheck
         (function () {
             const storedTheme = localStorage.getItem('admin-theme');
             const theme = storedTheme === 'dark' ? 'dark' : 'light';
@@ -1422,6 +1436,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .table {
             --bs-table-bg: transparent;
             color: var(--admin-table-head);
+        }
         .table thead th {
             border-bottom-width: 1px;
             color: #334155;
@@ -1435,14 +1450,17 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .table-hover tbody tr:hover {
             background: #f7faff;
         }
-            border: 1px solid var(--admin-input-border);
+        .form-control,
         .form-select {
             border-radius: 10px;
             border: 1px solid #d9e1ec;
             box-shadow: none;
-            border-color: var(--admin-input-focus);
+        }
         .form-control:focus,
         .form-select:focus {
+            border-color: var(--admin-input-focus);
+            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
+        }
         .theme-toggle {
             min-width: 124px;
             display: inline-flex;
@@ -1474,9 +1492,6 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
         html[data-admin-theme="dark"] .text-muted {
             color: var(--admin-muted) !important;
-        }
-            border-color: #8ab0ff;
-            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
         }
         .badge {
             border-radius: 999px;
@@ -1936,7 +1951,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes', 'kpis'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
                         <span><i class="bi bi-cart-check"></i> Ventas</span>
@@ -1983,6 +1998,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php if ($can_access('ventas_reportes')): ?>
                         <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
                         <a href="<?= $admin_url ?>estadisticas_productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'estadisticas_productos.php' ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Estadísticas de Productos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('kpis')): ?>
+                        <a href="<?= $admin_url ?>kpis.php" class="<?= basename($_SERVER['PHP_SELF']) === 'kpis.php' ? 'active' : '' ?>"><i class="bi bi-speedometer2"></i> KPIs Dinámicos</a>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -2102,56 +2120,4 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         <!-- Main Content -->
         <div class="col-md-10 main-content">
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const root = document.documentElement;
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const themeToggleIcon = document.getElementById('themeToggleIcon');
-    const themeToggleLabel = document.getElementById('themeToggleLabel');
-    const menuSections = document.querySelectorAll('.menu-section');
-
-    function applyTheme(theme) {
-        const nextTheme = theme === 'dark' ? 'dark' : 'light';
-        root.setAttribute('data-admin-theme', nextTheme);
-        root.setAttribute('data-bs-theme', nextTheme);
-
-        if (themeToggleIcon) {
-            themeToggleIcon.className = nextTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
-        }
-        if (themeToggleLabel) {
-            themeToggleLabel.textContent = nextTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
-        }
-        if (themeToggleBtn) {
-            themeToggleBtn.setAttribute('aria-label', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
-            themeToggleBtn.setAttribute('title', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
-        }
-    }
-
-    applyTheme(root.getAttribute('data-admin-theme') || 'light');
-
-    if (themeToggleBtn) {
-        themeToggleBtn.addEventListener('click', function () {
-            const currentTheme = root.getAttribute('data-admin-theme') === 'dark' ? 'dark' : 'light';
-            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            localStorage.setItem('admin-theme', nextTheme);
-            applyTheme(nextTheme);
-        });
-    }
-
-    menuSections.forEach(function (section) {
-        const activeItem = section.querySelector('.menu-items a.active');
-        if (activeItem) {
-            section.classList.add('has-active');
-            const collapseEl = section.querySelector('.collapse.menu-items');
-            if (collapseEl) {
-                collapseEl.classList.add('show');
-            }
-            const headerEl = section.querySelector('.menu-header[data-bs-toggle="collapse"]');
-            if (headerEl) {
-                headerEl.classList.remove('collapsed');
-                headerEl.setAttribute('aria-expanded', 'true');
-            }
-        }
-    });
-});
-</script>
+<script src="/ecommerce/admin/assets/js/admin-sidebar-theme.js?v=1"></script>
