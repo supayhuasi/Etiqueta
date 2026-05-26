@@ -191,7 +191,7 @@ $role_permissions = [
         'encuestas',
         'calidad',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda',
-        'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
+        'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'blog', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
         // No incluye 'sueldos'
     ],
     'usuario' => [
@@ -218,7 +218,7 @@ $role_permissions = [
         'recordatorios',
         'inventario',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'ventas' => [
         'dashboard',
@@ -233,7 +233,7 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'vendedor' => [
         'dashboard',
@@ -248,7 +248,7 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'revendedor' => [
         'dashboard',
@@ -256,6 +256,7 @@ $role_permissions = [
         'cotizaciones',
         'cotizacion_clientes',
         'pedidos',
+        'blog',
         'inicio_principal', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -264,11 +265,23 @@ $role_permissions = [
 if (isset($role_permissions['usuario']) && !in_array('faq', $role_permissions['usuario'], true)) {
     $role_permissions['usuario'][] = 'faq';
 }
+if (isset($role_permissions['usuario']) && !in_array('blog', $role_permissions['usuario'], true)) {
+    $role_permissions['usuario'][] = 'blog';
+}
 if (isset($role_permissions['ventas']) && !in_array('faq', $role_permissions['ventas'], true)) {
     $role_permissions['ventas'][] = 'faq';
 }
+if (isset($role_permissions['ventas']) && !in_array('blog', $role_permissions['ventas'], true)) {
+    $role_permissions['ventas'][] = 'blog';
+}
 if (isset($role_permissions['vendedor']) && !in_array('faq', $role_permissions['vendedor'], true)) {
     $role_permissions['vendedor'][] = 'faq';
+}
+if (isset($role_permissions['vendedor']) && !in_array('blog', $role_permissions['vendedor'], true)) {
+    $role_permissions['vendedor'][] = 'blog';
+}
+if (isset($role_permissions['revendedor']) && !in_array('blog', $role_permissions['revendedor'], true)) {
+    $role_permissions['revendedor'][] = 'blog';
 }
 
 $can_access = function (string $key) use ($role_permissions, $role): bool {
@@ -306,6 +319,7 @@ $page_permissions = [
     'empresa.php' => 'empresa',
     'email_config.php' => 'email_config',
     'faq.php' => 'faq',
+    'blog.php' => 'blog',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
     'slideshow.php' => 'slideshow',
@@ -1902,7 +1916,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
                         <span><i class="bi bi-building"></i> Empresa</span>
@@ -1939,6 +1953,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('faq')): ?>
                         <a href="<?= $admin_url ?>faq.php" class="<?= basename($_SERVER['PHP_SELF']) === 'faq.php' ? 'active' : '' ?>"><i class="bi bi-question-circle"></i> Preguntas Frecuentes</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('blog')): ?>
+                        <a href="<?= $admin_url ?>blog.php" class="<?= basename($_SERVER['PHP_SELF']) === 'blog.php' ? 'active' : '' ?>"><i class="bi bi-journal-text"></i> Blog</a>
                         <?php endif; ?>
                         <?php if ($can_access('envio_config')): ?>
                         <a href="<?= $admin_url ?>envio_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'envio_config.php' ? 'active' : '' ?>"><i class="bi bi-truck"></i> Envío</a>

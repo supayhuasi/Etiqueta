@@ -263,6 +263,108 @@ if (reponer_pdf_table_exists($pdo, 'ecommerce_productos')) {
 
 $items_reponer = array_merge($materiales, $productos_reponer);
 
+// Fallback final: replica criterio del modulo inventario para evitar PDF vacio en esquemas mixtos.
+if (empty($items_reponer)) {
+    $fallback_items = [];
+
+    if (reponer_pdf_table_exists($pdo, 'ecommerce_materiales')) {
+        $cols_m_fb = reponer_pdf_get_columns($pdo, 'ecommerce_materiales');
+        $stock_m_fb = in_array('stock', $cols_m_fb, true) ? 'stock' : '0';
+        $min_m_fb = in_array('stock_minimo', $cols_m_fb, true) ? 'stock_minimo' : '0';
+        $unidad_m_fb = in_array('unidad_medida', $cols_m_fb, true) ? 'unidad_medida' : "'unidad'";
+        $origen_m_fb = in_array('tipo_origen', $cols_m_fb, true) ? 'tipo_origen' : "'compra'";
+
+        $sql_m_fb = "
+            SELECT
+                'material' AS tipo_item,
+                id,
+                nombre,
+                {$stock_m_fb} AS stock,
+                {$min_m_fb} AS stock_minimo,
+                {$unidad_m_fb} AS unidad_medida,
+                {$origen_m_fb} AS tipo_origen,
+                NULL AS proveedor_nombre,
+                CASE
+                    WHEN {$stock_m_fb} < 0 THEN ABS({$stock_m_fb})
+                    WHEN {$stock_m_fb} <= COALESCE({$min_m_fb}, 0) THEN (COALESCE({$min_m_fb}, 0) - {$stock_m_fb})
+                    ELSE 0
+                END AS cantidad_reponer,
+                CASE
+                    WHEN {$stock_m_fb} < 0 THEN 'negativo'
+                    WHEN {$stock_m_fb} = 0 THEN 'sin_stock'
+                    WHEN {$stock_m_fb} <= COALESCE({$min_m_fb}, 0) THEN 'bajo_minimo'
+                    ELSE 'normal'
+                END AS prioridad
+            FROM ecommerce_materiales
+            WHERE {$stock_m_fb} < 0
+               OR {$stock_m_fb} = 0
+               OR {$stock_m_fb} <= COALESCE({$min_m_fb}, 0)
+        ";
+
+        foreach (reponer_pdf_fetch_all($pdo, $sql_m_fb) as $row) {
+            if (($row['prioridad'] ?? 'normal') !== 'normal') {
+                $fallback_items[] = $row;
+            }
+        }
+    }
+
+    if (reponer_pdf_table_exists($pdo, 'ecommerce_productos')) {
+        $cols_p_fb = reponer_pdf_get_columns($pdo, 'ecommerce_productos');
+        $stock_p_fb = in_array('stock', $cols_p_fb, true) ? 'stock' : '0';
+        $min_p_fb = in_array('stock_minimo', $cols_p_fb, true) ? 'stock_minimo' : '0';
+        $origen_p_fb = in_array('tipo_origen', $cols_p_fb, true) ? 'tipo_origen' : "'fabricacion_propia'";
+
+        $sql_p_fb = "
+            SELECT
+                'producto' AS tipo_item,
+                id,
+                nombre,
+                {$stock_p_fb} AS stock,
+                {$min_p_fb} AS stock_minimo,
+                'unidad' AS unidad_medida,
+                {$origen_p_fb} AS tipo_origen,
+                NULL AS proveedor_nombre,
+                CASE
+                    WHEN {$stock_p_fb} < 0 THEN ABS({$stock_p_fb})
+                    WHEN {$stock_p_fb} <= COALESCE({$min_p_fb}, 0) THEN (COALESCE({$min_p_fb}, 0) - {$stock_p_fb})
+                    ELSE 0
+                END AS cantidad_reponer,
+                CASE
+                    WHEN {$stock_p_fb} < 0 THEN 'negativo'
+                    WHEN {$stock_p_fb} = 0 THEN 'sin_stock'
+                    WHEN {$stock_p_fb} <= COALESCE({$min_p_fb}, 0) THEN 'bajo_minimo'
+                    ELSE 'normal'
+                END AS prioridad
+            FROM ecommerce_productos
+            WHERE {$stock_p_fb} < 0
+               OR {$stock_p_fb} = 0
+               OR {$stock_p_fb} <= COALESCE({$min_p_fb}, 0)
+        ";
+
+        foreach (reponer_pdf_fetch_all($pdo, $sql_p_fb) as $row) {
+            if (($row['prioridad'] ?? 'normal') !== 'normal') {
+                $fallback_items[] = $row;
+            }
+        }
+    }
+
+    if (!empty($fallback_items)) {
+        usort($fallback_items, static function (array $a, array $b): int {
+            $order = ['negativo' => 1, 'sin_stock' => 2, 'bajo_minimo' => 3, 'normal' => 4];
+            $pa = $order[$a['prioridad'] ?? 'normal'] ?? 9;
+            $pb = $order[$b['prioridad'] ?? 'normal'] ?? 9;
+            if ($pa !== $pb) {
+                return $pa <=> $pb;
+            }
+            return ((float)($a['stock'] ?? 0)) <=> ((float)($b['stock'] ?? 0));
+        });
+
+        $items_reponer = $fallback_items;
+        $materiales = array_values(array_filter($fallback_items, static fn(array $i): bool => ($i['tipo_item'] ?? '') === 'material'));
+        $productos_reponer = array_values(array_filter($fallback_items, static fn(array $i): bool => ($i['tipo_item'] ?? '') === 'producto'));
+    }
+}
+
 // Colores sin stock
 $opciones_color_reponer = [];
 $tiene_opciones = reponer_pdf_table_exists($pdo, 'ecommerce_atributo_opciones');
