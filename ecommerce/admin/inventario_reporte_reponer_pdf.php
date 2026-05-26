@@ -1,6 +1,19 @@
 <?php
-require '../../config.php';
-require '../../fpdf.php';
+require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/fpdf.php';
+
+function reponer_pdf_trim(string $value, int $width, string $suffix = '...'): string
+{
+    if (function_exists('mb_strimwidth')) {
+        return mb_strimwidth($value, 0, $width, $suffix);
+    }
+
+    if (strlen($value) <= $width) {
+        return $value;
+    }
+
+    return substr($value, 0, max(0, $width - strlen($suffix))) . $suffix;
+}
 
 // Helpers
 function reponer_pdf_table_exists(PDO $pdo, string $table): bool
@@ -347,7 +360,7 @@ class PDFReponer extends FPDF
 
         // Nombre (negrita)
         $this->SetFont('Arial', 'B', 8);
-        $this->Cell($cols[2], $rowH, utf8_decode(mb_strimwidth($item['nombre'], 0, 45, '...')), 'LRB', 0, 'L', true);
+        $this->Cell($cols[2], $rowH, utf8_decode(reponer_pdf_trim((string)$item['nombre'], 45, '...')), 'LRB', 0, 'L', true);
 
         $this->SetFont('Arial', '', 8);
         $um = ' ' . htmlspecialchars_decode($item['unidad_medida'] ?? '');
@@ -375,7 +388,7 @@ class PDFReponer extends FPDF
 
         // Proveedor
         $prov = $item['proveedor_nombre'] ?? '';
-        $this->Cell($cols[7], $rowH, utf8_decode(mb_strimwidth((string)$prov, 0, 28, '...')), 'LRB', 1, 'L', true);
+        $this->Cell($cols[7], $rowH, utf8_decode(reponer_pdf_trim((string)$prov, 28, '...')), 'LRB', 1, 'L', true);
 
         $this->SetFillColor(255, 255, 255);
     }
@@ -403,7 +416,7 @@ class PDFReponer extends FPDF
         foreach ($opciones as $opc) {
             $this->SetFillColor($rowNum % 2 === 0 ? 250 : 255, $rowNum % 2 === 0 ? 220 : 248, $rowNum % 2 === 0 ? 220 : 220);
             $this->SetFont('Arial', 'B', 8);
-            $this->Cell($wTotal * 0.5, 6, utf8_decode(mb_strimwidth($opc['material_nombre'], 0, 50, '...')), 1, 0, 'L', true);
+            $this->Cell($wTotal * 0.5, 6, utf8_decode(reponer_pdf_trim((string)$opc['material_nombre'], 50, '...')), 1, 0, 'L', true);
             $this->SetFont('Arial', '', 8);
             $this->Cell($wTotal * 0.35, 6, utf8_decode($opc['opcion_nombre']), 1, 0, 'L', true);
             $this->SetTextColor(180, 0, 0);
