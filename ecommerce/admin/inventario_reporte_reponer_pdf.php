@@ -64,64 +64,100 @@ $materiales = [];
 $materiales_error = '';
 if (reponer_pdf_table_exists($pdo, 'ecommerce_materiales')) {
     try {
-        $cols_m = reponer_pdf_get_columns($pdo, 'ecommerce_materiales');
-
-        $has_stock_min  = in_array('stock_minimo',         $cols_m, true);
-        $has_unidad     = in_array('unidad_medida',        $cols_m, true);
-        $has_origen     = in_array('tipo_origen',          $cols_m, true);
-        $has_proveedor  = in_array('proveedor_habitual_id',$cols_m, true);
-
-        $sel_stock_min  = $has_stock_min ? "m.stock_minimo" : "0";
-        $sel_unidad     = $has_unidad    ? "m.unidad_medida" : "'' ";
-        $sel_origen     = $has_origen    ? "m.tipo_origen"   : "'compra'";
-        $sel_cantidad   = $has_stock_min ? "(COALESCE(m.stock_minimo,0) - m.stock)" : "ABS(m.stock)";
-
-        $where_m = $has_stock_min
-            ? "WHERE m.stock <= 0 OR (m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo)"
-            : "WHERE m.stock <= 0";
-
-        $stmt_m = $pdo->query("
+        // Consulta principal: igual que inventario_reporte_reponer.php
+        $stmt_m = $pdo->query(" 
             SELECT
-                'material' AS tipo_item,
+                'material' as tipo_item,
                 m.id,
                 m.nombre,
                 m.stock,
-                {$sel_stock_min}  AS stock_minimo,
-                {$sel_unidad}     AS unidad_medida,
-                {$sel_origen}     AS tipo_origen,
-                {$sel_cantidad}   AS cantidad_reponer,
+                m.stock_minimo,
+                m.unidad_medida,
+                m.tipo_origen,
+                m.proveedor_habitual_id,
+                p.nombre as proveedor_nombre,
+                CASE
+                    WHEN m.stock_minimo IS NULL THEN ABS(m.stock)
+                    ELSE (m.stock_minimo - m.stock)
+                END as cantidad_reponer,
                 CASE
                     WHEN m.stock < 0 THEN 'negativo'
                     WHEN m.stock = 0 THEN 'sin_stock'
-                    ELSE 'bajo_minimo'
-                END AS prioridad,
-                NULL AS proveedor_nombre
+                    WHEN m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo THEN 'bajo_minimo'
+                    ELSE 'sin_stock'
+                END as prioridad
             FROM ecommerce_materiales m
-            {$where_m}
-            ORDER BY CASE WHEN m.stock < 0 THEN 1 WHEN m.stock = 0 THEN 2 ELSE 3 END, m.stock ASC
+            LEFT JOIN ecommerce_proveedores p ON m.proveedor_habitual_id = p.id
+            WHERE m.stock <= 0 OR (m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo)
+            ORDER BY
+                CASE
+                    WHEN m.stock < 0 THEN 1
+                    WHEN m.stock = 0 THEN 2
+                    ELSE 3
+                END,
+                m.stock ASC
         ");
-        $materiales_base = $stmt_m->fetchAll(PDO::FETCH_ASSOC);
+        $materiales = $stmt_m->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        // Fallback de compatibilidad para instalaciones con esquema parcial.
+        try {
+            $cols_m = reponer_pdf_get_columns($pdo, 'ecommerce_materiales');
 
-        // Proveedor habitual (opcional)
-        if ($has_proveedor && reponer_pdf_table_exists($pdo, 'ecommerce_proveedores') && !empty($materiales_base)) {
-            $ids = implode(',', array_map('intval', array_column($materiales_base, 'id')));
-            try {
-                $rows = $pdo->query("
+            $has_stock_min  = in_array('stock_minimo',          $cols_m, true);
+            $has_unidad     = in_array('unidad_medida',         $cols_m, true);
+            $has_origen     = in_array('tipo_origen',           $cols_m, true);
+            $has_proveedor  = in_array('proveedor_habitual_id', $cols_m, true);
+
+            $sel_stock_min  = $has_stock_min ? "m.stock_minimo" : "0";
+            $sel_unidad     = $has_unidad    ? "m.unidad_medida" : "''";
+            $sel_origen     = $has_origen    ? "m.tipo_origen"   : "'compra'";
+            $sel_cantidad   = $has_stock_min ? "(COALESCE(m.stock_minimo,0) - m.stock)" : "ABS(m.stock)";
+
+            $where_m = $has_stock_min
+                ? "WHERE m.stock <= 0 OR (m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo)"
+                : "WHERE m.stock <= 0";
+
+            $stmt_m = $pdo->query(" 
+                SELECT
+                    'material' AS tipo_item,
+                    m.id,
+                    m.nombre,
+                    m.stock,
+                    {$sel_stock_min}  AS stock_minimo,
+                    {$sel_unidad}     AS unidad_medida,
+                    {$sel_origen}     AS tipo_origen,
+                    {$sel_cantidad}   AS cantidad_reponer,
+                    CASE
+                        WHEN m.stock < 0 THEN 'negativo'
+                        WHEN m.stock = 0 THEN 'sin_stock'
+                        ELSE 'bajo_minimo'
+                    END AS prioridad,
+                    NULL AS proveedor_nombre
+                FROM ecommerce_materiales m
+                {$where_m}
+                ORDER BY CASE WHEN m.stock < 0 THEN 1 WHEN m.stock = 0 THEN 2 ELSE 3 END, m.stock ASC
+            ");
+            $materiales_base = $stmt_m->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            if ($has_proveedor && reponer_pdf_table_exists($pdo, 'ecommerce_proveedores') && !empty($materiales_base)) {
+                $ids = implode(',', array_map('intval', array_column($materiales_base, 'id')));
+                $rows = $pdo->query(" 
                     SELECT m.id, p.nombre AS proveedor_nombre
                     FROM ecommerce_materiales m
                     LEFT JOIN ecommerce_proveedores p ON p.id = m.proveedor_habitual_id
                     WHERE m.id IN ({$ids})
                 ")->fetchAll(PDO::FETCH_ASSOC);
-                $prov_map = array_column($rows, 'proveedor_nombre', 'id');
+                $prov_map = array_column($rows ?: [], 'proveedor_nombre', 'id');
                 foreach ($materiales_base as &$row) {
                     $row['proveedor_nombre'] = $prov_map[$row['id']] ?? '';
                 }
                 unset($row);
-            } catch (Throwable $e2) {}
+            }
+
+            $materiales = $materiales_base;
+        } catch (Throwable $e2) {
+            $materiales_error = $e2->getMessage();
         }
-        $materiales = $materiales_base;
-    } catch (Throwable $e) {
-        $materiales_error = $e->getMessage();
     }
 }
 
@@ -130,62 +166,98 @@ $productos_reponer = [];
 $productos_error = '';
 if (reponer_pdf_table_exists($pdo, 'ecommerce_productos')) {
     try {
-        $cols_p = reponer_pdf_get_columns($pdo, 'ecommerce_productos');
-
-        $has_stock_min_p = in_array('stock_minimo',         $cols_p, true);
-        $has_origen_p    = in_array('tipo_origen',          $cols_p, true);
-        $has_proveedor_p = in_array('proveedor_habitual_id',$cols_p, true);
-
-        $sel_stock_min_p = $has_stock_min_p ? "pr.stock_minimo" : "0";
-        $sel_origen_p    = $has_origen_p    ? "pr.tipo_origen"  : "'compra'";
-        $sel_cantidad_p  = $has_stock_min_p ? "(COALESCE(pr.stock_minimo,0) - pr.stock)" : "ABS(pr.stock)";
-
-        $where_p = $has_stock_min_p
-            ? "WHERE pr.stock <= 0 OR (pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo)"
-            : "WHERE pr.stock <= 0";
-
-        $stmt_p = $pdo->query("
+        // Consulta principal: igual que inventario_reporte_reponer.php
+        $stmt_p = $pdo->query(" 
             SELECT
-                'producto' AS tipo_item,
+                'producto' as tipo_item,
                 pr.id,
                 pr.nombre,
                 pr.stock,
-                {$sel_stock_min_p} AS stock_minimo,
-                'unidad'           AS unidad_medida,
-                {$sel_origen_p}    AS tipo_origen,
-                {$sel_cantidad_p}  AS cantidad_reponer,
+                pr.stock_minimo,
+                'unidad' as unidad_medida,
+                pr.tipo_origen,
+                pr.proveedor_habitual_id,
+                p.nombre as proveedor_nombre,
+                CASE
+                    WHEN pr.stock_minimo IS NULL THEN ABS(pr.stock)
+                    ELSE (pr.stock_minimo - pr.stock)
+                END as cantidad_reponer,
                 CASE
                     WHEN pr.stock < 0 THEN 'negativo'
                     WHEN pr.stock = 0 THEN 'sin_stock'
-                    ELSE 'bajo_minimo'
-                END AS prioridad,
-                NULL AS proveedor_nombre
+                    WHEN pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo THEN 'bajo_minimo'
+                    ELSE 'sin_stock'
+                END as prioridad
             FROM ecommerce_productos pr
-            {$where_p}
-            ORDER BY CASE WHEN pr.stock < 0 THEN 1 WHEN pr.stock = 0 THEN 2 ELSE 3 END, pr.stock ASC
+            LEFT JOIN ecommerce_proveedores p ON pr.proveedor_habitual_id = p.id
+            WHERE pr.stock <= 0 OR (pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo)
+            ORDER BY
+                CASE
+                    WHEN pr.stock < 0 THEN 1
+                    WHEN pr.stock = 0 THEN 2
+                    ELSE 3
+                END,
+                pr.stock ASC
         ");
-        $productos_base = $stmt_p->fetchAll(PDO::FETCH_ASSOC);
+        $productos_reponer = $stmt_p->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        // Fallback de compatibilidad para instalaciones con esquema parcial.
+        try {
+            $cols_p = reponer_pdf_get_columns($pdo, 'ecommerce_productos');
 
-        // Proveedor habitual (opcional)
-        if ($has_proveedor_p && reponer_pdf_table_exists($pdo, 'ecommerce_proveedores') && !empty($productos_base)) {
-            $ids = implode(',', array_map('intval', array_column($productos_base, 'id')));
-            try {
-                $rows = $pdo->query("
+            $has_stock_min_p = in_array('stock_minimo',          $cols_p, true);
+            $has_origen_p    = in_array('tipo_origen',           $cols_p, true);
+            $has_proveedor_p = in_array('proveedor_habitual_id', $cols_p, true);
+
+            $sel_stock_min_p = $has_stock_min_p ? "pr.stock_minimo" : "0";
+            $sel_origen_p    = $has_origen_p    ? "pr.tipo_origen"  : "'compra'";
+            $sel_cantidad_p  = $has_stock_min_p ? "(COALESCE(pr.stock_minimo,0) - pr.stock)" : "ABS(pr.stock)";
+
+            $where_p = $has_stock_min_p
+                ? "WHERE pr.stock <= 0 OR (pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo)"
+                : "WHERE pr.stock <= 0";
+
+            $stmt_p = $pdo->query(" 
+                SELECT
+                    'producto' AS tipo_item,
+                    pr.id,
+                    pr.nombre,
+                    pr.stock,
+                    {$sel_stock_min_p} AS stock_minimo,
+                    'unidad'           AS unidad_medida,
+                    {$sel_origen_p}    AS tipo_origen,
+                    {$sel_cantidad_p}  AS cantidad_reponer,
+                    CASE
+                        WHEN pr.stock < 0 THEN 'negativo'
+                        WHEN pr.stock = 0 THEN 'sin_stock'
+                        ELSE 'bajo_minimo'
+                    END AS prioridad,
+                    NULL AS proveedor_nombre
+                FROM ecommerce_productos pr
+                {$where_p}
+                ORDER BY CASE WHEN pr.stock < 0 THEN 1 WHEN pr.stock = 0 THEN 2 ELSE 3 END, pr.stock ASC
+            ");
+            $productos_base = $stmt_p->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            if ($has_proveedor_p && reponer_pdf_table_exists($pdo, 'ecommerce_proveedores') && !empty($productos_base)) {
+                $ids = implode(',', array_map('intval', array_column($productos_base, 'id')));
+                $rows = $pdo->query(" 
                     SELECT pr.id, p.nombre AS proveedor_nombre
                     FROM ecommerce_productos pr
                     LEFT JOIN ecommerce_proveedores p ON p.id = pr.proveedor_habitual_id
                     WHERE pr.id IN ({$ids})
                 ")->fetchAll(PDO::FETCH_ASSOC);
-                $prov_map = array_column($rows, 'proveedor_nombre', 'id');
+                $prov_map = array_column($rows ?: [], 'proveedor_nombre', 'id');
                 foreach ($productos_base as &$row) {
                     $row['proveedor_nombre'] = $prov_map[$row['id']] ?? '';
                 }
                 unset($row);
-            } catch (Throwable $e2) {}
+            }
+
+            $productos_reponer = $productos_base;
+        } catch (Throwable $e2) {
+            $productos_error = $e2->getMessage();
         }
-        $productos_reponer = $productos_base;
-    } catch (Throwable $e) {
-        $productos_error = $e->getMessage();
     }
 }
 
@@ -212,6 +284,21 @@ if ($ver_colores && $tiene_opciones
 $total_items     = count($items_reponer);
 $items_negativos = count(array_filter($items_reponer, fn($i) => $i['prioridad'] === 'negativo'));
 $items_sin_stock = count(array_filter($items_reponer, fn($i) => $i['prioridad'] === 'sin_stock'));
+
+if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'total_items' => $total_items,
+        'items_negativos' => $items_negativos,
+        'items_sin_stock' => $items_sin_stock,
+        'materiales_count' => count($materiales),
+        'productos_count' => count($productos_reponer),
+        'materiales_error' => $materiales_error,
+        'productos_error' => $productos_error,
+        'sample_items' => array_slice($items_reponer, 0, 10),
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    exit;
+}
 
 // Empresa
 $empresa = [];
