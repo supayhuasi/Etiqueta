@@ -70,7 +70,7 @@ if (!empty($atributos)) {
             $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'");
             if ($stmt && $stmt->rowCount() > 0) {
                 $placeholders = implode(',', array_fill(0, count($atributo_ids), '?'));
-                $stmt = $pdo->prepare("\n                    SELECT id, atributo_id, nombre, costo_adicional\n                    FROM ecommerce_atributo_opciones\n                    WHERE atributo_id IN ($placeholders)\n                ");
+                $stmt = $pdo->prepare("\n                    SELECT id, atributo_id, nombre, costo_adicional, tipo_costo\n                    FROM ecommerce_atributo_opciones\n                    WHERE atributo_id IN ($placeholders)\n                ");
                 $stmt->execute($atributo_ids);
                 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $opcion) {
                     $opcion_id = (int)($opcion['id'] ?? 0);
@@ -180,7 +180,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
                 $opcion_id = ($opcion_id !== null && $opcion_id !== '' && is_numeric($opcion_id)) ? (int)$opcion_id : null;
-                $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
+                $costo_opcion = ($attr['tipo_costo'] ?? 'fijo') === 'porcentaje'
+                    ? round($precio * (float)($attr['costo_adicional'] ?? 0) / 100, 2)
+                    : (float)($attr['costo_adicional'] ?? 0);
 
                 if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
                     $opcion = null;
@@ -205,7 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $valor = (string)($opcion['nombre'] ?? $valor);
-                    $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
+                    $costo_opcion = ($opcion['tipo_costo'] ?? 'fijo') === 'porcentaje'
+                        ? round($precio * (float)($opcion['costo_adicional'] ?? 0) / 100, 2)
+                        : (float)($opcion['costo_adicional'] ?? 0);
                 }
 
                 $atributos_seleccionados[$attr['id']] = [
@@ -220,7 +224,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($valor)) {
                     $opcion_id = $_POST['attr_opcion_id_' . $attr['id']] ?? null;
                     $opcion_id = ($opcion_id !== null && $opcion_id !== '' && is_numeric($opcion_id)) ? (int)$opcion_id : null;
-                    $costo_opcion = (float)($attr['costo_adicional'] ?? 0);
+                    $costo_opcion = ($attr['tipo_costo'] ?? 'fijo') === 'porcentaje'
+                        ? round($precio * (float)($attr['costo_adicional'] ?? 0) / 100, 2)
+                        : (float)($attr['costo_adicional'] ?? 0);
 
                     if (($attr['tipo'] ?? '') === 'select' && isset($opciones_por_atributo[(int)$attr['id']])) {
                         $opcion = null;
@@ -243,7 +249,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         $valor = (string)($opcion['nombre'] ?? $valor);
-                        $costo_opcion = (float)($opcion['costo_adicional'] ?? 0);
+                        $costo_opcion = ($opcion['tipo_costo'] ?? 'fijo') === 'porcentaje'
+                            ? round($precio * (float)($opcion['costo_adicional'] ?? 0) / 100, 2)
+                            : (float)($opcion['costo_adicional'] ?? 0);
                     }
 
                     $atributos_seleccionados[$attr['id']] = [
@@ -555,8 +563,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <?php foreach ($opciones_attr as $opcion): ?>
                                             <div class="position-relative">
                                                 <label class="cursor-pointer position-relative" style="cursor: pointer;">
-                                                       <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>" 
-                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>" data-opcion-id="<?= (int)$opcion['id'] ?>"
+                                                       <input type="radio" name="attr_<?= $attr['id'] ?>" value="<?= htmlspecialchars($opcion['nombre']) ?>"
+                                                           class="d-none attr-radio" data-attr-id="<?= $attr['id'] ?>" data-costo="<?= (float)($opcion['costo_adicional'] ?? 0) ?>" data-tipo-costo="<?= htmlspecialchars($opcion['tipo_costo'] ?? 'fijo') ?>" data-opcion-id="<?= (int)$opcion['id'] ?>"
                                                            onchange="actualizarPrecio()">
                                                     <div class="attr-option position-relative" id="option_<?= $opcion['id'] ?>" style="cursor: pointer;">
                                                         <?php if (!empty($opcion['color']) && preg_match('/^#[0-9A-F]{6}$/i', $opcion['color'])): ?>
@@ -572,7 +580,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                             </div>
                                                         <?php endif; ?>
                                                         <?php if ((float)($opcion['costo_adicional'] ?? 0) > 0): ?>
-                                                            <span class="badge bg-success position-absolute" style="top: -8px; right: -8px;">+$<?= number_format($opcion['costo_adicional'], 2) ?></span>
+                                                            <span class="badge bg-success position-absolute" style="top: -8px; right: -8px;">
+                                                                +<?= ($opcion['tipo_costo'] ?? 'fijo') === 'porcentaje' ? number_format($opcion['costo_adicional'], 2) . '%' : '$' . number_format($opcion['costo_adicional'], 2) ?>
+                                                            </span>
                                                         <?php endif; ?>
                                                         <small class="d-block text-center mt-1 text-muted"><?= htmlspecialchars($opcion['nombre']) ?></small>
                                                     </div>
@@ -721,18 +731,23 @@ function actualizarPrecio() {
     let precioFinal = precioConDescuento.precio;
 
     // Agregar costos adicionales de atributos
+    const precioBase_ = precioConDescuento.precio;
     atributosData.forEach(attr => {
         const tipo = String(attr.tipo || '').toLowerCase();
 
         if (tipo === 'select') {
             const selectedRadio = document.querySelector(`input.attr-radio[name="attr_${attr.id}"]:checked`);
             if (selectedRadio) {
-                const costoOpcion = parseFloat(selectedRadio.dataset.costo || 0);
+                const costoRaw = parseFloat(selectedRadio.dataset.costo || 0);
+                const tipoCosto = selectedRadio.dataset.tipoCosto || 'fijo';
+                const costoOpcion = tipoCosto === 'porcentaje' ? precioBase_ * costoRaw / 100 : costoRaw;
                 if (costoOpcion > 0) {
                     precioFinal += costoOpcion;
                     costosAdicionales.push({
                         nombre: selectedRadio.value || attr.nombre,
-                        costo: costoOpcion
+                        costo: costoOpcion,
+                        esPorcentaje: tipoCosto === 'porcentaje',
+                        porcentaje: costoRaw
                     });
                 }
             }
@@ -741,12 +756,16 @@ function actualizarPrecio() {
 
         const valorInput = document.getElementById('attr_' + attr.id);
         const valor = valorInput ? String(valorInput.value || '').trim() : '';
-        const costoAtributo = parseFloat(attr.costo_adicional || 0);
+        const costoRaw = parseFloat(attr.costo_adicional || 0);
+        const tipoCosto = attr.tipo_costo || 'fijo';
+        const costoAtributo = tipoCosto === 'porcentaje' ? precioBase_ * costoRaw / 100 : costoRaw;
         if (valor !== '' && costoAtributo > 0) {
             precioFinal += costoAtributo;
             costosAdicionales.push({
                 nombre: attr.nombre,
-                costo: costoAtributo
+                costo: costoAtributo,
+                esPorcentaje: tipoCosto === 'porcentaje',
+                porcentaje: costoRaw
             });
         }
     });
@@ -774,7 +793,10 @@ function actualizarPrecio() {
     if (costosAdicionales.length > 0) {
         precioDisplayHTML += '<br><small class="text-muted mt-2 d-block">';
         costosAdicionales.forEach((costo, idx) => {
-            precioDisplayHTML += `<span class="badge bg-light text-dark ms-${idx > 0 ? 2 : 0}">+ ${costo.nombre}: $${costo.costo.toFixed(2)}</span>`;
+            const label = costo.esPorcentaje
+                ? `+ ${costo.nombre}: $${costo.costo.toFixed(2)} (${costo.porcentaje}%)`
+                : `+ ${costo.nombre}: $${costo.costo.toFixed(2)}`;
+            precioDisplayHTML += `<span class="badge bg-light text-dark ms-${idx > 0 ? 2 : 0}">${label}</span>`;
         });
         precioDisplayHTML += '</small>';
     }
@@ -807,7 +829,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     atributosData.forEach(attr => {
-        if (attr.costo_adicional > 0) {
+        if (attr.costo_adicional > 0 || attr.tipo_costo === 'porcentaje') {
             const valorInput = document.getElementById('attr_' + attr.id);
             if (valorInput) {
                 valorInput.addEventListener('change', actualizarPrecio);

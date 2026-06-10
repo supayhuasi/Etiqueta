@@ -20,8 +20,8 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
     $producto_id = intval($_GET['producto_id']);
 
     $stmt = $pdo->prepare("
-        SELECT id, nombre, tipo, valores, costo_adicional, es_obligatorio, orden
-        FROM ecommerce_producto_atributos 
+        SELECT id, nombre, tipo, valores, costo_adicional, tipo_costo, es_obligatorio, orden
+        FROM ecommerce_producto_atributos
         WHERE producto_id = ? 
         ORDER BY orden
     ");
@@ -36,7 +36,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
             $ids = array_column($atributos, 'id');
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $stmt = $pdo->prepare("
-                SELECT id, atributo_id, nombre, color, imagen, costo_adicional
+                SELECT id, atributo_id, nombre, color, imagen, costo_adicional, tipo_costo
                 FROM ecommerce_atributo_opciones
                 WHERE atributo_id IN ($placeholders)
                 ORDER BY orden
@@ -63,6 +63,12 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'obtener' && isset($_GET['prod
 }
 
 require 'includes/header.php';
+
+// Auto-migrar columnas tipo_costo
+try { $pdo->query("SELECT tipo_costo FROM ecommerce_producto_atributos LIMIT 1"); }
+catch (Exception $e) { $pdo->exec("ALTER TABLE ecommerce_producto_atributos ADD COLUMN tipo_costo ENUM('fijo','porcentaje') NOT NULL DEFAULT 'fijo'"); }
+try { $pdo->query("SELECT tipo_costo FROM ecommerce_atributo_opciones LIMIT 1"); }
+catch (Exception $e) { try { $pdo->exec("ALTER TABLE ecommerce_atributo_opciones ADD COLUMN tipo_costo ENUM('fijo','porcentaje') NOT NULL DEFAULT 'fijo'"); } catch (Exception $e2) {} }
 
 $producto_id = $_GET['producto_id'] ?? 0;
 if ($producto_id <= 0) die("Producto no especificado");
@@ -132,6 +138,7 @@ if (($_POST['accion'] ?? '') === 'guardar_atributo') {
         $nombre = $_POST['nombre'] ?? '';
         $tipo = $_POST['tipo'] ?? '';
         $costo_adicional = floatval($_POST['costo_adicional'] ?? 0);
+        $tipo_costo = in_array($_POST['tipo_costo'] ?? 'fijo', ['fijo', 'porcentaje']) ? $_POST['tipo_costo'] : 'fijo';
         $es_obligatorio = isset($_POST['es_obligatorio']) ? 1 : 0;
         $orden = intval($_POST['orden'] ?? 0);
         
@@ -142,17 +149,17 @@ if (($_POST['accion'] ?? '') === 'guardar_atributo') {
         } else {
             if ($id > 0) {
                 $stmt = $pdo->prepare("
-                    UPDATE ecommerce_producto_atributos 
-                    SET nombre = ?, tipo = ?, costo_adicional = ?, es_obligatorio = ?, orden = ?
+                    UPDATE ecommerce_producto_atributos
+                    SET nombre = ?, tipo = ?, costo_adicional = ?, tipo_costo = ?, es_obligatorio = ?, orden = ?
                     WHERE id = ? AND producto_id = ?
                 ");
-                $stmt->execute([$nombre, $tipo, $costo_adicional, $es_obligatorio, $orden, $id, $producto_id]);
+                $stmt->execute([$nombre, $tipo, $costo_adicional, $tipo_costo, $es_obligatorio, $orden, $id, $producto_id]);
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, costo_adicional, es_obligatorio, orden, valores)
-                    VALUES (?, ?, ?, ?, ?, ?, '')
+                    INSERT INTO ecommerce_producto_atributos (producto_id, nombre, tipo, costo_adicional, tipo_costo, es_obligatorio, orden, valores)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, '')
                 ");
-                $stmt->execute([$producto_id, $nombre, $tipo, $costo_adicional, $es_obligatorio, $orden]);
+                $stmt->execute([$producto_id, $nombre, $tipo, $costo_adicional, $tipo_costo, $es_obligatorio, $orden]);
                 $atributo_id = $pdo->lastInsertId();
             }
             
@@ -209,6 +216,7 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
         $color = $_POST['opcion_color'] ?? null;
         $orden = intval($_POST['opcion_orden'] ?? 0);
         $costo_opcion = floatval($_POST['opcion_costo'] ?? 0);
+        $tipo_costo_opcion = in_array($_POST['tipo_costo_opcion'] ?? 'fijo', ['fijo', 'porcentaje']) ? $_POST['tipo_costo_opcion'] : 'fijo';
         $stock_opcion = floatval($_POST['opcion_stock'] ?? 0);
         
         // Validar color hexadecimal si se proporciona
@@ -245,11 +253,11 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
             if ($opcion_id > 0) {
                 // Actualizar opción existente
                 $stmt = $pdo->prepare("
-                    UPDATE ecommerce_atributo_opciones 
-                    SET nombre = ?, color = ?, orden = ?, costo_adicional = ?, stock = ?
+                    UPDATE ecommerce_atributo_opciones
+                    SET nombre = ?, color = ?, orden = ?, costo_adicional = ?, tipo_costo = ?, stock = ?
                     WHERE id = ? AND atributo_id = ?
                 ");
-                $stmt->execute([$nombre, $color, $orden, $costo_opcion, $stock_opcion, $opcion_id, $atributo_id]);
+                $stmt->execute([$nombre, $color, $orden, $costo_opcion, $tipo_costo_opcion, $stock_opcion, $opcion_id, $atributo_id]);
                 
                 // Si hay nueva imagen, actualizar
                 if ($imagen) {
@@ -263,10 +271,10 @@ if (($_POST['accion'] ?? '') === 'guardar_opcion') {
             } else {
                 // Nueva opción
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, costo_adicional, stock, orden)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_atributo_opciones (atributo_id, nombre, imagen, color, costo_adicional, tipo_costo, stock, orden)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $costo_opcion, $stock_opcion, $orden]);
+                $stmt->execute([$atributo_id, $nombre, $imagen, $color, $costo_opcion, $tipo_costo_opcion, $stock_opcion, $orden]);
             }
             
             // Recargar opciones
@@ -350,10 +358,17 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="costo_adicional" class="form-label">Costo Adicional ($)</label>
-                        <input type="number" class="form-control" id="costo_adicional" name="costo_adicional" 
+                        <label class="form-label">Tipo de Costo Adicional</label>
+                        <select class="form-select" name="tipo_costo" id="tipo_costo_attr" onchange="actualizarLabelCosto('attr')">
+                            <option value="fijo" <?= ($atributo_editar['tipo_costo'] ?? 'fijo') === 'fijo' ? 'selected' : '' ?>>Monto fijo ($)</option>
+                            <option value="porcentaje" <?= ($atributo_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? 'selected' : '' ?>>Porcentaje (%)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="costo_adicional" class="form-label">Costo Adicional <span id="symbol_costo_attr"><?= ($atributo_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? '(%)' : '($)' ?></span></label>
+                        <input type="number" class="form-control" id="costo_adicional" name="costo_adicional"
                                step="0.01" value="<?= $atributo_editar['costo_adicional'] ?? 0 ?>" min="0">
-                        <small class="text-muted">Se suma al precio total del producto</small>
+                        <small class="text-muted" id="hint_costo_attr"><?= ($atributo_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? 'Se suma como porcentaje del precio del producto' : 'Se suma al precio total del producto' ?></small>
                     </div>
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="es_obligatorio" name="es_obligatorio"
@@ -400,7 +415,11 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                         <td><span class="badge bg-secondary"><?= ucfirst($attr['tipo']) ?></span></td>
                                         <td>
                                             <?php if ($attr['costo_adicional'] > 0): ?>
-                                                <span class="badge bg-info">+$<?= number_format($attr['costo_adicional'], 2) ?></span>
+                                                <?php if (($attr['tipo_costo'] ?? 'fijo') === 'porcentaje'): ?>
+                                                    <span class="badge bg-info">+<?= number_format($attr['costo_adicional'], 2) ?>%</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-info">+$<?= number_format($attr['costo_adicional'], 2) ?></span>
+                                                <?php endif; ?>
                                             <?php else: ?>
                                                 <span class="text-muted">Gratis</span>
                                             <?php endif; ?>
@@ -501,10 +520,17 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                    value="<?= $opcion_editar['orden'] ?? 0 ?>">
                         </div>
                         <div class="mb-3">
-                            <label for="opcion_costo" class="form-label">Costo adicional ($)</label>
-                            <input type="number" step="0.01" class="form-control" id="opcion_costo" name="opcion_costo" 
+                            <label class="form-label">Tipo de Costo Adicional</label>
+                            <select class="form-select" name="tipo_costo_opcion" id="tipo_costo_opcion" onchange="actualizarLabelCosto('opcion')">
+                                <option value="fijo" <?= ($opcion_editar['tipo_costo'] ?? 'fijo') === 'fijo' ? 'selected' : '' ?>>Monto fijo ($)</option>
+                                <option value="porcentaje" <?= ($opcion_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? 'selected' : '' ?>>Porcentaje (%)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="opcion_costo" class="form-label">Costo adicional <span id="symbol_costo_opcion"><?= ($opcion_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? '(%)' : '($)' ?></span></label>
+                            <input type="number" step="0.01" class="form-control" id="opcion_costo" name="opcion_costo"
                                    value="<?= $opcion_editar['costo_adicional'] ?? 0 ?>">
-                            <small class="text-muted">Se suma al precio total cuando se elige esta opción</small>
+                            <small class="text-muted" id="hint_costo_opcion"><?= ($opcion_editar['tipo_costo'] ?? 'fijo') === 'porcentaje' ? 'Se suma como porcentaje del precio cuando se elige esta opción' : 'Se suma al precio total cuando se elige esta opción' ?></small>
                         </div>
                         <div class="mb-3">
                             <label for="opcion_stock" class="form-label">Stock (por color/opción)</label>
@@ -546,7 +572,11 @@ if (($_POST['accion'] ?? '') === 'eliminar_opcion') {
                                             <div class="d-flex justify-content-between align-items-start mb-2">
                                                 <h6 class="card-title mb-0"><?= htmlspecialchars($opcion['nombre']) ?></h6>
                                                 <?php if ((float)($opcion['costo_adicional'] ?? 0) > 0): ?>
-                                                    <span class="badge bg-success">+$<?= number_format($opcion['costo_adicional'], 2) ?></span>
+                                                    <?php if (($opcion['tipo_costo'] ?? 'fijo') === 'porcentaje'): ?>
+                                                        <span class="badge bg-success">+<?= number_format($opcion['costo_adicional'], 2) ?>%</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-success">+$<?= number_format($opcion['costo_adicional'], 2) ?></span>
+                                                    <?php endif; ?>
                                                 <?php else: ?>
                                                     <span class="badge bg-light text-dark">Gratis</span>
                                                 <?php endif; ?>
@@ -593,6 +623,26 @@ function toggleValores() {
     const tipo = document.getElementById('tipo').value;
     const container = document.getElementById('valores_container');
     container.style.display = tipo === 'select' ? 'block' : 'none';
+}
+function actualizarLabelCosto(ctx) {
+    const selId = ctx === 'attr' ? 'tipo_costo_attr' : 'tipo_costo_opcion';
+    const symId = ctx === 'attr' ? 'symbol_costo_attr' : 'symbol_costo_opcion';
+    const hintId = ctx === 'attr' ? 'hint_costo_attr' : 'hint_costo_opcion';
+    const sel = document.getElementById(selId);
+    const sym = document.getElementById(symId);
+    const hint = document.getElementById(hintId);
+    if (!sel || !sym || !hint) return;
+    if (sel.value === 'porcentaje') {
+        sym.textContent = '(%)';
+        hint.textContent = ctx === 'attr'
+            ? 'Se suma como porcentaje del precio del producto'
+            : 'Se suma como porcentaje del precio cuando se elige esta opción';
+    } else {
+        sym.textContent = '($)';
+        hint.textContent = ctx === 'attr'
+            ? 'Se suma al precio total del producto'
+            : 'Se suma al precio total cuando se elige esta opción';
+    }
 }
 </script>
 
