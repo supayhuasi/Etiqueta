@@ -31,11 +31,12 @@ $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $empleados = [];
 if ($usuarios_tienen_empleado) {
+  $empleados_tienen_activo = (bool)$pdo->query("SHOW COLUMNS FROM empleados LIKE 'activo'")->fetchColumn();
   $stmt = $pdo->query("\
-    SELECT e.id, e.nombre\
+    SELECT e.id, e.nombre" . ($empleados_tienen_activo ? ", e.activo" : ", 1 AS activo") . "\
     FROM empleados e\
     LEFT JOIN usuarios u ON u.empleado_id = e.id\
-    WHERE COALESCE(e.activo, 1) = 1 AND u.id IS NULL\
+    WHERE u.id IS NULL\
     ORDER BY e.nombre ASC\
   ");
   $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -141,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <select name="empleado_id" class="form-select">
             <option value="0">Sin vincular</option>
             <?php foreach ($empleados as $empleado): ?>
-              <option value="<?= (int)$empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?></option>
+              <option value="<?= (int)$empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?><?= empty($empleado['activo']) ? ' (inactivo)' : '' ?></option>
             <?php endforeach; ?>
           </select>
         </div>

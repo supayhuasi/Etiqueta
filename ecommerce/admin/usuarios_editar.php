@@ -36,14 +36,14 @@ $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $empleados = [];
 if ($usuarios_tienen_empleado) {
-        $stmt = $pdo->prepare("
-                SELECT e.id, e.nombre
-                FROM empleados e
-                LEFT JOIN usuarios u ON u.empleado_id = e.id AND u.id <> ?
-                WHERE COALESCE(e.activo, 1) = 1
-                    AND u.id IS NULL
-                ORDER BY e.nombre ASC
-        ");
+    $empleados_tienen_activo = admin_column_exists($pdo, 'empleados', 'activo');
+    $stmt = $pdo->prepare("\
+        SELECT e.id, e.nombre" . ($empleados_tienen_activo ? ", e.activo" : ", 1 AS activo") . "
+        FROM empleados e
+        LEFT JOIN usuarios u ON u.empleado_id = e.id AND u.id <> ?
+        WHERE u.id IS NULL
+        ORDER BY e.nombre ASC
+    ");
         $stmt->execute([$id]);
         $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -163,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <select name="empleado_id" class="form-select">
                             <option value="0">Sin vincular</option>
                             <?php foreach ($empleados as $empleado): ?>
-                                <option value="<?= (int)$empleado['id'] ?>" <?= (int)($usuario['empleado_id'] ?? 0) === (int)$empleado['id'] ? 'selected' : '' ?>><?= htmlspecialchars($empleado['nombre']) ?></option>
+                                <option value="<?= (int)$empleado['id'] ?>" <?= (int)($usuario['empleado_id'] ?? 0) === (int)$empleado['id'] ? 'selected' : '' ?>><?= htmlspecialchars($empleado['nombre']) ?><?= empty($empleado['activo']) ? ' (inactivo)' : '' ?></option>
                             <?php endforeach; ?>
                             <?php if (!empty($usuario['empleado_id']) && empty(array_filter($empleados, static function ($empleado) use ($usuario) { return (int)$empleado['id'] === (int)$usuario['empleado_id']; }))): ?>
                                 <option value="<?= (int)$usuario['empleado_id'] ?>" selected>Empleado actual #<?= (int)$usuario['empleado_id'] ?></option>

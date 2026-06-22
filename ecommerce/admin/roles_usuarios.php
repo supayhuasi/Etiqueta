@@ -34,7 +34,9 @@ $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $empleados = [];
 $empleado_asignado_a = [];
 if ($usuarios_tienen_empleado) {
-    $stmt = $pdo->query("SELECT id, nombre, COALESCE(activo, 1) AS activo FROM empleados ORDER BY activo DESC, nombre ASC");
+    $empleados_tienen_activo = admin_column_exists($pdo, 'empleados', 'activo');
+    $sql_empleados = "SELECT id, nombre" . ($empleados_tienen_activo ? ", activo" : ", 1 AS activo") . " FROM empleados ORDER BY " . ($empleados_tienen_activo ? "activo DESC, " : "") . "nombre ASC";
+    $stmt = $pdo->query($sql_empleados);
     $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt = $pdo->query("SELECT id, empleado_id FROM usuarios WHERE empleado_id IS NOT NULL");

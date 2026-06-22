@@ -24,15 +24,16 @@ $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $empleados = [];
 if ($usuarios_tienen_empleado) {
-        $stmt = $pdo->query("
-                SELECT e.id, e.nombre
-                FROM empleados e
-                LEFT JOIN usuarios u ON u.empleado_id = e.id
-                WHERE COALESCE(e.activo, 1) = 1
-                    AND u.id IS NULL
-                ORDER BY e.nombre ASC
-        ");
-        $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $empleados_tienen_activo = admin_column_exists($pdo, 'empleados', 'activo');
+    $sql_empleados = "
+        SELECT e.id, e.nombre" . ($empleados_tienen_activo ? ", e.activo" : ", 1 AS activo") . "
+        FROM empleados e
+        LEFT JOIN usuarios u ON u.empleado_id = e.id
+        WHERE u.id IS NULL
+        ORDER BY e.nombre ASC
+    ";
+    $stmt = $pdo->query($sql_empleados);
+    $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -132,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <select name="empleado_id" class="form-select">
                             <option value="0">Sin vincular</option>
                             <?php foreach ($empleados as $empleado): ?>
-                                <option value="<?= (int)$empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?></option>
+                                <option value="<?= (int)$empleado['id'] ?>"><?= htmlspecialchars($empleado['nombre']) ?><?= empty($empleado['activo']) ? ' (inactivo)' : '' ?></option>
                             <?php endforeach; ?>
                         </select>
                         <div class="form-text">Cada empleado puede quedar vinculado a un solo usuario.</div>
