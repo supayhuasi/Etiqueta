@@ -62,11 +62,16 @@ $sql = "
         SELECT p.cliente_id, SUM(pp.monto) AS total_pagado
         FROM ecommerce_pedido_pagos pp
         JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
-        WHERE p.estado != 'cancelado'
         GROUP BY p.cliente_id
     ) pag ON pag.cliente_id = c.id
     LEFT JOIN ecommerce_pedidos p_last ON p_last.id = ped.ultimo_pedido_id
-    LEFT JOIN ecommerce_ordenes_produccion op ON op.pedido_id = p_last.id
+    LEFT JOIN (
+        SELECT pedido_id,
+               MIN(fecha_creacion) AS fecha_creacion,
+               MIN(fecha_entrega)  AS fecha_entrega
+        FROM ecommerce_ordenes_produccion
+        GROUP BY pedido_id
+    ) op ON op.pedido_id = p_last.id
     WHERE COALESCE(ped.total_pedidos, 0) > 0
     {$whereAdicional}
     ORDER BY {$orderBy}
