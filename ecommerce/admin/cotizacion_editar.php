@@ -1337,7 +1337,13 @@ function renderItemResumen(index, itemData) {
                         <div class="item-resumen-title">${nombre}</div>
                         ${descripcion ? `<div class="item-resumen-meta">${descripcion}</div>` : ''}
                         <div class="item-resumen-meta">Cantidad: <strong>${itemData.cantidad}</strong> · Medidas: <strong>${dimensiones}</strong></div>
-                        <div class="item-resumen-meta">Precio base: <strong>$${precioVisible.toFixed(2)}</strong></div>
+                        <div class="item-resumen-meta d-flex align-items-center gap-2 mt-1">
+                            <span>Precio unit.:</span>
+                            <div class="input-group input-group-sm" style="max-width:160px;">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control text-end" id="precio_editable_${index}" value="${precioVisible.toFixed(2)}" min="0" step="0.01" onchange="actualizarPrecioItemInline(${index}, this.value)">
+                            </div>
+                        </div>
                         <div class="item-resumen-meta">Descuento item: <strong id="descuento_pct_text_${index}">${descuentoPct.toFixed(2)}%</strong></div>
                         <div class="item-resumen-attrs mt-2">${atributosResumen}</div>
                     </div>
@@ -1551,6 +1557,26 @@ function actualizarDescuentoItem(index, valor) {
         setItemState(index, current);
     }
 
+    calcularTotales();
+}
+
+function actualizarPrecioItemInline(index, value) {
+    const precio = Math.max(0, parseFloat(String(value).replace(',', '.')) || 0);
+    const precioInput = document.getElementById(`precio_${index}`);
+    const precioBaseInput = document.getElementById(`precio_base_${index}`);
+    if (precioInput) {
+        precioInput.value = precio.toFixed(2);
+        precioInput.dataset.base = precio.toFixed(2);
+    }
+    if (precioBaseInput) {
+        precioBaseInput.value = precio.toFixed(2);
+    }
+    const current = getItemState(index);
+    if (current) {
+        current.precio = precio.toFixed(2);
+        current.precio_base = precio.toFixed(2);
+        setItemState(index, current);
+    }
     calcularTotales();
 }
 
@@ -1911,7 +1937,7 @@ document.addEventListener('DOMContentLoaded', function() {
             agregarItem(item);
         });
     }
-    aplicarListaPrecios();
+    calcularTotales();
     const btnGuardar = document.getElementById('guardarItemBtn');
     if (btnGuardar) {
         btnGuardar.addEventListener('click', guardarItemDesdeModal);

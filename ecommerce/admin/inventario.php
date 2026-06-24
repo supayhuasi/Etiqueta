@@ -1,6 +1,30 @@
 <?php
 require 'includes/header.php';
 
+// Acción: resetear todo el stock a 0
+$mensaje_reset = '';
+$error_reset = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'reset_stock') {
+    if (($_POST['confirmacion'] ?? '') === 'CONFIRMAR') {
+        try {
+            $pdo->exec("UPDATE ecommerce_materiales SET stock = 0");
+            $pdo->exec("UPDATE ecommerce_productos SET stock = 0");
+            $tiene_op_stock = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+            if ($tiene_op_stock) {
+                $cols_op = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones LIKE 'stock'")->rowCount();
+                if ($cols_op > 0) {
+                    $pdo->exec("UPDATE ecommerce_atributo_opciones SET stock = 0");
+                }
+            }
+            $mensaje_reset = 'Stock de todos los items puesto en 0 correctamente.';
+        } catch (Throwable $e) {
+            $error_reset = 'Error al resetear el stock: ' . $e->getMessage();
+        }
+    } else {
+        $error_reset = 'Confirmación incorrecta. Escribí exactamente la palabra CONFIRMAR.';
+    }
+}
+
 function get_columns($pdo, $tabla) {
     $stmt = $pdo->query("SHOW COLUMNS FROM {$tabla}");
     return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
@@ -220,6 +244,19 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
     </div>
 <?php endif; ?>
 
+<?php if ($mensaje_reset): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        ✅ <?= htmlspecialchars($mensaje_reset) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+<?php if ($error_reset): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        ❌ <?= htmlspecialchars($error_reset) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
 <div class="row mb-4">
     <div class="col-md-12">
         <div class="d-flex justify-content-between align-items-center">
@@ -227,11 +264,42 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                 <h1>📦 Inventario</h1>
                 <p class="text-muted">Gestión de stock de materiales y productos</p>
             </div>
-            <div>
+            <div class="d-flex gap-2 flex-wrap">
                 <a href="inventario_reporte_productos.php" class="btn btn-info">📋 Reporte de Productos</a>
                 <a href="inventario_reporte_reponer.php" class="btn btn-warning">⚠️ Productos a Reponer</a>
                 <a href="inventario_ajustes.php" class="btn btn-primary">⚙️ Ajustes de Inventario</a>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalResetStock">
+                    🗑️ Poner stock en 0
+                </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal confirmación reset stock -->
+<div class="modal fade" id="modalResetStock" tabindex="-1" aria-labelledby="modalResetStockLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalResetStockLabel">⚠️ Poner todo el stock en 0</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="POST" action="inventario.php">
+                <input type="hidden" name="accion" value="reset_stock">
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <strong>Atención:</strong> Esta acción pone en <strong>0</strong> el stock de todos los materiales, productos y colores. No se puede deshacer.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Para confirmar, escribí <strong>CONFIRMAR</strong> en mayúsculas:</label>
+                        <input type="text" name="confirmacion" class="form-control" autocomplete="off" placeholder="CONFIRMAR" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Confirmar reset de stock</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
