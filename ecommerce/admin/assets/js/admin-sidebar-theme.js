@@ -3,7 +3,31 @@ document.addEventListener('DOMContentLoaded', function () {
     const themeToggleBtn = document.getElementById('themeToggleBtn');
     const themeToggleIcon = document.getElementById('themeToggleIcon');
     const themeToggleLabel = document.getElementById('themeToggleLabel');
+    const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+    const sidebarToggleIcon = document.getElementById('sidebarToggleIcon');
     const menuSections = document.querySelectorAll('.menu-section');
+
+    function applySidebarState(collapsed) {
+        root.setAttribute('data-admin-sidebar', collapsed ? 'collapsed' : 'expanded');
+        if (sidebarToggleIcon) {
+            sidebarToggleIcon.className = collapsed ? 'bi bi-arrow-bar-right' : 'bi bi-arrow-bar-left';
+        }
+        if (sidebarToggleBtn) {
+            const label = collapsed ? 'Mostrar menú completo' : 'Colapsar menú a íconos';
+            sidebarToggleBtn.setAttribute('title', label);
+            sidebarToggleBtn.setAttribute('aria-label', label);
+        }
+    }
+
+    applySidebarState(root.getAttribute('data-admin-sidebar') === 'collapsed');
+
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', function () {
+            const collapsed = root.getAttribute('data-admin-sidebar') !== 'collapsed';
+            localStorage.setItem('admin-sidebar-collapsed', collapsed ? '1' : '0');
+            applySidebarState(collapsed);
+        });
+    }
 
     function applyTheme(theme) {
         const nextTheme = theme === 'dark' ? 'dark' : 'light';

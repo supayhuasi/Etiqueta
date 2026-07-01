@@ -1125,6 +1125,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             const theme = storedTheme === 'dark' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-admin-theme', theme);
             document.documentElement.setAttribute('data-bs-theme', theme);
+
+            const storedSidebar = localStorage.getItem('admin-sidebar-collapsed');
+            document.documentElement.setAttribute('data-admin-sidebar', storedSidebar === '1' ? 'collapsed' : 'expanded');
         })();
     </script>
     <style>
@@ -1513,6 +1516,110 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             padding: .4em .7em;
             font-weight: 600;
         }
+
+        /* ===== Sidebar colapsado (rail de iconos) ===== */
+        .sidebar,
+        .main-content {
+            transition: width .25s ease, max-width .25s ease, flex-basis .25s ease, padding .25s ease;
+        }
+        #sidebarToggleBtn i {
+            transition: transform .25s ease;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar {
+            width: 72px !important;
+            max-width: 72px !important;
+            flex: 0 0 72px !important;
+            overflow: visible;
+        }
+        html[data-admin-sidebar="collapsed"] .main-content {
+            width: calc(100% - 72px) !important;
+            max-width: calc(100% - 72px) !important;
+            flex: 0 0 calc(100% - 72px) !important;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section {
+            padding: 14px 8px;
+            position: relative;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section img,
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section h4 {
+            display: none;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section::after {
+            content: 'TR';
+            display: block;
+            width: 36px;
+            height: 36px;
+            margin: 0 auto;
+            border-radius: 10px;
+            background: var(--admin-primary);
+            color: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            line-height: 36px;
+            text-align: center;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar-menu {
+            padding: 12px 8px 90px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header {
+            justify-content: center;
+            padding: 12px 0;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header span i {
+            margin-right: 0;
+            font-size: 1.1rem;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-label,
+        html[data-admin-sidebar="collapsed"] .menu-header .bi-chevron-down {
+            display: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header:hover {
+            transform: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header[data-bs-toggle="collapse"] {
+            pointer-events: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section {
+            position: relative;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items {
+            display: none !important;
+            position: absolute;
+            left: calc(100% + 10px);
+            top: 0;
+            width: 230px;
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: 12px;
+            box-shadow: var(--admin-shadow);
+            padding: 10px 8px;
+            margin: 0;
+            z-index: 1050;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section:hover .menu-items {
+            display: block !important;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a {
+            padding-left: 15px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a::before {
+            left: 4px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a:hover {
+            padding-left: 20px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section.mt-3 {
+            display: flex;
+            justify-content: center;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section.mt-3 .btn {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         @media (max-width: 992px) {
             .top-navbar {
                 padding: 12px 16px;
@@ -1549,6 +1656,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 <div class="top-navbar">
     <h5 style="margin: 0; color: var(--admin-title);"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
     <div class="top-navbar-right">
+        <button class="btn btn-outline-primary btn-sm" type="button" id="sidebarToggleBtn" title="Mostrar/ocultar menú" aria-label="Mostrar u ocultar el menú">
+            <i class="bi bi-arrow-bar-left" id="sidebarToggleIcon"></i>
+        </button>
         <button class="btn btn-outline-primary btn-sm theme-toggle" type="button" id="themeToggleBtn" aria-label="Cambiar tema del panel">
             <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
             <span class="theme-toggle-label" id="themeToggleLabel">Modo oscuro</span>
@@ -1883,8 +1993,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Inicio -->
                 <?php if ($can_access('dashboard')): ?>
                 <div class="menu-section">
-                    <a href="<?= $admin_url ?>index.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? '' : 'collapsed' ?>" style="cursor: default;">
-                        <span><i class="bi bi-house-door"></i> Inicio</span>
+                    <a href="<?= $admin_url ?>index.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? '' : 'collapsed' ?>" style="cursor: default;" title="Inicio">
+                        <span><i class="bi bi-house-door"></i><span class="menu-label"> Inicio</span></span>
                     </a>
                 </div>
                 <?php endif; ?>
@@ -1892,8 +2002,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Catálogo -->
                 <?php if ($can_access_any(['categorias', 'productos', 'matriz_precios', 'listas_precios', 'precios_ecommerce'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCatalogo">
-                        <span><i class="bi bi-box-seam"></i> Catálogo</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCatalogo" title="Catálogo">
+                        <span><i class="bi bi-box-seam"></i><span class="menu-label"> Catálogo</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCatalogo">
@@ -1919,8 +2029,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Empresa -->
                 <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
-                        <span><i class="bi bi-building"></i> Empresa</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa" title="Empresa">
+                        <span><i class="bi bi-building"></i><span class="menu-label"> Empresa</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuEmpresa">
@@ -1971,8 +2081,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Ventas -->
                 <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes', 'kpis'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
-                        <span><i class="bi bi-cart-check"></i> Ventas</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas" title="Ventas">
+                        <span><i class="bi bi-cart-check"></i><span class="menu-label"> Ventas</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuVentas">
@@ -2027,8 +2137,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Compras e Inventario -->
                 <?php if ($can_access_any(['inventario', 'proveedores', 'compras', 'inventario_ajustes'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCompras">
-                        <span><i class="bi bi-bag"></i> Compras e Inventario</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCompras" title="Compras e Inventario">
+                        <span><i class="bi bi-bag"></i><span class="menu-label"> Compras e Inventario</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCompras">
@@ -2051,8 +2161,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Recursos Humanos -->
                 <?php if ($can_access_any(['sueldos', 'plantillas', 'asistencias'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuRRHH">
-                        <span><i class="bi bi-person-badge"></i> Recursos Humanos</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuRRHH" title="Recursos Humanos">
+                        <span><i class="bi bi-person-badge"></i><span class="menu-label"> Recursos Humanos</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuRRHH">
@@ -2075,8 +2185,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Finanzas -->
                 <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas">
-                        <span><i class="bi bi-cash-stack"></i> Finanzas</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas" title="Finanzas">
+                        <span><i class="bi bi-cash-stack"></i><span class="menu-label"> Finanzas</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuFinanzas">
@@ -2101,8 +2211,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Sistema -->
                 <?php if ($can_access_any(['inicio_principal', 'scan', 'dashboard_principal', 'usuarios', 'roles'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuSistema">
-                        <span><i class="bi bi-gear-fill"></i> Sistema</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuSistema" title="Sistema">
+                        <span><i class="bi bi-gear-fill"></i><span class="menu-label"> Sistema</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuSistema">
@@ -2128,8 +2238,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Botón Ir a Tienda -->
                 <?php if ($can_access('tienda')): ?>
                 <div class="menu-section mt-3">
-                    <a href="/index.php" target="_blank" class="btn btn-success w-100">
-                        <i class="bi bi-shop"></i> Ir a la Tienda
+                    <a href="/index.php" target="_blank" class="btn btn-success w-100" title="Ir a la Tienda">
+                        <i class="bi bi-shop"></i><span class="menu-label"> Ir a la Tienda</span>
                     </a>
                 </div>
                 <?php endif; ?>
