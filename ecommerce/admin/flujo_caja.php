@@ -30,10 +30,20 @@ if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
 }
 
 // Obtener transacciones del mes
-$query = "SELECT flujo_caja.*, cuentas.nombre AS cuenta_nombre
-          FROM flujo_caja
-          LEFT JOIN cuentas ON flujo_caja.cuenta_id = cuentas.id
-          WHERE DATE_FORMAT(flujo_caja.fecha, '%Y-%m') = ? ";
+$tiene_cuenta_id = admin_column_exists($pdo, 'flujo_caja', 'cuenta_id');
+
+if ($tiene_cuenta_id) {
+    $query = "SELECT flujo_caja.*, cuentas.nombre AS cuenta_nombre
+              FROM flujo_caja
+              LEFT JOIN cuentas ON flujo_caja.cuenta_id = cuentas.id
+              WHERE DATE_FORMAT(flujo_caja.fecha, '%Y-%m') = ? ";
+} else {
+    // La columna cuenta_id todavía no existe (migración pendiente): degradar sin romper la página.
+    $query = "SELECT flujo_caja.*, NULL AS cuenta_nombre
+              FROM flujo_caja
+              WHERE DATE_FORMAT(flujo_caja.fecha, '%Y-%m') = ? ";
+    $cuenta_filtro = 0;
+}
 $params = [$mes];
 
 if ($tipo_filtro !== 'todos') {
@@ -41,7 +51,7 @@ if ($tipo_filtro !== 'todos') {
     $params[] = $tipo_filtro;
 }
 
-if ($cuenta_filtro > 0) {
+if ($tiene_cuenta_id && $cuenta_filtro > 0) {
     $query .= "AND flujo_caja.cuenta_id = ? ";
     $params[] = $cuenta_filtro;
 }

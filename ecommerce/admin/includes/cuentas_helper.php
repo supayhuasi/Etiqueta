@@ -31,6 +31,8 @@ if (!function_exists('admin_column_exists')) {
 if (!function_exists('ensureCuentasSchema')) {
     function ensureCuentasSchema(PDO $pdo): void
     {
+        // Cada paso corre en su propio try/catch: si uno falla, no debe impedir
+        // que los siguientes (más importantes, como crear la cuenta por defecto) se ejecuten.
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS cuentas (
                 id INT PRIMARY KEY AUTO_INCREMENT,
@@ -44,16 +46,43 @@ if (!function_exists('ensureCuentasSchema')) {
                 UNIQUE KEY uniq_nombre (nombre),
                 INDEX idx_activo (activo)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo crear la tabla cuentas: ' . $e->getMessage());
+        }
 
+        try {
             if (admin_table_exists($pdo, 'flujo_caja') && !admin_column_exists($pdo, 'flujo_caja', 'cuenta_id')) {
-                $pdo->exec("ALTER TABLE flujo_caja ADD COLUMN cuenta_id INT NULL AFTER id_referencia");
-                $pdo->exec("ALTER TABLE flujo_caja ADD INDEX idx_cuenta_id (cuenta_id)");
+                $pdo->exec("ALTER TABLE flujo_caja ADD COLUMN cuenta_id INT NULL");
             }
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo agregar flujo_caja.cuenta_id: ' . $e->getMessage());
+        }
 
+        try {
+            if (admin_table_exists($pdo, 'flujo_caja') && admin_column_exists($pdo, 'flujo_caja', 'cuenta_id')) {
+                $stmtIdx = $pdo->prepare("
+                    SELECT COUNT(*) FROM information_schema.statistics
+                    WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND index_name = 'idx_cuenta_id'
+                ");
+                $stmtIdx->execute();
+                if ((int)$stmtIdx->fetchColumn() === 0) {
+                    $pdo->exec("ALTER TABLE flujo_caja ADD INDEX idx_cuenta_id (cuenta_id)");
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo agregar el índice idx_cuenta_id: ' . $e->getMessage());
+        }
+
+        try {
             if (admin_table_exists($pdo, 'gastos') && !admin_column_exists($pdo, 'gastos', 'cuenta_id')) {
                 $pdo->exec("ALTER TABLE gastos ADD COLUMN cuenta_id INT NULL");
             }
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo agregar gastos.cuenta_id: ' . $e->getMessage());
+        }
 
+        $defaultId = null;
+        try {
             // Cuenta por defecto para movimientos históricos / sin cuenta asignada
             $stmt = $pdo->prepare("SELECT id FROM cuentas WHERE nombre = 'Caja / Operativa' LIMIT 1");
             $stmt->execute();
@@ -65,13 +94,21 @@ if (!function_exists('ensureCuentasSchema')) {
                 ")->execute();
                 $defaultId = $pdo->lastInsertId();
             }
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo crear la cuenta por defecto: ' . $e->getMessage());
+        }
 
-            if (admin_table_exists($pdo, 'flujo_caja') && admin_column_exists($pdo, 'flujo_caja', 'cuenta_id')) {
+        try {
+            if ($defaultId && admin_table_exists($pdo, 'flujo_caja') && admin_column_exists($pdo, 'flujo_caja', 'cuenta_id')) {
                 $stmt = $pdo->prepare("UPDATE flujo_caja SET cuenta_id = ? WHERE cuenta_id IS NULL");
                 $stmt->execute([$defaultId]);
             }
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo backfillear flujo_caja.cuenta_id: ' . $e->getMessage());
+        }
 
-            // FK: se agrega solo después de garantizar que no hay cuenta_id huérfano (backfill de arriba)
+        // FK: se agrega solo después de garantizar que no hay cuenta_id huérfano (backfill de arriba)
+        try {
             if (admin_table_exists($pdo, 'flujo_caja') && admin_column_exists($pdo, 'flujo_caja', 'cuenta_id')) {
                 $stmtFk = $pdo->prepare("
                     SELECT COUNT(*) FROM information_schema.table_constraints
@@ -79,17 +116,12 @@ if (!function_exists('ensureCuentasSchema')) {
                 ");
                 $stmtFk->execute();
                 if ((int)$stmtFk->fetchColumn() === 0) {
-                    try {
-                        $pdo->exec("ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta FOREIGN KEY (cuenta_id) REFERENCES cuentas(id)");
-                    } catch (Throwable $e) {
-                        // No bloquear la carga de la página si la FK no se puede agregar todavía (p.ej. datos huérfanos residuales)
-                        error_log('cuentas_helper: no se pudo agregar la FK fk_flujo_caja_cuenta: ' . $e->getMessage());
-                    }
+                    $pdo->exec("ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta FOREIGN KEY (cuenta_id) REFERENCES cuentas(id)");
                 }
             }
         } catch (Throwable $e) {
-            // No bloquear la carga de la página si falla algún paso de la migración defensiva
-            error_log('cuentas_helper: ensureCuentasSchema falló: ' . $e->getMessage());
+            // No bloquear la carga de la página si la FK no se puede agregar todavía (p.ej. datos huérfanos residuales)
+            error_log('cuentas_helper: no se pudo agregar la FK fk_flujo_caja_cuenta: ' . $e->getMessage());
         }
     }
 }
