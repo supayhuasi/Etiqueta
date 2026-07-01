@@ -1070,7 +1070,7 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                                     return `
                                         <div class="position-relative">
                                             <label class="cursor-pointer position-relative" style="cursor: pointer;">
-                                                <input type="radio" name="modal_attr_${attr.id}" value="${o.valor}" class="d-none attr-radio" data-attr-id="${attr.id}" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributoModal(${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
+                                                <input type="radio" name="modal_attr_${attr.id}" value="${o.valor}" class="d-none attr-radio" data-attr-id="${attr.id}" data-costo="${o.costo || 0}" onchange="actualizarCostoAtributoModal(${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
                                                 <div class="attr-option position-relative" style="cursor: pointer; border: 2px solid #ddd; border-radius: 6px; padding: 4px; transition: all 0.2s ease; background: #fff;">
                                                     ${colorBox || imgTag || placeholder}
                                                     ${costoBadge}
