@@ -14,6 +14,28 @@ require 'includes/header.php';
 require_once 'includes/cuentas_helper.php';
 
 $error_manual = null;
+$error_create_table = null;
+
+// Intento directo (sin el try/catch silencioso del helper) para poder mostrar el error real de MySQL.
+if (!admin_table_exists($pdo, 'cuentas')) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS cuentas (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            nombre VARCHAR(150) NOT NULL,
+            tipo VARCHAR(50) NOT NULL DEFAULT 'Operativa',
+            descripcion TEXT NULL,
+            activo TINYINT(1) NOT NULL DEFAULT 1,
+            orden_visual INT NOT NULL DEFAULT 0,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_nombre (nombre),
+            INDEX idx_activo (activo)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {
+        $error_create_table = $e->getMessage();
+    }
+}
+
 try {
     ensureCuentasSchema($pdo);
 } catch (Throwable $e) {
@@ -29,6 +51,12 @@ $todo_ok = $tabla_cuentas_existe && $columna_flujo_caja_existe && !empty($cuenta
 ?>
 
 <div class="container my-4">
+    <?php if ($error_create_table): ?>
+        <div class="alert alert-danger">
+            ✗ Error real de MySQL al crear la tabla <code>cuentas</code>:<br>
+            <code><?= htmlspecialchars($error_create_table) ?></code>
+        </div>
+    <?php endif; ?>
     <?php if ($error_manual): ?>
         <div class="alert alert-danger">✗ Error al preparar el esquema: <?= htmlspecialchars($error_manual) ?></div>
     <?php elseif ($todo_ok): ?>
