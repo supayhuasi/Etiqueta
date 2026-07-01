@@ -83,11 +83,13 @@ if (!function_exists('ensureCuentasSchema')) {
                         $pdo->exec("ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta FOREIGN KEY (cuenta_id) REFERENCES cuentas(id)");
                     } catch (Throwable $e) {
                         // No bloquear la carga de la página si la FK no se puede agregar todavía (p.ej. datos huérfanos residuales)
+                        error_log('cuentas_helper: no se pudo agregar la FK fk_flujo_caja_cuenta: ' . $e->getMessage());
                     }
                 }
             }
         } catch (Throwable $e) {
             // No bloquear la carga de la página si falla algún paso de la migración defensiva
+            error_log('cuentas_helper: ensureCuentasSchema falló: ' . $e->getMessage());
         }
     }
 }
@@ -95,37 +97,51 @@ if (!function_exists('ensureCuentasSchema')) {
 if (!function_exists('cuentas_get_default_id')) {
     function cuentas_get_default_id(PDO $pdo): int
     {
-        $stmt = $pdo->prepare("SELECT id FROM cuentas WHERE nombre = 'Caja / Operativa' LIMIT 1");
-        $stmt->execute();
-        $id = $stmt->fetchColumn();
-        if ($id) {
-            return (int)$id;
+        try {
+            $stmt = $pdo->prepare("SELECT id FROM cuentas WHERE nombre = 'Caja / Operativa' LIMIT 1");
+            $stmt->execute();
+            $id = $stmt->fetchColumn();
+            if ($id) {
+                return (int)$id;
+            }
+            ensureCuentasSchema($pdo);
+            $stmt->execute();
+            return (int)($stmt->fetchColumn() ?: 0);
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: cuentas_get_default_id falló: ' . $e->getMessage());
+            return 0;
         }
-        ensureCuentasSchema($pdo);
-        $stmt->execute();
-        return (int)($stmt->fetchColumn() ?: 0);
     }
 }
 
 if (!function_exists('cuentas_listar')) {
     function cuentas_listar(PDO $pdo, bool $soloActivas = true): array
     {
-        $sql = "SELECT * FROM cuentas";
-        if ($soloActivas) {
-            $sql .= " WHERE activo = 1";
+        try {
+            $sql = "SELECT * FROM cuentas";
+            if ($soloActivas) {
+                $sql .= " WHERE activo = 1";
+            }
+            $sql .= " ORDER BY orden_visual ASC, nombre ASC";
+            return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: cuentas_listar falló: ' . $e->getMessage());
+            return [];
         }
-        $sql .= " ORDER BY orden_visual ASC, nombre ASC";
-        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 
 if (!function_exists('cuentas_get')) {
     function cuentas_get(PDO $pdo, int $id): ?array
     {
-        $stmt = $pdo->prepare("SELECT * FROM cuentas WHERE id = ?");
-        $stmt->execute([$id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM cuentas WHERE id = ?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row ?: null;
+        } catch (Throwable $e) {
+            return null;
+        }
     }
 }
 
@@ -147,44 +163,56 @@ if (!function_exists('cuentas_saldo_movimientos_sql')) {
 if (!function_exists('cuentas_saldo_inicial_mes')) {
     function cuentas_saldo_inicial_mes(PDO $pdo, int $cuentaId, string $mesYm): float
     {
-        $primerDia = $mesYm . '-01';
-        $sql = "SELECT COALESCE(" . cuentas_saldo_movimientos_sql() . ", 0)
-                FROM flujo_caja WHERE cuenta_id = ? AND fecha < ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$cuentaId, $primerDia]);
-        return (float)$stmt->fetchColumn();
+        try {
+            $primerDia = $mesYm . '-01';
+            $sql = "SELECT COALESCE(" . cuentas_saldo_movimientos_sql() . ", 0)
+                    FROM flujo_caja WHERE cuenta_id = ? AND fecha < ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$cuentaId, $primerDia]);
+            return (float)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return 0.0;
+        }
     }
 }
 
 if (!function_exists('cuentas_saldo_total')) {
     function cuentas_saldo_total(PDO $pdo, int $cuentaId): float
     {
-        $sql = "SELECT COALESCE(" . cuentas_saldo_movimientos_sql() . ", 0)
-                FROM flujo_caja WHERE cuenta_id = ?";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$cuentaId]);
-        return (float)$stmt->fetchColumn();
+        try {
+            $sql = "SELECT COALESCE(" . cuentas_saldo_movimientos_sql() . ", 0)
+                    FROM flujo_caja WHERE cuenta_id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$cuentaId]);
+            return (float)$stmt->fetchColumn();
+        } catch (Throwable $e) {
+            return 0.0;
+        }
     }
 }
 
 if (!function_exists('cuentas_saldo_periodo')) {
     function cuentas_saldo_periodo(PDO $pdo, int $cuentaId, string $fechaInicio, string $fechaFin): array
     {
-        $stmt = $pdo->prepare("
-            SELECT
-                COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND categoria <> 'Pago de Sueldo' THEN monto ELSE 0 END), 0) AS ingresos,
-                COALESCE(SUM(CASE WHEN tipo = 'egreso' OR categoria = 'Pago de Sueldo' THEN monto ELSE 0 END), 0) AS egresos
-            FROM flujo_caja
-            WHERE cuenta_id = ? AND fecha BETWEEN ? AND ?
-        ");
-        $stmt->execute([$cuentaId, $fechaInicio, $fechaFin]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['ingresos' => 0, 'egresos' => 0];
-        $ingresos = (float)$row['ingresos'];
-        $egresos = (float)$row['egresos'];
-        return [
-            'ingresos' => $ingresos,
-            'egresos' => $egresos,
-            'saldo' => $ingresos - $egresos,
-        ];
+        try {
+            $stmt = $pdo->prepare("
+                SELECT
+                    COALESCE(SUM(CASE WHEN tipo = 'ingreso' AND categoria <> 'Pago de Sueldo' THEN monto ELSE 0 END), 0) AS ingresos,
+                    COALESCE(SUM(CASE WHEN tipo = 'egreso' OR categoria = 'Pago de Sueldo' THEN monto ELSE 0 END), 0) AS egresos
+                FROM flujo_caja
+                WHERE cuenta_id = ? AND fecha BETWEEN ? AND ?
+            ");
+            $stmt->execute([$cuentaId, $fechaInicio, $fechaFin]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['ingresos' => 0, 'egresos' => 0];
+            $ingresos = (float)$row['ingresos'];
+            $egresos = (float)$row['egresos'];
+            return [
+                'ingresos' => $ingresos,
+                'egresos' => $egresos,
+                'saldo' => $ingresos - $egresos,
+            ];
+        } catch (Throwable $e) {
+            return ['ingresos' => 0.0, 'egresos' => 0.0, 'saldo' => 0.0];
+        }
     }
 }
