@@ -1,11 +1,15 @@
 <?php
 require '../includes/header.php';
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: auth/login.php");
     exit;
 }
+
+$cuentas = cuentas_listar($pdo);
 
 $id = $_GET['id'] ?? 0;
 
@@ -23,7 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado = $_POST['estado'] ?? 'pendiente';
     $fecha_pago = $_POST['fecha_pago'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
-    
+    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+
     try {
         // Actualizar campo pagado para compatibilidad
         $pagado = ($estado === 'pagado') ? 1 : 0;
@@ -52,9 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $descripcion_mov = 'Cheque #' . $cheque['numero_cheque'] . ' - ' . $cheque['beneficiario'];
 
                     $stmt_fc = $pdo->prepare("
-                        INSERT INTO flujo_caja 
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'egreso', 'Cheque', ?, ?, ?, ?, ?, ?)
+                        INSERT INTO flujo_caja
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Cheque', ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt_fc->execute([
                         $fecha_movimiento,
@@ -62,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $cheque['monto'],
                         $cheque['numero_cheque'],
                         $id,
+                        $cuenta_id,
                         $_SESSION['user']['id'],
                         $observaciones ?: 'Registrado desde cambio de estado a Pagado'
                     ]);
@@ -153,6 +159,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="date" class="form-control" id="fecha_pago" name="fecha_pago" 
                                    value="<?= $cheque['fecha_pago'] ?? '' ?>">
                             <small class="text-muted">Dejar en blanco si aún no se ha pagado</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cuenta_id" class="form-label">Cuenta (para el movimiento de caja si se marca como Pagado)</label>
+                            <select class="form-select" id="cuenta_id" name="cuenta_id">
+                                <?php foreach ($cuentas as $c): ?>
+                                    <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="mb-3">

@@ -14,10 +14,15 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
+require_once 'includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+
+$cuentas = cuentas_listar($pdo, false);
 
 // Obtener parámetros
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01', strtotime('first day of previous month'));
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t', strtotime('last day of previous month'));
+$cuenta_filtro = intval($_GET['cuenta'] ?? 0);
 
 // Validar fechas
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_inicio) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_fin)) {
@@ -26,13 +31,30 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_inicio) || !preg_match('/^\d{4}-
 }
 
 // Obtener todas las transacciones en el rango
-$stmt = $pdo->prepare("
-    SELECT * FROM flujo_caja 
-    WHERE fecha BETWEEN ? AND ?
-    ORDER BY fecha ASC
-");
-$stmt->execute([$fecha_inicio, $fecha_fin]);
+$query_trans = "SELECT * FROM flujo_caja WHERE fecha BETWEEN ? AND ?";
+$params_trans = [$fecha_inicio, $fecha_fin];
+if ($cuenta_filtro > 0) {
+    $query_trans .= " AND cuenta_id = ?";
+    $params_trans[] = $cuenta_filtro;
+}
+$query_trans .= " ORDER BY fecha ASC";
+$stmt = $pdo->prepare($query_trans);
+$stmt->execute($params_trans);
 $transacciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Resumen por cuenta (cuando no hay una sola cuenta seleccionada)
+$resumen_por_cuenta = [];
+if ($cuenta_filtro === 0) {
+    foreach ($cuentas as $c) {
+        if ((int)$c['activo'] !== 1) {
+            continue;
+        }
+        $resumen_por_cuenta[] = array_merge(
+            ['nombre' => $c['nombre']],
+            cuentas_saldo_periodo($pdo, (int)$c['id'], $fecha_inicio, $fecha_fin)
+        );
+    }
+}
 
 // Calcular acumulados por día
 $acumulado_diario = [];
@@ -77,18 +99,23 @@ foreach ($transacciones as $trans) {
 $saldo_neto = $total_ingresos - $total_egresos;
 
 // Resumen por categoría
-$stmt = $pdo->prepare("
-    SELECT 
+$query_cat = "
+    SELECT
         tipo,
         categoria,
         COUNT(*) as cantidad,
         SUM(monto) as total
     FROM flujo_caja
     WHERE fecha BETWEEN ? AND ?
-    GROUP BY tipo, categoria
-    ORDER BY tipo DESC, total DESC
-");
-$stmt->execute([$fecha_inicio, $fecha_fin]);
+";
+$params_cat = [$fecha_inicio, $fecha_fin];
+if ($cuenta_filtro > 0) {
+    $query_cat .= " AND cuenta_id = ?";
+    $params_cat[] = $cuenta_filtro;
+}
+$query_cat .= " GROUP BY tipo, categoria ORDER BY tipo DESC, total DESC";
+$stmt = $pdo->prepare($query_cat);
+$stmt->execute($params_cat);
 $resumen_categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
@@ -135,7 +162,16 @@ $resumen_categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <label for="fecha_fin" class="form-label">Fecha Fin</label>
                     <input type="date" id="fecha_fin" name="fecha_fin" class="form-control" value="<?= $fecha_fin ?>">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-3">
+                    <label for="cuenta" class="form-label">Cuenta</label>
+                    <select id="cuenta" name="cuenta" class="form-select">
+                        <option value="0">Todas las cuentas</option>
+                        <?php foreach ($cuentas as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= $cuenta_filtro === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                 </div>
             </form>
@@ -171,6 +207,34 @@ $resumen_categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+
+    <?php if (!empty($resumen_por_cuenta)): ?>
+    <div class="card mb-4">
+        <div class="card-header">Resumen por cuenta (período seleccionado)</div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Cuenta</th>
+                        <th class="text-end">Ingresos</th>
+                        <th class="text-end">Egresos</th>
+                        <th class="text-end">Saldo del período</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($resumen_por_cuenta as $r): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($r['nombre']) ?></td>
+                            <td class="text-end text-success">$<?= number_format($r['ingresos'], 2) ?></td>
+                            <td class="text-end text-danger">$<?= number_format($r['egresos'], 2) ?></td>
+                            <td class="text-end" style="color: <?= $r['saldo'] >= 0 ? '#28A745' : '#DC3545' ?>"><strong>$<?= number_format($r['saldo'], 2) ?></strong></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div class="row mb-4">
         <div class="col-md-6">

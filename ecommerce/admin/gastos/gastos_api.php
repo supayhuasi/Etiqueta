@@ -35,6 +35,8 @@
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/gastos_budget_helper.php';
 ensureGastosBudgetSchema($pdo);
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
 
 header('Content-Type: application/json');
 
@@ -117,6 +119,8 @@ try {
     $empleadoRaw = $pickValue($data, ['empleado_id', 'beneficiario_id', 'employee_id']);
     $empleado_id = ($empleadoRaw !== null && $empleadoRaw !== '' ? intval($empleadoRaw) : null);
     $observaciones = trim((string)($pickValue($data, ['observaciones', 'observacion', 'notes'], '') ?? ''));
+    $cuentaRaw = $pickValue($data, ['cuenta_id', 'cuenta', 'account_id']);
+    $cuenta_id = $resolveIdByName($pdo, 'cuentas', $cuentaRaw) ?: cuentas_get_default_id($pdo);
 
     $errores = [];
     if (empty($fecha)) $errores[] = 'La fecha es obligatoria';
@@ -224,10 +228,10 @@ try {
 
         $stmt = $pdo->prepare("INSERT INTO gastos
             (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion,
-             monto, observaciones, archivo, usuario_registra)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+             monto, observaciones, archivo, cuenta_id, usuario_registra)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$numero, $fecha, $tipo_id, $empleado_id, $estado_id,
-                        $descripcion, $monto, $observaciones, $archivoNombre, $usuario_id]);
+                        $descripcion, $monto, $observaciones, $archivoNombre, $cuenta_id, $usuario_id]);
         $gasto_id = $pdo->lastInsertId();
 
         // historial
@@ -252,10 +256,10 @@ try {
     $pagadoId = $stmt_pag->fetchColumn();
     if ($pagadoId && (int)$estado_id === (int)$pagadoId) {
         $stmt_fc = $pdo->prepare("INSERT INTO flujo_caja
-            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?)");
+            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?, ?)");
         $stmt_fc->execute([
-            $fecha, $descripcion, $monto, $numero, $gasto_id, $usuario_id,
+            $fecha, $descripcion, $monto, $numero, $gasto_id, $cuenta_id, $usuario_id,
             $observaciones ?: 'Registrado desde API'
         ]);
     }

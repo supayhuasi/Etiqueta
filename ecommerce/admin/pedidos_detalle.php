@@ -1,11 +1,15 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
+require_once __DIR__ . '/includes/cuentas_helper.php';
 
 $pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
 if (!($pdo instanceof PDO)) {
     throw new RuntimeException('Conexion PDO no disponible en detalle de pedidos.');
 }
+
+ensureCuentasSchema($pdo);
+$cuentas = cuentas_listar($pdo);
 
 $es_revendedor = (($role ?? '') === 'revendedor');
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
@@ -379,6 +383,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $metodo = trim($_POST['metodo'] ?? '');
             $referencia = trim($_POST['referencia'] ?? '');
             $notas = trim($_POST['notas'] ?? '');
+            $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
 
             if ($monto <= 0) {
                 throw new Exception('El monto debe ser mayor a 0');
@@ -423,8 +428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $stmt_fc = $pdo->prepare("
                         INSERT INTO flujo_caja
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?)
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt_fc->execute([
                         date('Y-m-d'),
@@ -432,6 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $monto,
                         $referencia_fc,
                         $pago_id,
+                        $cuenta_id,
                         $_SESSION['user']['id'] ?? null,
                         $notas ?: 'Registrado desde pedido'
                     ]);
@@ -670,6 +676,15 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="col-md-3">
                 <label class="form-label">Notas</label>
                 <input type="text" class="form-control" name="notas">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Cuenta</label>
+                <select class="form-select" name="cuenta_id" required>
+                    <option value="">Seleccionar...</option>
+                    <?php foreach ($cuentas as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-12">
                 <button type="submit" class="btn btn-primary">Registrar Pago</button>

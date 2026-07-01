@@ -14,6 +14,10 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
+require_once 'includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+
+$cuentas = cuentas_listar($pdo, false);
 
 $id = intval($_GET['id'] ?? 0);
 $error = '';
@@ -42,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $monto = floatval($_POST['monto'] ?? $transaccion['monto']);
         $referencia = $_POST['referencia'] ?? $transaccion['referencia'];
         $observaciones = $_POST['observaciones'] ?? $transaccion['observaciones'];
+        $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
 
         if ($monto <= 0) {
             throw new Exception('El monto debe ser mayor a 0');
@@ -49,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $pdo->prepare("
             UPDATE flujo_caja
-            SET fecha = ?, categoria = ?, descripcion = ?, monto = ?, referencia = ?, observaciones = ?, fecha_actualizacion = NOW()
+            SET fecha = ?, categoria = ?, descripcion = ?, monto = ?, referencia = ?, cuenta_id = ?, observaciones = ?, fecha_actualizacion = NOW()
             WHERE id = ?
         ");
 
@@ -59,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $descripcion,
             $monto,
             $referencia,
+            $cuenta_id,
             $observaciones,
             $id
         ]);
@@ -124,6 +130,15 @@ $tipo_texto = ucfirst($transaccion['tipo']);
                             <input type="text" id="categoria" name="categoria" class="form-control" value="<?= htmlspecialchars($transaccion['categoria']) ?>" required>
                         </div>
                     </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="cuenta_id" class="form-label">Cuenta</label>
+                    <select id="cuenta_id" name="cuenta_id" class="form-select">
+                        <?php foreach ($cuentas as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= (int)($transaccion['cuenta_id'] ?? 0) === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <div class="mb-3">

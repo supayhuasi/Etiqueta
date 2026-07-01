@@ -2,6 +2,8 @@
 require '../includes/header.php';
 require_once __DIR__ . '/gastos_budget_helper.php';
 ensureGastosBudgetSchema($pdo);
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -12,6 +14,8 @@ if (!isset($_SESSION['user'])) {
 if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
+
+$cuentas = cuentas_listar($pdo);
 
 // Obtener tipos y estados
 $stmt_tipos = $pdo->query("SELECT id, nombre, color, presupuesto_mensual, porcentaje_alerta, bloquear_exceso FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
@@ -36,7 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monto = floatval($_POST['monto'] ?? 0);
     $empleado_id = $_POST['empleado_id'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
-    
+    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+
     $errores = [];
     
     if (empty($fecha)) $errores[] = "La fecha es obligatoria";
@@ -106,12 +111,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $numero_gasto = "G-" . str_pad($ultimoNumero + 1, 6, '0', STR_PAD_LEFT);
 
                 $stmt = $pdo->prepare("
-                    INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto, 
-                                       observaciones, archivo, usuario_registra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto,
+                                       observaciones, archivo, cuenta_id, usuario_registra)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
-                               $observaciones, $archivo, $_SESSION['user']['id']]);
+                $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
+                               $observaciones, $archivo, $cuenta_id, $_SESSION['user']['id']]);
                 $gasto_id = $pdo->lastInsertId();
             
                 // Registrar en historial
@@ -140,9 +145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($pagado_id && (int)$estado_gasto_id === (int)$pagado_id) {
                 try {
                     $stmt_fc = $pdo->prepare("
-                        INSERT INTO flujo_caja 
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?)
+                        INSERT INTO flujo_caja
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt_fc->execute([
                         $fecha,
@@ -150,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $monto,
                         $numero_gasto,
                         $gasto_id,
+                        $cuenta_id,
                         $_SESSION['user']['id'],
                         $observaciones ?: 'Registrado desde creación en estado Pagado'
                     ]);
@@ -232,6 +238,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <option value="<?= $estado['id'] ?>"><?= htmlspecialchars($estado['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="cuenta_id" class="form-label">Cuenta</label>
+                                <select class="form-select" id="cuenta_id" name="cuenta_id">
+                                    <?php foreach ($cuentas as $c): ?>
+                                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <small class="text-muted">De dónde sale el pago si el estado es (o pasa a ser) Pagado.</small>
                             </div>
                             <div class="col-12">
                                 <div id="budgetAlertBox" class="alert d-none mb-3"></div>

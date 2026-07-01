@@ -2086,6 +2086,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('flujo_caja')): ?>
                         <a href="<?= $admin_url ?>flujo_caja.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['flujo_caja.php', 'flujo_caja_ingreso.php', 'flujo_caja_egreso.php', 'flujo_caja_reportes.php', 'pagos_sueldos_parciales.php']) ? 'active' : '' ?>"><i class="bi bi-cash"></i> Flujo de Caja</a>
+                        <a href="<?= $admin_url ?>cuentas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cuentas.php', 'cuentas_crear.php', 'cuentas_eliminar.php']) ? 'active' : '' ?>"><i class="bi bi-bank"></i> Cuentas</a>
                         <?php endif; ?>
                         <?php if ($can_access('cheques')): ?>
                         <a href="<?= $admin_url ?>cheques/cheques.php" class="<?= basename($_SERVER['PHP_SELF']) === 'cheques.php' ? 'active' : '' ?>"><i class="bi bi-credit-card-2-front"></i> Cheques</a>

@@ -14,6 +14,10 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
+require_once 'includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+
+$cuentas = cuentas_listar($pdo);
 
 $error = '';
 $exito = '';
@@ -63,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $monto = floatval($_POST['monto'] ?? 0);
         $observaciones = $_POST['observaciones'] ?? '';
         $usuario_id = $_SESSION['user']['id'] ?? null;
+        $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
 
         if ($monto <= 0) {
             throw new Exception('El monto debe ser mayor a 0');
@@ -221,9 +226,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Registrar en flujo de caja
         $stmt = $pdo->prepare("
-            INSERT INTO flujo_caja 
-            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-            VALUES (?, 'egreso', ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO flujo_caja
+            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+            VALUES (?, 'egreso', ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $stmt->execute([
@@ -233,6 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $monto,
             $referencia,
             $id_referencia,
+            $cuenta_id,
             $usuario_id,
             $observaciones
         ]);
@@ -315,6 +321,16 @@ $titulo = match($tipo_egreso) {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="cuenta_id" class="form-label">Cuenta *</label>
+                    <select id="cuenta_id" name="cuenta_id" class="form-select" required>
+                        <option value="">Seleccionar...</option>
+                        <?php foreach ($cuentas as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= (string)($_POST['cuenta_id'] ?? '') === (string)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <!-- Formulario para GASTOS -->

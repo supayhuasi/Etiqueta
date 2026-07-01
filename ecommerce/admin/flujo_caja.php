@@ -14,10 +14,15 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
+require_once 'includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+
+$cuentas = cuentas_listar($pdo, false);
 
 // Obtener filtros
 $mes = $_GET['mes'] ?? date('Y-m');
 $tipo_filtro = $_GET['tipo'] ?? 'todos';
+$cuenta_filtro = intval($_GET['cuenta'] ?? 0);
 
 // Validar formato de mes
 if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
@@ -25,15 +30,23 @@ if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
 }
 
 // Obtener transacciones del mes
-$query = "SELECT * FROM flujo_caja WHERE DATE_FORMAT(fecha, '%Y-%m') = ? ";
+$query = "SELECT flujo_caja.*, cuentas.nombre AS cuenta_nombre
+          FROM flujo_caja
+          LEFT JOIN cuentas ON flujo_caja.cuenta_id = cuentas.id
+          WHERE DATE_FORMAT(flujo_caja.fecha, '%Y-%m') = ? ";
 $params = [$mes];
 
 if ($tipo_filtro !== 'todos') {
-    $query .= "AND tipo = ? ";
+    $query .= "AND flujo_caja.tipo = ? ";
     $params[] = $tipo_filtro;
 }
 
-$query .= "ORDER BY fecha DESC";
+if ($cuenta_filtro > 0) {
+    $query .= "AND flujo_caja.cuenta_id = ? ";
+    $params[] = $cuenta_filtro;
+}
+
+$query .= "ORDER BY flujo_caja.fecha DESC";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -53,6 +66,28 @@ foreach ($transacciones as $trans) {
 }
 
 $saldo = $total_ingresos - $total_egresos;
+
+// Saldo inicial del mes (arrastre de meses anteriores) por cuenta
+$saldo_inicial_cuenta = null;
+$saldo_final_cuenta = null;
+$desglose_saldos_cuentas = [];
+if ($cuenta_filtro > 0) {
+    $saldo_inicial_cuenta = cuentas_saldo_inicial_mes($pdo, $cuenta_filtro, $mes);
+    $saldo_final_cuenta = $saldo_inicial_cuenta + $saldo;
+} else {
+    foreach ($cuentas as $c) {
+        if ((int)$c['activo'] !== 1) {
+            continue;
+        }
+        $saldo_inicial_c = cuentas_saldo_inicial_mes($pdo, (int)$c['id'], $mes);
+        $saldo_periodo_c = cuentas_saldo_periodo($pdo, (int)$c['id'], $mes . '-01', date('Y-m-t', strtotime($mes . '-01')));
+        $desglose_saldos_cuentas[] = [
+            'nombre' => $c['nombre'],
+            'saldo_inicial' => $saldo_inicial_c,
+            'saldo_final' => $saldo_inicial_c + $saldo_periodo_c['saldo'],
+        ];
+    }
+}
 
 // Obtener resumen por categoría
 $stmt_categorias = $pdo->prepare("
@@ -102,6 +137,9 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
             <h1>💰 Flujo de Caja</h1>
         </div>
         <div class="col-md-6 text-end">
+            <a href="cuentas.php" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-bank"></i> Cuentas
+            </a>
             <a href="flujo_caja_ingreso.php" class="btn btn-success me-2">
                 <i class="bi bi-plus-circle"></i> Nuevo Ingreso
             </a>
@@ -115,11 +153,11 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
     <div class="card mb-4">
         <div class="card-body">
             <form method="GET" class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="mes" class="form-label">Mes</label>
                     <input type="month" id="mes" name="mes" class="form-control" value="<?= $mes ?>" onchange="this.form.submit()">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="tipo" class="form-label">Tipo</label>
                     <select id="tipo" name="tipo" class="form-select" onchange="this.form.submit()">
                         <option value="todos">Todos</option>
@@ -127,9 +165,61 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                         <option value="egreso" <?= $tipo_filtro === 'egreso' ? 'selected' : '' ?>>Egresos</option>
                     </select>
                 </div>
+                <div class="col-md-4">
+                    <label for="cuenta" class="form-label">Cuenta</label>
+                    <select id="cuenta" name="cuenta" class="form-select" onchange="this.form.submit()">
+                        <option value="0">Todas las cuentas</option>
+                        <?php foreach ($cuentas as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= $cuenta_filtro === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </form>
         </div>
     </div>
+
+    <?php if ($cuenta_filtro > 0): ?>
+    <!-- Saldo inicial / final del mes para la cuenta seleccionada -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="resumen-box" style="background-color: #fff3cd; border-left: 4px solid #ffc107;">
+                <div class="h6 text-muted">SALDO INICIAL DEL MES (arrastrado)</div>
+                <div class="h4">$<?= number_format($saldo_inicial_cuenta, 2) ?></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="resumen-box" style="background-color: #d1e7dd; border-left: 4px solid #198754;">
+                <div class="h6 text-muted">SALDO FINAL DEL MES</div>
+                <div class="h4" style="color: <?= $saldo_final_cuenta >= 0 ? '#28A745' : '#DC3545' ?>">$<?= number_format($saldo_final_cuenta, 2) ?></div>
+            </div>
+        </div>
+    </div>
+    <?php elseif (!empty($desglose_saldos_cuentas)): ?>
+    <!-- Desglose de saldo inicial/final por cuenta cuando no hay una sola cuenta seleccionada -->
+    <div class="card mb-4">
+        <div class="card-header">Saldo por cuenta (arrastrado de meses anteriores)</div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Cuenta</th>
+                        <th class="text-end">Saldo inicial del mes</th>
+                        <th class="text-end">Saldo final del mes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($desglose_saldos_cuentas as $d): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($d['nombre']) ?></td>
+                            <td class="text-end">$<?= number_format($d['saldo_inicial'], 2) ?></td>
+                            <td class="text-end" style="color: <?= $d['saldo_final'] >= 0 ? '#28A745' : '#DC3545' ?>">$<?= number_format($d['saldo_final'], 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Resumen -->
     <div class="row mb-4">
@@ -222,6 +312,7 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                             <tr>
                                 <th>Fecha</th>
                                 <th>Tipo</th>
+                                <th>Cuenta</th>
                                 <th>Categoría</th>
                                 <th>Descripción</th>
                                 <th>Monto</th>
@@ -238,6 +329,7 @@ $categorias_resumen = $stmt_categorias->fetchAll(PDO::FETCH_ASSOC);
                                             <?= ucfirst($trans['tipo']) ?>
                                         </span>
                                     </td>
+                                    <td><small><?= htmlspecialchars($trans['cuenta_nombre'] ?? '-') ?></small></td>
                                     <td><strong><?= htmlspecialchars($trans['categoria']) ?></strong></td>
                                     <td><?= htmlspecialchars($trans['descripcion'] ?? '-') ?></td>
                                     <td class="text-end">
