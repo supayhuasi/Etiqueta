@@ -215,6 +215,7 @@ $role_permissions = [
         'dashboard',
         'kpis',
         'ordenes_produccion',
+        'instalaciones',
         'recordatorios',
         'inventario',
         'calidad',
