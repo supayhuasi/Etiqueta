@@ -199,6 +199,19 @@ $stmt = $pdo->prepare("
 $stmt->execute([$mes_filtro, $mes_filtro]);
 $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Detalle de pagos parciales por empleado para el mes seleccionado
+$stmt_det = $pdo->prepare("
+    SELECT empleado_id, monto_pagado, fecha_pago, observaciones
+    FROM pagos_sueldos_parciales
+    WHERE mes_pago = ?
+    ORDER BY fecha_pago ASC
+");
+$stmt_det->execute([$mes_filtro]);
+$parciales_detalle = [];
+foreach ($stmt_det->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $parciales_detalle[(int)$row['empleado_id']][] = $row;
+}
+
 $minutos_extras_por_empleado = calcularMinutosExtrasMesPorEmpleado($pdo, $mes_filtro);
 $total_minutos_extras_mes = 0;
 foreach ($minutos_extras_por_empleado as $mins) {
@@ -355,6 +368,7 @@ foreach ($empleados as $emp) {
                 <table class="table table-striped table-hover">
                     <thead>
                         <tr>
+                            <th><input type="checkbox" id="sel_todos" class="form-check-input" title="Seleccionar todos"></th>
                             <th>Empleado</th>
                             <th>Sueldo Base</th>
                             <th>Plantilla Actual</th>
@@ -380,6 +394,13 @@ foreach ($empleados as $emp) {
                                 $minutos_extras_emp = (int)($minutos_extras_por_empleado[$emp['id']] ?? 0);
                             ?>
                         <tr>
+                            <td class="align-middle">
+                                <input type="checkbox" class="emp-checkbox form-check-input"
+                                       data-sueldo="<?= $sueldo_total_emp ?>"
+                                       data-pagado="<?= $monto_total_pagado ?>"
+                                       data-pendiente="<?= max(0, $saldo_pendiente) ?>"
+                                       data-nombre="<?= htmlspecialchars($emp['nombre']) ?>">
+                            </td>
                             <td>
                                 <strong><?= htmlspecialchars($emp['nombre']) ?></strong>
                                 <br><small class="text-muted"><?= htmlspecialchars($emp['email']) ?></small>
@@ -415,6 +436,14 @@ foreach ($empleados as $emp) {
                                             <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
+                                    <?php if (!empty($parciales_detalle[$emp['id']])): ?>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#pago-det-<?= $emp['id'] ?>"
+                                                title="Ver detalle de pagos parciales">
+                                            📅 <?= count($parciales_detalle[$emp['id']]) ?> pago<?= count($parciales_detalle[$emp['id']]) > 1 ? 's' : '' ?>
+                                        </button>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="badge bg-warning">Sin registrar</span>
                                 <?php endif; ?>
@@ -435,9 +464,56 @@ foreach ($empleados as $emp) {
                                 </div>
                             </td>
                         </tr>
+                        <?php if (!empty($parciales_detalle[$emp['id']])): ?>
+                        <tr class="collapse" id="pago-det-<?= $emp['id'] ?>">
+                            <td colspan="10" class="p-0">
+                                <div class="px-4 py-2 bg-light border-start border-info border-3">
+                                    <strong class="text-muted small">Pagos parciales — <?= htmlspecialchars($emp['nombre']) ?></strong>
+                                    <table class="table table-sm table-bordered mt-2 mb-0">
+                                        <thead class="table-secondary">
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Monto</th>
+                                                <th>Observaciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($parciales_detalle[$emp['id']] as $det): ?>
+                                            <tr>
+                                                <td><?= date('d/m/Y', strtotime($det['fecha_pago'])) ?></td>
+                                                <td><strong>$<?= number_format((float)$det['monto_pagado'], 2, ',', '.') ?></strong></td>
+                                                <td><?= $det['observaciones'] ? htmlspecialchars($det['observaciones']) : '<span class="text-muted">—</span>' ?></td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endif; ?>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            <!-- Panel acumulado de selección -->
+            <div id="resumen-seleccion" class="mt-3 p-3 rounded border border-info bg-info bg-opacity-10" style="display:none;">
+                <div class="row align-items-center g-3">
+                    <div class="col-auto">
+                        <strong>Seleccionados: <span id="sel-count">0</span></strong>
+                    </div>
+                    <div class="col-auto">
+                        Sueldo total: <strong id="sel-sueldo">$0</strong>
+                    </div>
+                    <div class="col-auto">
+                        Pagado: <strong class="text-success" id="sel-pagado">$0</strong>
+                    </div>
+                    <div class="col-auto">
+                        Pendiente: <strong class="text-danger" id="sel-pendiente">$0</strong>
+                    </div>
+                    <div class="col-auto ms-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-desel-todos">Deseleccionar todo</button>
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -464,5 +540,58 @@ foreach ($empleados as $emp) {
         </div>
     </div>
 </div>
+
+<script>
+function formatMonto(n) {
+    var parts = n.toFixed(2).split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return '$' + parts[0] + ',' + parts[1];
+}
+
+function actualizarResumen() {
+    var checks = document.querySelectorAll('.emp-checkbox:checked');
+    var sueldo = 0, pagado = 0, pendiente = 0;
+    checks.forEach(function(c) {
+        sueldo    += parseFloat(c.dataset.sueldo)    || 0;
+        pagado    += parseFloat(c.dataset.pagado)    || 0;
+        pendiente += parseFloat(c.dataset.pendiente) || 0;
+    });
+    var panel = document.getElementById('resumen-seleccion');
+    if (checks.length > 0) {
+        panel.style.display = '';
+        document.getElementById('sel-count').textContent     = checks.length;
+        document.getElementById('sel-sueldo').textContent    = formatMonto(sueldo);
+        document.getElementById('sel-pagado').textContent    = formatMonto(pagado);
+        document.getElementById('sel-pendiente').textContent = formatMonto(pendiente);
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.emp-checkbox').forEach(function(c) {
+        c.addEventListener('change', actualizarResumen);
+    });
+
+    var selTodos = document.getElementById('sel_todos');
+    if (selTodos) {
+        selTodos.addEventListener('change', function() {
+            document.querySelectorAll('.emp-checkbox').forEach(function(c) {
+                c.checked = selTodos.checked;
+            });
+            actualizarResumen();
+        });
+    }
+
+    var btnDesel = document.getElementById('btn-desel-todos');
+    if (btnDesel) {
+        btnDesel.addEventListener('click', function() {
+            document.querySelectorAll('.emp-checkbox').forEach(function(c) { c.checked = false; });
+            if (selTodos) selTodos.checked = false;
+            actualizarResumen();
+        });
+    }
+});
+</script>
 
 <?php require '../includes/footer.php'; ?>

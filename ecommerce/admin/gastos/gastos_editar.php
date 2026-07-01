@@ -2,6 +2,8 @@
 require '../includes/header.php';
 require_once __DIR__ . '/gastos_budget_helper.php';
 ensureGastosBudgetSchema($pdo);
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -12,6 +14,8 @@ if (!isset($_SESSION['user'])) {
 if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
+
+$cuentas = cuentas_listar($pdo);
 
 $id = $_GET['id'] ?? 0;
 
@@ -46,7 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monto = floatval($_POST['monto'] ?? 0);
     $empleado_id = $_POST['empleado_id'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
-    
+    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+
     $errores = [];
     
     if (empty($fecha)) $errores[] = "La fecha es obligatoria";
@@ -104,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errores)) {
         try {
             $stmt = $pdo->prepare("
-                UPDATE gastos 
-                SET fecha = ?, tipo_gasto_id = ?, empleado_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?, 
-                    observaciones = ?, archivo = ?
+                UPDATE gastos
+                SET fecha = ?, tipo_gasto_id = ?, empleado_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?,
+                    observaciones = ?, archivo = ?, cuenta_id = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto, 
-                           $observaciones, $archivo, $id]);
+            $stmt->execute([$fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
+                           $observaciones, $archivo, $cuenta_id, $id]);
             
             // Si el nuevo estado es "Pagado", registrar en flujo de caja
             $stmt_pagado = $pdo->prepare("SELECT id FROM estados_gastos WHERE LOWER(nombre) = 'pagado' LIMIT 1");
@@ -131,22 +136,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($fc_existe) {
                         $stmt_fc_update = $pdo->prepare("
                             UPDATE flujo_caja
-                            SET fecha = ?, descripcion = ?, monto = ?, observaciones = ?
+                            SET fecha = ?, descripcion = ?, monto = ?, cuenta_id = ?, observaciones = ?
                             WHERE id_referencia = ? AND categoria = 'Gasto'
                         ");
                         $stmt_fc_update->execute([
                             $fecha,
                             $descripcion,
                             $monto,
+                            $cuenta_id,
                             $observaciones ?: 'Actualizado desde edición en estado Pagado',
                             $id
                         ]);
                     } else {
                         // Solo crear si no existe
                         $stmt_fc = $pdo->prepare("
-                            INSERT INTO flujo_caja 
-                            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?)
+                            INSERT INTO flujo_caja
+                            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt_fc->execute([
                             $fecha,
@@ -154,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $monto,
                             $gasto['numero_gasto'],
                             $id,
+                            $cuenta_id,
                             $_SESSION['user']['id'],
                             $observaciones ?: 'Registrado desde edición'
                         ]);
@@ -238,6 +245,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="cuenta_id" class="form-label">Cuenta</label>
+                                <select class="form-select" id="cuenta_id" name="cuenta_id">
+                                    <?php foreach ($cuentas as $c): ?>
+                                        <option value="<?= (int)$c['id'] ?>" <?= (int)($gasto['cuenta_id'] ?? 0) === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <small class="text-muted">De dónde sale el pago si el estado es (o pasa a ser) Pagado.</small>
                             </div>
                             <div class="col-12">
                                 <div id="budgetAlertBox" class="alert d-none mb-3"></div>

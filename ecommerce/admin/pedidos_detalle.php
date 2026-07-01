@@ -1,6 +1,30 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
+require_once __DIR__ . '/includes/cuentas_helper.php';
+
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('Conexion PDO no disponible en detalle de pedidos.');
+}
+
+ensureCuentasSchema($pdo);
+$cuentas = cuentas_listar($pdo);
+
+$es_revendedor = (($role ?? '') === 'revendedor');
+$usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
+$pedido_owner_col = '';
+try {
+    $cols_pedidos_owner = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    foreach (['creado_por', 'usuario_id', 'vendedor_id'] as $col_owner_candidate) {
+        if (in_array($col_owner_candidate, $cols_pedidos_owner, true)) {
+            $pedido_owner_col = $col_owner_candidate;
+            break;
+        }
+    }
+} catch (Throwable $e) {
+    $pedido_owner_col = '';
+}
 
 function registrarMovimientoInventario(PDO $pdo, array $payload): void
 {
@@ -135,6 +159,19 @@ $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$pedido) {
     die("Pedido no encontrado (ID: " . htmlspecialchars($pedido_id) . ")");
+}
+
+if ($es_revendedor) {
+    if ($pedido_owner_col === '' || $usuario_id_actual <= 0) {
+        http_response_code(403);
+        die('Acceso denegado. No es posible validar propiedad del pedido en esta instalacion.');
+    }
+
+    $owner_val = isset($pedido[$pedido_owner_col]) ? (int)$pedido[$pedido_owner_col] : 0;
+    if ($owner_val !== $usuario_id_actual) {
+        http_response_code(403);
+        die('Acceso denegado. Solo podes ver pedidos creados por tu usuario.');
+    }
 }
 
 $configContablePedido = contabilidad_get_config($pdo);
@@ -346,6 +383,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $metodo = trim($_POST['metodo'] ?? '');
             $referencia = trim($_POST['referencia'] ?? '');
             $notas = trim($_POST['notas'] ?? '');
+            $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
 
             if ($monto <= 0) {
                 throw new Exception('El monto debe ser mayor a 0');
@@ -390,8 +428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $stmt_fc = $pdo->prepare("
                         INSERT INTO flujo_caja
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?)
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt_fc->execute([
                         date('Y-m-d'),
@@ -399,6 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $monto,
                         $referencia_fc,
                         $pago_id,
+                        $cuenta_id,
                         $_SESSION['user']['id'] ?? null,
                         $notas ?: 'Registrado desde pedido'
                     ]);
@@ -637,6 +676,15 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="col-md-3">
                 <label class="form-label">Notas</label>
                 <input type="text" class="form-control" name="notas">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Cuenta</label>
+                <select class="form-select" name="cuenta_id" required>
+                    <option value="">Seleccionar...</option>
+                    <?php foreach ($cuentas as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-md-12">
                 <button type="submit" class="btn btn-primary">Registrar Pago</button>

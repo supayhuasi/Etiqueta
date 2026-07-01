@@ -1,5 +1,7 @@
 <?php
 require '../includes/header.php';
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -10,6 +12,8 @@ if (!isset($_SESSION['user'])) {
 if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
+
+$cuentas = cuentas_listar($pdo);
 
 $id = $_GET['id'] ?? 0;
 
@@ -36,7 +40,8 @@ $estados = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado_nuevo_id = $_POST['estado_gasto_id'] ?? 0;
     $observaciones = $_POST['observaciones'] ?? '';
-    
+    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+
     if ($estado_nuevo_id <= 0) {
         $error = "Debe seleccionar un estado";
     } else {
@@ -44,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $estado_anterior_id = $gasto['estado_gasto_id'];
             
             // Actualizar estado del gasto
-            $stmt = $pdo->prepare("UPDATE gastos SET estado_gasto_id = ? WHERE id = ?");
-            $stmt->execute([$estado_nuevo_id, $id]);
+            $stmt = $pdo->prepare("UPDATE gastos SET estado_gasto_id = ?, cuenta_id = ? WHERE id = ?");
+            $stmt->execute([$estado_nuevo_id, $cuenta_id, $id]);
             
             // Registrar en historial
             $stmt = $pdo->prepare("
@@ -73,22 +78,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($fc_existe) {
                         $stmt_fc_update = $pdo->prepare("
                             UPDATE flujo_caja
-                            SET fecha = ?, descripcion = ?, monto = ?, observaciones = ?
+                            SET fecha = ?, descripcion = ?, monto = ?, cuenta_id = ?, observaciones = ?
                             WHERE id_referencia = ? AND categoria = 'Gasto'
                         ");
                         $stmt_fc_update->execute([
                             $gasto['fecha'],
                             $gasto['descripcion'],
                             $gasto['monto'],
+                            $cuenta_id,
                             $observaciones ?: 'Actualizado desde cambio de estado a Pagado',
                             $id
                         ]);
                     } else {
                         // Solo crear si no existe
                         $stmt_fc = $pdo->prepare("
-                            INSERT INTO flujo_caja 
-                            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?)
+                            INSERT INTO flujo_caja
+                            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                            VALUES (?, 'egreso', 'Gasto', ?, ?, ?, ?, ?, ?, ?)
                         ");
                         $stmt_fc->execute([
                             $gasto['fecha'],
@@ -96,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $gasto['monto'],
                             $gasto['numero_gasto'],
                             $id,
+                            $cuenta_id,
                             $_SESSION['user']['id'],
                             $observaciones ?: 'Registrado desde cambio de estado a Pagado'
                         ]);
@@ -187,6 +194,15 @@ $historial = $stmt_historial->fetchAll(PDO::FETCH_ASSOC);
                                     <option value="<?= $estado['id'] ?>" <?= $estado['id'] == $gasto['estado_gasto_id'] ? 'disabled' : '' ?>>
                                         <?= htmlspecialchars($estado['nombre']) ?>
                                     </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cuenta_id" class="form-label">Cuenta (para el movimiento de caja si el estado pasa a Pagado)</label>
+                            <select class="form-select" id="cuenta_id" name="cuenta_id">
+                                <?php foreach ($cuentas as $c): ?>
+                                    <option value="<?= (int)$c['id'] ?>" <?= (int)($gasto['cuenta_id'] ?? 0) === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>

@@ -17,13 +17,54 @@ if ($mensaje === 'eliminada') {
     $mensajeTexto = 'La recepción se actualizó y el stock fue ajustado.';
 }
 
-$stmt = $pdo->query("
+$fechaDesde = $_GET['fecha_desde'] ?? '';
+$fechaHasta = $_GET['fecha_hasta'] ?? '';
+
+$whereClauses = [];
+$params = [];
+
+if ($fechaDesde !== '') {
+    $whereClauses[] = 'DATE(c.fecha_compra) >= ?';
+    $params[] = $fechaDesde;
+}
+
+if ($fechaHasta !== '') {
+    $whereClauses[] = 'DATE(c.fecha_compra) <= ?';
+    $params[] = $fechaHasta;
+}
+
+$sql = "
     SELECT c.*, p.nombre as proveedor_nombre
     FROM ecommerce_compras c
     LEFT JOIN ecommerce_proveedores p ON c.proveedor_id = p.id
-    ORDER BY c.fecha_compra DESC
-");
+";
+
+if (!empty($whereClauses)) {
+    $sql .= ' WHERE ' . implode(' AND ', $whereClauses);
+}
+
+$sql .= ' ORDER BY c.fecha_compra DESC';
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$totalOrdenes = count($compras);
+$totalImporte = 0;
+$totalAprobadas = 0;
+$totalRecepcionTotal = 0;
+
+foreach ($compras as $compra) {
+    $totalImporte += (float)($compra['total'] ?? 0);
+
+    if (($compra['estado'] ?? '') === 'aprobada') {
+        $totalAprobadas++;
+    }
+
+    if (($compra['recepcion_estado'] ?? '') === 'total') {
+        $totalRecepcionTotal++;
+    }
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -34,6 +75,62 @@ $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <a href="compras_crear.php" class="btn btn-primary">+ Nueva Orden</a>
 </div>
 
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="fecha_desde" class="form-label">Fecha desde</label>
+                <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" value="<?= htmlspecialchars($fechaDesde) ?>">
+            </div>
+            <div class="col-md-3">
+                <label for="fecha_hasta" class="form-label">Fecha hasta</label>
+                <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="<?= htmlspecialchars($fechaHasta) ?>">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            </div>
+            <div class="col-md-2">
+                <a href="compras.php" class="btn btn-outline-secondary w-100">Limpiar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-2">Total órdenes</h6>
+                <h3 class="mb-0"><?= $totalOrdenes ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-2">Monto total</h6>
+                <h3 class="mb-0">$<?= number_format($totalImporte, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-2">Aprobadas</h6>
+                <h3 class="mb-0"><?= $totalAprobadas ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="card-title text-muted mb-2">Recepción total</h6>
+                <h3 class="mb-0"><?= $totalRecepcionTotal ?></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-body">
         <?php if ($mensajeTexto): ?>
@@ -41,7 +138,7 @@ $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
 
         <?php if (empty($compras)): ?>
-            <div class="alert alert-info">No hay compras registradas.</div>
+            <div class="alert alert-info">No hay compras registradas para el rango seleccionado.</div>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover">

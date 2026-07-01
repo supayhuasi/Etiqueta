@@ -1,6 +1,11 @@
 <?php
 require 'includes/header.php';
 
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('Conexion PDO no disponible en reporte de reposicion.');
+}
+
 function inv_table_exists(PDO $pdo, string $table): bool
 {
     try {
@@ -67,15 +72,19 @@ if (inv_table_exists($pdo, 'ecommerce_materiales')) {
             m.tipo_origen,
             m.proveedor_habitual_id,
             p.nombre as proveedor_nombre,
-            (m.stock_minimo - m.stock) as cantidad_reponer,
+            CASE
+                WHEN m.stock_minimo IS NULL THEN ABS(m.stock)
+                ELSE (m.stock_minimo - m.stock)
+            END as cantidad_reponer,
             CASE
                 WHEN m.stock < 0 THEN 'negativo'
                 WHEN m.stock = 0 THEN 'sin_stock'
-                WHEN m.stock <= m.stock_minimo THEN 'bajo_minimo'
+                WHEN m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo THEN 'bajo_minimo'
+                ELSE 'sin_stock'
             END as prioridad
         FROM ecommerce_materiales m
         LEFT JOIN ecommerce_proveedores p ON m.proveedor_habitual_id = p.id
-        WHERE m.stock <= m.stock_minimo
+        WHERE m.stock <= 0 OR (m.stock_minimo IS NOT NULL AND m.stock <= m.stock_minimo)
         ORDER BY
             CASE
                 WHEN m.stock < 0 THEN 1
@@ -100,15 +109,19 @@ if (inv_table_exists($pdo, 'ecommerce_productos')) {
             pr.tipo_origen,
             pr.proveedor_habitual_id,
             p.nombre as proveedor_nombre,
-            (pr.stock_minimo - pr.stock) as cantidad_reponer,
+            CASE
+                WHEN pr.stock_minimo IS NULL THEN ABS(pr.stock)
+                ELSE (pr.stock_minimo - pr.stock)
+            END as cantidad_reponer,
             CASE
                 WHEN pr.stock < 0 THEN 'negativo'
                 WHEN pr.stock = 0 THEN 'sin_stock'
-                WHEN pr.stock <= pr.stock_minimo THEN 'bajo_minimo'
+                WHEN pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo THEN 'bajo_minimo'
+                ELSE 'sin_stock'
             END as prioridad
         FROM ecommerce_productos pr
         LEFT JOIN ecommerce_proveedores p ON pr.proveedor_habitual_id = p.id
-        WHERE pr.stock <= pr.stock_minimo
+        WHERE pr.stock <= 0 OR (pr.stock_minimo IS NOT NULL AND pr.stock <= pr.stock_minimo)
         ORDER BY
             CASE
                 WHEN pr.stock < 0 THEN 1
@@ -190,7 +203,8 @@ $items_solo_compra = count(array_filter($items_reponer, fn($i) => $i['tipo_orige
             </div>
             <div>
                 <a href="inventario.php" class="btn btn-secondary">← Volver a Inventario</a>
-                <button onclick="window.print()" class="btn btn-primary">🖨️ Imprimir</button>
+                <a href="inventario_reporte_reponer_pdf.php<?= $ver_colores ? '?ver_colores=1' : '' ?>" target="_blank" class="btn btn-danger">📄 Descargar PDF</a>
+                <button onclick="window.print()" class="btn btn-outline-primary">🖨️ Imprimir pantalla</button>
                 <?php if ($tiene_opciones): ?>
                     <?php if ($ver_colores): ?>
                         <a href="inventario_reporte_reponer.php" class="btn btn-outline-secondary">Ocultar colores</a>

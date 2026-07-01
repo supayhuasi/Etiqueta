@@ -17,7 +17,9 @@ try {
         ['admin', 'Administrador del sistema'],
         ['usuario', 'Usuario regular'],
         ['operario', 'Operario de producción'],
-        ['ventas', 'Usuario de ventas']
+        ['ventas', 'Usuario de ventas'],
+        ['sin_sueldos', 'Puede ver todo menos sueldos'],
+        ['revendedor', 'Revendedor: ve sus cotizaciones, clientes de cotización y pedidos']
     ];
     $stmt = $pdo->prepare("INSERT IGNORE INTO roles (nombre, descripcion) VALUES (?, ?)");
     foreach ($roles_default as $role) {

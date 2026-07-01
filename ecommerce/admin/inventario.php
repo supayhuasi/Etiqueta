@@ -1,10 +1,42 @@
 <?php
 require 'includes/header.php';
 
+// Acción: resetear todo el stock a 0
+$mensaje_reset = '';
+$error_reset = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'reset_stock') {
+    if (($_POST['confirmacion'] ?? '') === 'CONFIRMAR') {
+        try {
+            $pdo->exec("UPDATE ecommerce_materiales SET stock = 0");
+            $pdo->exec("UPDATE ecommerce_productos SET stock = 0");
+            $tiene_op_stock = $pdo->query("SHOW TABLES LIKE 'ecommerce_atributo_opciones'")->rowCount() > 0;
+            if ($tiene_op_stock) {
+                $cols_op = $pdo->query("SHOW COLUMNS FROM ecommerce_atributo_opciones LIKE 'stock'")->rowCount();
+                if ($cols_op > 0) {
+                    $pdo->exec("UPDATE ecommerce_atributo_opciones SET stock = 0");
+                }
+            }
+            $mensaje_reset = 'Stock de todos los items puesto en 0 correctamente.';
+        } catch (Throwable $e) {
+            $error_reset = 'Error al resetear el stock: ' . $e->getMessage();
+        }
+    } else {
+        $error_reset = 'Confirmación incorrecta. Escribí exactamente la palabra CONFIRMAR.';
+    }
+}
+
 function get_columns($pdo, $tabla) {
     $stmt = $pdo->query("SHOW COLUMNS FROM {$tabla}");
     return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 }
+
+// Auto-migración: agregar columna ubicacion si no existe
+foreach (['ecommerce_materiales', 'ecommerce_productos'] as $_tabla) {
+    try {
+        $pdo->query("ALTER TABLE `{$_tabla}` ADD COLUMN `ubicacion` VARCHAR(120) NULL DEFAULT NULL AFTER `stock_minimo`");
+    } catch (Throwable $_e) { /* columna ya existe */ }
+}
+unset($_tabla, $_e);
 
 $cols_materiales = get_columns($pdo, 'ecommerce_materiales');
 $cols_productos = get_columns($pdo, 'ecommerce_productos');
@@ -28,6 +60,7 @@ foreach (['stock','stock_minimo','tipo_origen','proveedor_habitual_id'] as $col)
 $tipo_filtro = $_GET['tipo'] ?? 'todos'; // todos, materiales, productos
 $alerta_filtro = $_GET['alerta'] ?? 'todos'; // todos, bajo_minimo, negativo, sin_alerta
 $origen_filtro = $_GET['origen'] ?? 'todos'; // todos, fabricacion_propia, compra
+$ubicacion_filtro = trim($_GET['ubicacion'] ?? '');
 $buscar = $_GET['buscar'] ?? '';
 $ver_colores = !empty($_GET['ver_colores']);
 
@@ -38,6 +71,11 @@ $params_materiales = [];
 if ($buscar) {
     $where_materiales[] = "nombre LIKE ?";
     $params_materiales[] = "%$buscar%";
+}
+
+if ($ubicacion_filtro !== '' && in_array('ubicacion', $cols_materiales, true)) {
+    $where_materiales[] = "ubicacion = ?";
+    $params_materiales[] = $ubicacion_filtro;
 }
 
 if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_materiales, true)) {
@@ -54,6 +92,7 @@ $sql_materiales = "
         " . (in_array('stock_minimo', $cols_materiales, true) ? "stock_minimo" : "0") . " as stock_minimo,
         " . (in_array('tipo_origen', $cols_materiales, true) ? "tipo_origen" : "'compra'") . " as tipo_origen,
         " . (in_array('unidad_medida', $cols_materiales, true) ? "unidad_medida" : "'unidad'") . " as unidad_medida,
+        " . (in_array('ubicacion', $cols_materiales, true) ? "ubicacion" : "''") . " as ubicacion,
         " . (in_array('proveedor_habitual_id', $cols_materiales, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
             WHEN " . (in_array('stock', $cols_materiales, true) ? "stock" : "0") . " < 0 THEN 'negativo'
@@ -77,6 +116,11 @@ if ($buscar) {
     $params_productos[] = "%$buscar%";
 }
 
+if ($ubicacion_filtro !== '' && in_array('ubicacion', $cols_productos, true)) {
+    $where_productos[] = "ubicacion = ?";
+    $params_productos[] = $ubicacion_filtro;
+}
+
 if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_productos, true)) {
     $where_productos[] = "tipo_origen = ?";
     $params_productos[] = $origen_filtro;
@@ -91,6 +135,7 @@ $sql_productos = "
         " . (in_array('stock_minimo', $cols_productos, true) ? "stock_minimo" : "0") . " as stock_minimo,
         " . (in_array('tipo_origen', $cols_productos, true) ? "tipo_origen" : "'fabricacion_propia'") . " as tipo_origen,
         'unidad' as unidad_medida,
+        " . (in_array('ubicacion', $cols_productos, true) ? "ubicacion" : "''") . " as ubicacion,
         " . (in_array('proveedor_habitual_id', $cols_productos, true) ? "proveedor_habitual_id" : "NULL") . " as proveedor_habitual_id,
         CASE 
             WHEN " . (in_array('stock', $cols_productos, true) ? "stock" : "0") . " < 0 THEN 'negativo'
@@ -134,6 +179,22 @@ $proveedores_map = [];
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $prov) {
     $proveedores_map[$prov['id']] = $prov['nombre'];
 }
+
+// Obtener ubicaciones únicas para el filtro
+$ubicaciones_disponibles = [];
+try {
+    $ubs = [];
+    if (in_array('ubicacion', $cols_materiales, true)) {
+        $rows = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_materiales WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+        $ubs = array_merge($ubs, $rows);
+    }
+    if (in_array('ubicacion', $cols_productos, true)) {
+        $rows = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_productos WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+        $ubs = array_merge($ubs, $rows);
+    }
+    $ubicaciones_disponibles = array_unique($ubs);
+    sort($ubicaciones_disponibles);
+} catch (Throwable $e) {}
 
 // Stock por color (opciones de atributos)
 $opciones_color = [];
@@ -183,6 +244,19 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
     </div>
 <?php endif; ?>
 
+<?php if ($mensaje_reset): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        ✅ <?= htmlspecialchars($mensaje_reset) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+<?php if ($error_reset): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        ❌ <?= htmlspecialchars($error_reset) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
 <div class="row mb-4">
     <div class="col-md-12">
         <div class="d-flex justify-content-between align-items-center">
@@ -190,11 +264,42 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                 <h1>📦 Inventario</h1>
                 <p class="text-muted">Gestión de stock de materiales y productos</p>
             </div>
-            <div>
+            <div class="d-flex gap-2 flex-wrap">
                 <a href="inventario_reporte_productos.php" class="btn btn-info">📋 Reporte de Productos</a>
                 <a href="inventario_reporte_reponer.php" class="btn btn-warning">⚠️ Productos a Reponer</a>
                 <a href="inventario_ajustes.php" class="btn btn-primary">⚙️ Ajustes de Inventario</a>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalResetStock">
+                    🗑️ Poner stock en 0
+                </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal confirmación reset stock -->
+<div class="modal fade" id="modalResetStock" tabindex="-1" aria-labelledby="modalResetStockLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalResetStockLabel">⚠️ Poner todo el stock en 0</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="POST" action="inventario.php">
+                <input type="hidden" name="accion" value="reset_stock">
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <strong>Atención:</strong> Esta acción pone en <strong>0</strong> el stock de todos los materiales, productos y colores. No se puede deshacer.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Para confirmar, escribí <strong>CONFIRMAR</strong> en mayúsculas:</label>
+                        <input type="text" name="confirmacion" class="form-control" autocomplete="off" placeholder="CONFIRMAR" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Confirmar reset de stock</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -269,6 +374,17 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Ubicación / Sector</label>
+                <select name="ubicacion" class="form-select">
+                    <option value="">Todas</option>
+                    <?php foreach ($ubicaciones_disponibles as $ub): ?>
+                        <option value="<?= htmlspecialchars($ub) ?>" <?= $ubicacion_filtro === $ub ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($ub) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Stock por color</label>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="ver_colores" name="ver_colores" value="1" <?= $ver_colores ? 'checked' : '' ?>>
@@ -295,6 +411,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                         <tr>
                             <th>Tipo</th>
                             <th>Nombre</th>
+                            <th>Ubicación</th>
                             <th>Stock Actual</th>
                             <th>Stock Mínimo</th>
                             <th>Estado</th>
@@ -314,6 +431,13 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                     <?php endif; ?>
                                 </td>
                                 <td><strong><?= htmlspecialchars($item['nombre']) ?></strong></td>
+                                <td>
+                                    <?php if (!empty($item['ubicacion'])): ?>
+                                        <span class="badge bg-light text-dark border">📍 <?= htmlspecialchars($item['ubicacion']) ?></span>
+                                    <?php else: ?>
+                                        <small class="text-muted">-</small>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <strong class="<?= $item['stock'] < 0 ? 'text-danger' : ($item['stock'] == 0 ? 'text-secondary' : '') ?>">
                                         <?= number_format($item['stock'], 2) ?> <?= htmlspecialchars($item['unidad_medida']) ?>

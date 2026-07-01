@@ -1,10 +1,13 @@
 <?php
 require 'includes/header.php';
 
+$es_revendedor = (($role ?? '') === 'revendedor');
+
 // Filtros
 $estado_filtro = $_GET['estado'] ?? '';
-$buscar = $_GET['buscar'] ?? '';
-$ver_todas = isset($_GET['ver_todas']) ? true : false;
+$buscar = $_GET['cliente'] ?? ($_GET['buscar'] ?? '');
+// Revendedor siempre ve solo sus cotizaciones
+$ver_todas = $es_revendedor ? false : (isset($_GET['ver_todas']) ? true : false);
 $usuario_id = $_SESSION['user']['id'] ?? 0;
 
 // Construir query
@@ -66,7 +69,9 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
         <p class="text-muted">Gestiona solicitudes de cotización y presupuestos</p>
     </div>
     <div>
+        <?php if (!$es_revendedor): ?>
         <a href="cotizacion_crear.php" class="btn btn-primary">➕ Nueva Cotización</a>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -135,10 +140,14 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
             </div>
             <div class="col-md-2">
                 <label class="form-label">Mostrar</label>
+                <?php if ($es_revendedor): ?>
+                    <input type="text" class="form-control" value="Mis cotizaciones" disabled>
+                <?php else: ?>
                 <select name="ver_todas" class="form-select" onchange="this.form.submit()">
                     <option value="" <?= !$ver_todas ? 'selected' : '' ?>>Mis cotizaciones</option>
                     <option value="1" <?= $ver_todas ? 'selected' : '' ?>>Todas</option>
                 </select>
+                <?php endif; ?>
             </div>
             <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary me-2">🔍 Filtrar</button>

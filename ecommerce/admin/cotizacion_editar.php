@@ -865,8 +865,17 @@ function maxDescuentoInicial(item, precioBase) {
     return Math.min(100, Math.max(0, fromList)).toFixed(2);
 }
 
+function limpiarEstadoModal() {
+    // Limpia cualquier backdrop o estado residual antes de abrir el modal
+    try { document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); }); } catch(e){}
+    try { document.body.classList.remove('modal-open'); } catch(e){}
+    try { document.body.style.removeProperty('padding-right'); } catch(e){}
+    try { document.body.style.removeProperty('overflow'); } catch(e){}
+}
+
 function abrirModalItem(editIndex = null) {
     modalEditIndex = editIndex;
+    limpiarEstadoModal();
     asegurarDatalistProductos();
     resetearModalItem();
 
@@ -919,6 +928,11 @@ function abrirModalItem(editIndex = null) {
                 modalEl.addEventListener('hidden.bs.modal', function() {
                     try { modalEl.setAttribute('aria-hidden', 'true'); } catch(e){}
                     try { if ('inert' in modalEl) modalEl.inert = true; } catch(e){}
+                    // Garantizar limpieza completa del estado del modal
+                    try { document.body.classList.remove('modal-open'); } catch(e){}
+                    try { document.body.style.removeProperty('padding-right'); } catch(e){}
+                    try { document.body.style.removeProperty('overflow'); } catch(e){}
+                    try { document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); }); } catch(e){}
                 });
                 modalEl._bsListenersAdded = true;
             }
@@ -1056,7 +1070,7 @@ function cargarAtributosProductoModal(productoId, valoresExistentes = []) {
                                     return `
                                         <div class="position-relative">
                                             <label class="cursor-pointer position-relative" style="cursor: pointer;">
-                                                <input type="radio" name="modal_attr_${attr.id}" value="${o.valor}" class="d-none attr-radio" data-attr-id="${attr.id}" data-costo="${o.costo || 0}" ${requerido} onchange="actualizarCostoAtributoModal(${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
+                                                <input type="radio" name="modal_attr_${attr.id}" value="${o.valor}" class="d-none attr-radio" data-attr-id="${attr.id}" data-costo="${o.costo || 0}" onchange="actualizarCostoAtributoModal(${attr.id}, ${attr.costo_adicional}, this.dataset.costo, this.value); marcarOpcionAtributo(this);">
                                                 <div class="attr-option position-relative" style="cursor: pointer; border: 2px solid #ddd; border-radius: 6px; padding: 4px; transition: all 0.2s ease; background: #fff;">
                                                     ${colorBox || imgTag || placeholder}
                                                     ${costoBadge}
@@ -1323,7 +1337,13 @@ function renderItemResumen(index, itemData) {
                         <div class="item-resumen-title">${nombre}</div>
                         ${descripcion ? `<div class="item-resumen-meta">${descripcion}</div>` : ''}
                         <div class="item-resumen-meta">Cantidad: <strong>${itemData.cantidad}</strong> · Medidas: <strong>${dimensiones}</strong></div>
-                        <div class="item-resumen-meta">Precio base: <strong>$${precioVisible.toFixed(2)}</strong></div>
+                        <div class="item-resumen-meta d-flex align-items-center gap-2 mt-1">
+                            <span>Precio unit.:</span>
+                            <div class="input-group input-group-sm" style="max-width:160px;">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control text-end" id="precio_editable_${index}" value="${precioVisible.toFixed(2)}" min="0" step="0.01" onchange="actualizarPrecioItemInline(${index}, this.value)">
+                            </div>
+                        </div>
                         <div class="item-resumen-meta">Descuento item: <strong id="descuento_pct_text_${index}">${descuentoPct.toFixed(2)}%</strong></div>
                         <div class="item-resumen-attrs mt-2">${atributosResumen}</div>
                     </div>
@@ -1537,6 +1557,26 @@ function actualizarDescuentoItem(index, valor) {
         setItemState(index, current);
     }
 
+    calcularTotales();
+}
+
+function actualizarPrecioItemInline(index, value) {
+    const precio = Math.max(0, parseFloat(String(value).replace(',', '.')) || 0);
+    const precioInput = document.getElementById(`precio_${index}`);
+    const precioBaseInput = document.getElementById(`precio_base_${index}`);
+    if (precioInput) {
+        precioInput.value = precio.toFixed(2);
+        precioInput.dataset.base = precio.toFixed(2);
+    }
+    if (precioBaseInput) {
+        precioBaseInput.value = precio.toFixed(2);
+    }
+    const current = getItemState(index);
+    if (current) {
+        current.precio = precio.toFixed(2);
+        current.precio_base = precio.toFixed(2);
+        setItemState(index, current);
+    }
     calcularTotales();
 }
 
@@ -1897,7 +1937,7 @@ document.addEventListener('DOMContentLoaded', function() {
             agregarItem(item);
         });
     }
-    aplicarListaPrecios();
+    calcularTotales();
     const btnGuardar = document.getElementById('guardarItemBtn');
     if (btnGuardar) {
         btnGuardar.addEventListener('click', guardarItemDesdeModal);
@@ -1973,6 +2013,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnSubmit.textContent = 'Guardando...';
             }
 
+            // Safety: re-habilitar el botón si la navegación no ocurre en 30s
+            const safetyTimer = setTimeout(function() {
+                envioEnCurso = false;
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = '💾 Guardar Cambios';
+                }
+            }, 30000);
+
             const nativeSubmit = HTMLFormElement.prototype.submit;
             try {
                 if (typeof nativeSubmit === 'function') {
@@ -1981,6 +2030,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     formCot.submit();
                 }
             } catch (submitError) {
+                clearTimeout(safetyTimer);
                 envioEnCurso = false;
                 if (btnSubmit) {
                     btnSubmit.disabled = false;

@@ -96,6 +96,12 @@ if (!function_exists('admin_require_csrf_post')) {
 $base_path = dirname(dirname(dirname(dirname(__FILE__))));
 require $base_path . '/config.php';
 
+// Normaliza la conexion en este scope para evitar referencias ambiguas a $pdo.
+$pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
+if (!($pdo instanceof PDO)) {
+    throw new RuntimeException('No se pudo inicializar la conexion PDO en el admin.');
+}
+
 // Crear variables para las rutas relativas en HTML
 // $relative_root: cantidad de ../ para llegar a la raíz del proyecto
 // $admin_url: URL base del admin para usar en enlaces (absoluta desde la raíz del servidor)
@@ -156,6 +162,7 @@ $role_aliases = [
     'administrador del sistema' => 'admin',
     'superadmin' => 'admin',
     'super_admin' => 'admin',
+    'revendedor' => 'revendedor',
     'vendedor' => 'ventas',
     'vendedores' => 'ventas',
     'venta' => 'ventas',
@@ -168,8 +175,28 @@ if (isset($role_aliases[$role])) {
 
 $role_permissions = [
     'admin' => ['*'],
+    'sin_sueldos' => [
+        'dashboard',
+        'kpis',
+        'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
+        'pedidos', 'ordenes_produccion', 'instalaciones',
+        'recordatorios',
+        'crm',
+        'clientes_web',
+        'inventario',
+        'finanzas',
+        'flujo_caja',
+        'cheques',
+        'gastos',
+        'encuestas',
+        'calidad',
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda',
+        'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'blog', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
+        // No incluye 'sueldos'
+    ],
     'usuario' => [
         'dashboard',
+        'kpis',
         'productos', 'categorias', 'matriz_precios', 'listas_precios', 'precios_ecommerce',
         'pedidos', 'ordenes_produccion', 'instalaciones',
         'recordatorios',
@@ -186,14 +213,17 @@ $role_permissions = [
     ],
     'operario' => [
         'dashboard',
+        'kpis',
         'ordenes_produccion',
+        'instalaciones',
         'recordatorios',
         'inventario',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'ventas' => [
         'dashboard',
+        'kpis',
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
@@ -204,10 +234,11 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'vendedor' => [
         'dashboard',
+        'kpis',
         'pedidos',
         'ordenes_produccion',
         'instalaciones',
@@ -218,7 +249,16 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
+        'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
+    ],
+    'revendedor' => [
+        'dashboard',
+        'kpis',
+        'cotizaciones',
+        'cotizacion_clientes',
+        'pedidos',
+        'blog',
+        'inicio_principal', 'dashboard_principal', 'tienda'
     ]
 ];
 
@@ -226,11 +266,23 @@ $role_permissions = [
 if (isset($role_permissions['usuario']) && !in_array('faq', $role_permissions['usuario'], true)) {
     $role_permissions['usuario'][] = 'faq';
 }
+if (isset($role_permissions['usuario']) && !in_array('blog', $role_permissions['usuario'], true)) {
+    $role_permissions['usuario'][] = 'blog';
+}
 if (isset($role_permissions['ventas']) && !in_array('faq', $role_permissions['ventas'], true)) {
     $role_permissions['ventas'][] = 'faq';
 }
+if (isset($role_permissions['ventas']) && !in_array('blog', $role_permissions['ventas'], true)) {
+    $role_permissions['ventas'][] = 'blog';
+}
 if (isset($role_permissions['vendedor']) && !in_array('faq', $role_permissions['vendedor'], true)) {
     $role_permissions['vendedor'][] = 'faq';
+}
+if (isset($role_permissions['vendedor']) && !in_array('blog', $role_permissions['vendedor'], true)) {
+    $role_permissions['vendedor'][] = 'blog';
+}
+if (isset($role_permissions['revendedor']) && !in_array('blog', $role_permissions['revendedor'], true)) {
+    $role_permissions['revendedor'][] = 'blog';
 }
 
 $can_access = function (string $key) use ($role_permissions, $role): bool {
@@ -253,6 +305,7 @@ $can_access_any = function (array $keys) use ($can_access): bool {
 // Control de acceso por página
 $page_permissions = [
     'index.php' => 'dashboard',
+    'kpis.php' => 'kpis',
     'categorias.php' => 'categorias',
     'categorias_crear.php' => 'categorias',
     'categorias_editar.php' => 'categorias',
@@ -267,6 +320,7 @@ $page_permissions = [
     'empresa.php' => 'empresa',
     'email_config.php' => 'email_config',
     'faq.php' => 'faq',
+    'blog.php' => 'blog',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
     'slideshow.php' => 'slideshow',
@@ -290,6 +344,10 @@ $page_permissions = [
     'cotizaciones.php' => 'cotizaciones',
     'cotizacion_crear.php' => 'cotizaciones',
     'cotizacion_detalle.php' => 'cotizaciones',
+    'cotizacion_editar.php' => 'cotizaciones',
+    'cotizacion_pdf.php' => 'cotizaciones',
+    'cotizacion_clientes_crear.php' => 'cotizacion_clientes',
+    'cotizacion_clientes_eliminar.php' => 'cotizacion_clientes',
     'recordatorios.php' => 'recordatorios',
     'crm.php' => 'crm',
     'descuentos.php' => 'descuentos',
@@ -300,6 +358,7 @@ $page_permissions = [
     'calidad.php' => 'calidad',
     'calidad_reporte.php' => 'calidad',
     'ventas_reportes.php' => 'ventas_reportes',
+    'estadisticas_productos.php' => 'ventas_reportes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
@@ -342,6 +401,22 @@ if ($current_page === 'instalaciones.php' && !$can_access('instalaciones')) {
 }
 if (isset($page_permissions[$current_page]) && !($current_page === 'instalaciones.php') && !$can_access($page_permissions[$current_page])) {
     die("Acceso denegado. No tenés permisos para esta sección.");
+}
+
+// Revendedor no puede crear/editar/eliminar clientes de cotización
+if ($role === 'revendedor' && in_array($current_page, ['cotizacion_clientes_crear.php', 'cotizacion_clientes_eliminar.php', 'cotizacion_crear.php', 'cotizacion_editar.php'])) {
+    die("Acceso denegado. El rol revendedor no tiene permisos para esta acción.");
+}
+
+// Asegurar que el rol 'revendedor' exista en la tabla roles
+try {
+    $stmt_rol_check = $pdo->prepare("SELECT COUNT(*) FROM roles WHERE nombre = 'revendedor'");
+    $stmt_rol_check->execute();
+    if ((int)$stmt_rol_check->fetchColumn() === 0) {
+        $pdo->prepare("INSERT INTO roles (nombre) VALUES ('revendedor')")->execute();
+    }
+} catch (Throwable $e) {
+    // No interrumpir si falla (e.g. tabla sin columna nombre)
 }
 
 if (!function_exists('admin_table_exists')) {
@@ -405,6 +480,8 @@ $notificaciones_tareas_vencidas_total = 0;
 $notificaciones_tareas_vencidas_criticas_total = 0;
 $notificaciones_tareas_recientes = [];
 $notificaciones_tareas_recientes_total = 0;
+$notificaciones_tareas_personales = [];
+$notificaciones_tareas_personales_total = 0;
 $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_pedidos_recientes = [];
@@ -962,6 +1039,58 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- Sección: Tareas personales pendientes del usuario actual ---
+    if (
+        admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'usuario_id')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'titulo')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'estado')
+        && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_asignacion')
+    ) {
+        try {
+            $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
+            if ($usuario_actual_id > 0) {
+                $sql_tareas_personales_count = "
+                    SELECT COUNT(*)
+                    FROM ecommerce_tareas_usuarios t
+                    WHERE t.usuario_id = ?
+                      AND LOWER(COALESCE(t.estado, '')) NOT IN ('completada', 'cancelada')
+                ";
+                $stmt = $pdo->prepare($sql_tareas_personales_count);
+                $stmt->execute([$usuario_actual_id]);
+                $notificaciones_tareas_personales_total = (int)$stmt->fetchColumn();
+
+                if ($notificaciones_tareas_personales_total > 0) {
+                    $sql_tareas_personales = "
+                        SELECT
+                            t.id,
+                            t.titulo,
+                            t.descripcion,
+                            t.estado,
+                            t.fecha_asignacion,
+                            t.fecha_limite,
+                            COALESCE(NULLIF(TRIM(a.nombre), ''), a.usuario, 'Sistema') AS asignada_por_nombre
+                        FROM ecommerce_tareas_usuarios t
+                        LEFT JOIN usuarios a ON a.id = t.asignada_por
+                        WHERE t.usuario_id = ?
+                          AND LOWER(COALESCE(t.estado, '')) NOT IN ('completada', 'cancelada')
+                        ORDER BY 
+                            CASE WHEN t.estado = 'en_progreso' THEN 0 ELSE 1 END,
+                            CASE WHEN t.fecha_limite IS NOT NULL THEN DATE(t.fecha_limite) ELSE DATE('2099-12-31') END ASC,
+                            t.fecha_asignacion DESC
+                        LIMIT 10
+                    ";
+                    $stmt = $pdo->prepare($sql_tareas_personales);
+                    $stmt->execute([$usuario_actual_id]);
+                    $notificaciones_tareas_personales = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('Notif tareas personales error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[tareas_personales] ' . $e->getMessage();
+        }
+    }
+
     // --- Totales finales ---
     $notificaciones_total = (int)$notificaciones_atrasos_total;
     if ($notificaciones_permiso_admin) {
@@ -976,6 +1105,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_cotizaciones_altas_total
             + (int)$notificacion_prueba_manual_total;
     }
+    
+    // Agregar tareas personales al total para todos los usuarios (no solo admin)
+    $notificaciones_total += (int)$notificaciones_tareas_personales_total;
 }
 ?>
 <!DOCTYPE html>
@@ -987,11 +1119,15 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script>
+        // @ts-nocheck
         (function () {
             const storedTheme = localStorage.getItem('admin-theme');
             const theme = storedTheme === 'dark' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-admin-theme', theme);
             document.documentElement.setAttribute('data-bs-theme', theme);
+
+            const storedSidebar = localStorage.getItem('admin-sidebar-collapsed');
+            document.documentElement.setAttribute('data-admin-sidebar', storedSidebar === '1' ? 'collapsed' : 'expanded');
         })();
     </script>
     <style>
@@ -1318,6 +1454,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .table {
             --bs-table-bg: transparent;
             color: var(--admin-table-head);
+        }
         .table thead th {
             border-bottom-width: 1px;
             color: #334155;
@@ -1331,14 +1468,17 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         .table-hover tbody tr:hover {
             background: #f7faff;
         }
-            border: 1px solid var(--admin-input-border);
+        .form-control,
         .form-select {
             border-radius: 10px;
             border: 1px solid #d9e1ec;
             box-shadow: none;
-            border-color: var(--admin-input-focus);
+        }
         .form-control:focus,
         .form-select:focus {
+            border-color: var(--admin-input-focus);
+            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
+        }
         .theme-toggle {
             min-width: 124px;
             display: inline-flex;
@@ -1371,13 +1511,114 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         html[data-admin-theme="dark"] .text-muted {
             color: var(--admin-muted) !important;
         }
-            border-color: #8ab0ff;
-            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, 0.14);
-        }
         .badge {
             border-radius: 999px;
             padding: .4em .7em;
             font-weight: 600;
+        }
+
+        /* ===== Sidebar colapsado (rail de iconos) ===== */
+        .sidebar,
+        .main-content {
+            transition: width .25s ease, max-width .25s ease, flex-basis .25s ease, padding .25s ease;
+        }
+        #sidebarToggleBtn i {
+            transition: transform .25s ease;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar {
+            width: 72px !important;
+            max-width: 72px !important;
+            flex: 0 0 72px !important;
+            overflow: visible;
+        }
+        html[data-admin-sidebar="collapsed"] .main-content {
+            width: calc(100% - 72px) !important;
+            max-width: calc(100% - 72px) !important;
+            flex: 0 0 calc(100% - 72px) !important;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section {
+            padding: 14px 8px;
+            position: relative;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section img,
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section h4 {
+            display: none;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar .logo-section::after {
+            content: 'TR';
+            display: block;
+            width: 36px;
+            height: 36px;
+            margin: 0 auto;
+            border-radius: 10px;
+            background: var(--admin-primary);
+            color: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            line-height: 36px;
+            text-align: center;
+        }
+        html[data-admin-sidebar="collapsed"] .sidebar-menu {
+            padding: 12px 8px 90px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header {
+            justify-content: center;
+            padding: 12px 0;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header span i {
+            margin-right: 0;
+            font-size: 1.1rem;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-label,
+        html[data-admin-sidebar="collapsed"] .menu-header .bi-chevron-down {
+            display: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header:hover {
+            transform: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-header[data-bs-toggle="collapse"] {
+            pointer-events: none;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section {
+            position: relative;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items {
+            display: none !important;
+            position: absolute;
+            left: calc(100% + 10px);
+            top: 0;
+            width: 230px;
+            background: var(--admin-surface);
+            border: 1px solid var(--admin-border);
+            border-radius: 12px;
+            box-shadow: var(--admin-shadow);
+            padding: 10px 8px;
+            margin: 0;
+            z-index: 1050;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section:hover .menu-items {
+            display: block !important;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a {
+            padding-left: 15px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a::before {
+            left: 4px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-items a:hover {
+            padding-left: 20px;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section.mt-3 {
+            display: flex;
+            justify-content: center;
+        }
+        html[data-admin-sidebar="collapsed"] .menu-section.mt-3 .btn {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         @media (max-width: 992px) {
             .top-navbar {
@@ -1415,6 +1656,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 <div class="top-navbar">
     <h5 style="margin: 0; color: var(--admin-title);"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
     <div class="top-navbar-right">
+        <button class="btn btn-outline-primary btn-sm" type="button" id="sidebarToggleBtn" title="Mostrar/ocultar menú" aria-label="Mostrar u ocultar el menú">
+            <i class="bi bi-arrow-bar-left" id="sidebarToggleIcon"></i>
+        </button>
         <button class="btn btn-outline-primary btn-sm theme-toggle" type="button" id="themeToggleBtn" aria-label="Cambiar tema del panel">
             <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
             <span class="theme-toggle-label" id="themeToggleLabel">Modo oscuro</span>
@@ -1518,6 +1762,46 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                 </a>
                             <?php endforeach; ?>
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">Ver tareas manuales</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_tareas_personales_total > 0): ?>
+                            <div class="notif-section-title" style="background-color: #e8f4fd; border-left: 4px solid #0dcaf0;">👤 Mis tareas pendientes (<?= (int)$notificaciones_tareas_personales_total ?>)</div>
+                            <?php foreach ($notificaciones_tareas_personales as $tareaMia): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>produccion_tareas_usuarios.php" style="border-left: 4px solid <?= $tareaMia['estado'] === 'en_progreso' ? '#ffc107' : '#e9ecef' ?>;">
+                                    <div class="fw-semibold"><?= htmlspecialchars($tareaMia['titulo'] ?? 'Tarea sin título') ?></div>
+                                    <div class="small text-muted">
+                                        <?php 
+                                            $estado_badge = '';
+                                            if ($tareaMia['estado'] === 'en_progreso') {
+                                                $estado_badge = '<span class="badge bg-warning text-dark">En Progreso</span>';
+                                            } elseif ($tareaMia['estado'] === 'pendiente') {
+                                                $estado_badge = '<span class="badge bg-secondary">Pendiente</span>';
+                                            } else {
+                                                $estado_badge = '<span class="badge bg-secondary">' . htmlspecialchars(ucfirst($tareaMia['estado'])) . '</span>';
+                                            }
+                                            echo $estado_badge;
+                                        ?>
+                                        · Por: <?= htmlspecialchars($tareaMia['asignada_por_nombre'] ?? 'Sistema') ?>
+                                    </div>
+                                    <?php if (!empty($tareaMia['descripcion'])): ?>
+                                        <div class="small text-muted" style="margin-top: 4px; font-style: italic;">
+                                            <?= htmlspecialchars(substr($tareaMia['descripcion'], 0, 80)) . (strlen($tareaMia['descripcion']) > 80 ? '...' : '') ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="small" style="margin-top: 4px;">
+                                        <?php if (!empty($tareaMia['fecha_limite'])): ?>
+                                            <span style="color: <?= strtotime($tareaMia['fecha_limite']) < time() ? '#dc3545' : '#0dcaf0' ?>;">
+                                                📅 Vence: <?= htmlspecialchars(date('d/m/Y', strtotime((string)$tareaMia['fecha_limite']))) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #6c757d;">📅 Sin fecha límite</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-info fw-semibold" href="<?= $admin_url ?>produccion_tareas_usuarios.php">
+                                <i class="bi bi-arrow-right"></i> Ver todas mis tareas
+                            </a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
@@ -1709,8 +1993,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Inicio -->
                 <?php if ($can_access('dashboard')): ?>
                 <div class="menu-section">
-                    <a href="<?= $admin_url ?>index.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? '' : 'collapsed' ?>" style="cursor: default;">
-                        <span><i class="bi bi-house-door"></i> Inicio</span>
+                    <a href="<?= $admin_url ?>index.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? '' : 'collapsed' ?>" style="cursor: default;" title="Inicio">
+                        <span><i class="bi bi-house-door"></i><span class="menu-label"> Inicio</span></span>
                     </a>
                 </div>
                 <?php endif; ?>
@@ -1718,8 +2002,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Catálogo -->
                 <?php if ($can_access_any(['categorias', 'productos', 'matriz_precios', 'listas_precios', 'precios_ecommerce'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCatalogo">
-                        <span><i class="bi bi-box-seam"></i> Catálogo</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCatalogo" title="Catálogo">
+                        <span><i class="bi bi-box-seam"></i><span class="menu-label"> Catálogo</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCatalogo">
@@ -1743,10 +2027,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa">
-                        <span><i class="bi bi-building"></i> Empresa</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa" title="Empresa">
+                        <span><i class="bi bi-building"></i><span class="menu-label"> Empresa</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuEmpresa">
@@ -1781,6 +2065,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php if ($can_access('faq')): ?>
                         <a href="<?= $admin_url ?>faq.php" class="<?= basename($_SERVER['PHP_SELF']) === 'faq.php' ? 'active' : '' ?>"><i class="bi bi-question-circle"></i> Preguntas Frecuentes</a>
                         <?php endif; ?>
+                        <?php if ($can_access('blog')): ?>
+                        <a href="<?= $admin_url ?>blog.php" class="<?= basename($_SERVER['PHP_SELF']) === 'blog.php' ? 'active' : '' ?>"><i class="bi bi-journal-text"></i> Blog</a>
+                        <?php endif; ?>
                         <?php if ($can_access('envio_config')): ?>
                         <a href="<?= $admin_url ?>envio_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'envio_config.php' ? 'active' : '' ?>"><i class="bi bi-truck"></i> Envío</a>
                         <?php endif; ?>
@@ -1792,10 +2079,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <?php endif; ?>
 
                 <!-- Ventas -->
-                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes'])): ?>
+                <?php if ($can_access_any(['pedidos', 'ordenes_produccion', 'instalaciones', 'recordatorios', 'crm', 'facturacion_clientes', 'clientes_web', 'cotizaciones', 'cotizacion_clientes', 'descuentos', 'encuestas', 'calidad', 'ventas_reportes', 'kpis'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas">
-                        <span><i class="bi bi-cart-check"></i> Ventas</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuVentas" title="Ventas">
+                        <span><i class="bi bi-cart-check"></i><span class="menu-label"> Ventas</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuVentas">
@@ -1838,6 +2125,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('ventas_reportes')): ?>
                         <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
+                        <a href="<?= $admin_url ?>estadisticas_productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'estadisticas_productos.php' ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Estadísticas de Productos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('kpis')): ?>
+                        <a href="<?= $admin_url ?>kpis.php" class="<?= basename($_SERVER['PHP_SELF']) === 'kpis.php' ? 'active' : '' ?>"><i class="bi bi-speedometer2"></i> KPIs Dinámicos</a>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1846,8 +2137,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Compras e Inventario -->
                 <?php if ($can_access_any(['inventario', 'proveedores', 'compras', 'inventario_ajustes'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCompras">
-                        <span><i class="bi bi-bag"></i> Compras e Inventario</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuCompras" title="Compras e Inventario">
+                        <span><i class="bi bi-bag"></i><span class="menu-label"> Compras e Inventario</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuCompras">
@@ -1870,8 +2161,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Recursos Humanos -->
                 <?php if ($can_access_any(['sueldos', 'plantillas', 'asistencias'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuRRHH">
-                        <span><i class="bi bi-person-badge"></i> Recursos Humanos</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuRRHH" title="Recursos Humanos">
+                        <span><i class="bi bi-person-badge"></i><span class="menu-label"> Recursos Humanos</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuRRHH">
@@ -1894,8 +2185,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Finanzas -->
                 <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas">
-                        <span><i class="bi bi-cash-stack"></i> Finanzas</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas" title="Finanzas">
+                        <span><i class="bi bi-cash-stack"></i><span class="menu-label"> Finanzas</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuFinanzas">
@@ -1905,6 +2196,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php endif; ?>
                         <?php if ($can_access('flujo_caja')): ?>
                         <a href="<?= $admin_url ?>flujo_caja.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['flujo_caja.php', 'flujo_caja_ingreso.php', 'flujo_caja_egreso.php', 'flujo_caja_reportes.php', 'pagos_sueldos_parciales.php']) ? 'active' : '' ?>"><i class="bi bi-cash"></i> Flujo de Caja</a>
+                        <a href="<?= $admin_url ?>cuentas.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cuentas.php', 'cuentas_crear.php', 'cuentas_eliminar.php']) ? 'active' : '' ?>"><i class="bi bi-bank"></i> Cuentas</a>
                         <?php endif; ?>
                         <?php if ($can_access('cheques')): ?>
                         <a href="<?= $admin_url ?>cheques/cheques.php" class="<?= basename($_SERVER['PHP_SELF']) === 'cheques.php' ? 'active' : '' ?>"><i class="bi bi-credit-card-2-front"></i> Cheques</a>
@@ -1919,8 +2211,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Sistema -->
                 <?php if ($can_access_any(['inicio_principal', 'scan', 'dashboard_principal', 'usuarios', 'roles'])): ?>
                 <div class="menu-section">
-                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuSistema">
-                        <span><i class="bi bi-gear-fill"></i> Sistema</span>
+                    <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuSistema" title="Sistema">
+                        <span><i class="bi bi-gear-fill"></i><span class="menu-label"> Sistema</span></span>
                         <i class="bi bi-chevron-down"></i>
                     </div>
                     <div class="collapse menu-items" id="menuSistema">
@@ -1946,8 +2238,8 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 <!-- Botón Ir a Tienda -->
                 <?php if ($can_access('tienda')): ?>
                 <div class="menu-section mt-3">
-                    <a href="/index.php" target="_blank" class="btn btn-success w-100">
-                        <i class="bi bi-shop"></i> Ir a la Tienda
+                    <a href="/index.php" target="_blank" class="btn btn-success w-100" title="Ir a la Tienda">
+                        <i class="bi bi-shop"></i><span class="menu-label"> Ir a la Tienda</span>
                     </a>
                 </div>
                 <?php endif; ?>
@@ -1957,56 +2249,4 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         <!-- Main Content -->
         <div class="col-md-10 main-content">
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const root = document.documentElement;
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
-    const themeToggleIcon = document.getElementById('themeToggleIcon');
-    const themeToggleLabel = document.getElementById('themeToggleLabel');
-    const menuSections = document.querySelectorAll('.menu-section');
-
-    function applyTheme(theme) {
-        const nextTheme = theme === 'dark' ? 'dark' : 'light';
-        root.setAttribute('data-admin-theme', nextTheme);
-        root.setAttribute('data-bs-theme', nextTheme);
-
-        if (themeToggleIcon) {
-            themeToggleIcon.className = nextTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
-        }
-        if (themeToggleLabel) {
-            themeToggleLabel.textContent = nextTheme === 'dark' ? 'Modo claro' : 'Modo oscuro';
-        }
-        if (themeToggleBtn) {
-            themeToggleBtn.setAttribute('aria-label', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
-            themeToggleBtn.setAttribute('title', nextTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
-        }
-    }
-
-    applyTheme(root.getAttribute('data-admin-theme') || 'light');
-
-    if (themeToggleBtn) {
-        themeToggleBtn.addEventListener('click', function () {
-            const currentTheme = root.getAttribute('data-admin-theme') === 'dark' ? 'dark' : 'light';
-            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            localStorage.setItem('admin-theme', nextTheme);
-            applyTheme(nextTheme);
-        });
-    }
-
-    menuSections.forEach(function (section) {
-        const activeItem = section.querySelector('.menu-items a.active');
-        if (activeItem) {
-            section.classList.add('has-active');
-            const collapseEl = section.querySelector('.collapse.menu-items');
-            if (collapseEl) {
-                collapseEl.classList.add('show');
-            }
-            const headerEl = section.querySelector('.menu-header[data-bs-toggle="collapse"]');
-            if (headerEl) {
-                headerEl.classList.remove('collapsed');
-                headerEl.setAttribute('aria-expanded', 'true');
-            }
-        }
-    });
-});
-</script>
+<script src="/ecommerce/admin/assets/js/admin-sidebar-theme.js?v=1"></script>

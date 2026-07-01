@@ -59,6 +59,8 @@ $scan_url = ($base_path !== '' ? $base_path : '') . '/scan.php';
         <li class="nav-item">
           <a class="nav-link" href="ecommerce/admin/sueldos/sueldos.php">💰 Sueldos</a>
         </li>
+        <?php elseif ($_SESSION['rol'] === 'sin_sueldos'): ?>
+        <!-- No mostrar Sueldos para este rol -->
 
         <li class="nav-item">
           <a class="nav-link" href="ecommerce/admin/cheques/cheques.php">🏦 Cheques</a>

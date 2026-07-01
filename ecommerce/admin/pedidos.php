@@ -1,291 +1,264 @@
 <?php
-require 'includes/header.php';
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../../logs/pedidos_error.log');
+if (function_exists('opcache_invalidate')) {
+    opcache_invalidate(__FILE__, true);
+}
+
+set_exception_handler(function($e) {
+    error_log('Excepción no capturada en pedidos.php: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    http_response_code(500);
+    echo 'Ocurrió un error interno. Revise el log de errores.';
+    exit;
+});
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    if ($errno === E_NOTICE || $errno === E_WARNING || $errno === E_DEPRECATED || $errno === E_STRICT) {
+        error_log("PHP Warning/Notice [$errno] $errstr en $errfile:$errline");
+        return true; // No interrumpir ejecución por notices/warnings
+    }
+    error_log("Error PHP [$errno] $errstr en $errfile:$errline");
+    http_response_code(500);
+    echo 'Ocurrió un error interno. Revise el log de errores.';
+    exit;
+});
+
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("Error fatal: {$error['message']} en {$error['file']}:{$error['line']}");
+        http_response_code(500);
+        echo 'Ocurrió un error fatal. Revise el log de errores.';
+        exit;
+    }
+});
+
+require_once __DIR__ . '/includes/header.php';
+
+if (!isset($pdo) || !$pdo) {
+    http_response_code(500);
+    die('Error: No se pudo establecer la conexión a la base de datos.');
+}
 require '../includes/funciones_recetas.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
+$es_revendedor = (($role ?? '') === 'revendedor');
+$usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
+$pedido_owner_col = '';
+try {
+    $cols_pedidos_owner = $pdo->query("SHOW COLUMNS FROM ecommerce_pedidos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    foreach (['creado_por', 'usuario_id', 'vendedor_id'] as $col_owner_candidate) {
+        if (in_array($col_owner_candidate, $cols_pedidos_owner, true)) {
+            $pedido_owner_col = $col_owner_candidate;
+            break;
+        }
+    }
+} catch (Throwable $e) {
+    $pedido_owner_col = '';
+}
+
 $estados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'pagado'];
 $colores = [
-    'pendiente' => 'warning',
+    'pendiente'  => 'warning',
     'confirmado' => 'info',
     'preparando' => 'primary',
-    'enviado' => 'secondary',
-    'entregado' => 'success',
-    'cancelado' => 'danger',
-    'pagado' => 'success'
+    'enviado'    => 'secondary',
+    'entregado'  => 'success',
+    'cancelado'  => 'danger',
+    'pagado'     => 'success',
 ];
 
-function pedidos_tabla_existe(PDO $pdo, string $tabla): bool {
-    try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
-        $stmt->execute([$tabla]);
-        return (int)$stmt->fetchColumn() > 0;
-    } catch (Exception $e) {
-        return false;
-    }
-}
+$error = null;
 
-function pedidos_asegurar_tablas_remitos(PDO $pdo): void {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remitos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        pedido_id INT NOT NULL,
-        numero_remito VARCHAR(50) NOT NULL,
-        tipo ENUM('completo','parcial') NOT NULL DEFAULT 'completo',
-        observaciones TEXT NULL,
-        creado_por INT NULL,
-        fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uniq_numero_remito (numero_remito),
-        KEY idx_pedido (pedido_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_remito_items (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        remito_id INT NOT NULL,
-        pedido_item_id INT NOT NULL,
-        cantidad DECIMAL(10,2) NOT NULL DEFAULT 0,
-        KEY idx_remito_id (remito_id),
-        KEY idx_pedido_item_id (pedido_item_id),
-        UNIQUE KEY uniq_remito_item (remito_id, pedido_item_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-}
-
-pedidos_asegurar_tablas_remitos($pdo);
-try {
-    ensureCalidadSchema($pdo);
-} catch (Throwable $e) {
-    // Continuar aunque la tabla de calidad no pueda inicializarse.
-}
-
-// Procesar cambio de estado ANTES de consultar pedidos
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'cambiar_estado') {
-    try {
-        $pedido_id = intval($_POST['pedido_id']);
-        $nuevo_estado = $_POST['nuevo_estado'];
-        
-        if (!in_array($nuevo_estado, $estados)) die("Estado inválido");
-        
-        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?");
-        $stmt->execute([$nuevo_estado, $pedido_id]);
-
-        if ($nuevo_estado === 'confirmado') {
-            $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
-            $stmt->execute([$pedido_id]);
-            $orden = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if (!$orden) {
-                $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
-                $stmt->execute([$pedido_id]);
-                $orden_id = $pdo->lastInsertId();
-                $orden = ['id' => $orden_id, 'materiales_descontados' => 0];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pedido_id'], $_POST['nuevo_estado'])) {
+    $pedido_id    = (int)$_POST['pedido_id'];
+    $nuevo_estado = $_POST['nuevo_estado'];
+    if (!in_array($nuevo_estado, $estados)) {
+        $error = 'Estado inválido.';
+    } else {
+        try {
+            if ($es_revendedor) {
+                if ($pedido_owner_col === '' || $usuario_id_actual <= 0) {
+                    throw new Exception('No tenes permisos para cambiar estados de pedidos en esta instalacion.');
+                }
+                $stmt_upd = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ? AND `{$pedido_owner_col}` = ?");
+                $stmt_upd->execute([$nuevo_estado, $pedido_id, $usuario_id_actual]);
+                if ($stmt_upd->rowCount() === 0) {
+                    throw new Exception('No tenes permisos para cambiar este pedido.');
+                }
+            } else {
+                $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?")->execute([$nuevo_estado, $pedido_id]);
             }
 
-            if (empty($orden['materiales_descontados'])) {
-                // Descontar materiales según receta
-                $stmt = $pdo->prepare("
-                    SELECT pi.*, p.usa_receta
-                    FROM ecommerce_pedido_items pi
-                    JOIN ecommerce_productos p ON pi.producto_id = p.id
-                    WHERE pi.pedido_id = ?
-                ");
-                $stmt->execute([$pedido_id]);
-                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($nuevo_estado === 'confirmado') {
+                $stmtOrden = $pdo->prepare("SELECT id, materiales_descontados FROM ecommerce_ordenes_produccion WHERE pedido_id = ?");
+                $stmtOrden->execute([$pedido_id]);
+                $orden = $stmtOrden->fetch(PDO::FETCH_ASSOC);
+                if (!$orden) {
+                    $stmtIns = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, materiales_descontados) VALUES (?, 'pendiente', 0)");
+                    $stmtIns->execute([$pedido_id]);
+                    $orden = ['id' => $pdo->lastInsertId(), 'materiales_descontados' => 0];
+                }
 
-                $materiales = [];
-                $materiales_color = [];
-                $color_cache = [];
-                $opcion_color_cache = [];
-                foreach ($items as $it) {
-                    if (empty($it['usa_receta'])) {
-                        continue;
-                    }
-                    
-                    // Obtener atributos del item
-                    $atributos_seleccionados = [];
-                    if (!empty($it['atributos'])) {
-                        $atributos_seleccionados = json_decode($it['atributos'], true) ?: [];
-                    }
-                    
-                    $producto_id = (int)$it['producto_id'];
-                    $ancho_cm = floatval($it['ancho_cm'] ?? 0);
-                    $alto_cm = floatval($it['alto_cm'] ?? 0);
+                if (empty($orden['materiales_descontados'])) {
+                    $stmtIt = $pdo->prepare("
+                        SELECT pi.*, p.usa_receta
+                        FROM ecommerce_pedido_items pi
+                        JOIN ecommerce_productos p ON pi.producto_id = p.id
+                        WHERE pi.pedido_id = ?
+                    ");
+                    $stmtIt->execute([$pedido_id]);
+                    $items = $stmtIt->fetchAll(PDO::FETCH_ASSOC);
 
-                    // Buscar atributo de color seleccionado (si existe)
-                    $color_val = null;
-                    if (is_array($atributos_seleccionados)) {
+                    $materiales       = [];
+                    $materiales_color = [];
+                    $color_cache      = [];
+
+                    foreach ($items as $it) {
+                        if (empty($it['usa_receta'])) continue;
+                        $producto_id = (int)$it['producto_id'];
+                        $ancho_cm    = (float)($it['ancho_cm'] ?? 0);
+                        $alto_cm     = (float)($it['alto_cm'] ?? 0);
+                        $atributos_seleccionados = [];
+                        if (!empty($it['atributos'])) {
+                            $arr = json_decode((string)$it['atributos'], true);
+                            if (is_array($arr)) $atributos_seleccionados = $arr;
+                        }
+                        $color_val = null;
                         foreach ($atributos_seleccionados as $attr) {
-                            $nombre_attr = (string)($attr['nombre'] ?? '');
-                            $valor_attr = (string)($attr['valor'] ?? '');
-                            $opcion_id_attr = isset($attr['opcion_id']) && $attr['opcion_id'] !== '' ? (int)$attr['opcion_id'] : null;
-
-                            // 1) Si el nombre del atributo menciona color, usar el valor
-                            if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && $valor_attr !== '') {
+                            $nombre_attr = strtolower(trim((string)($attr['nombre'] ?? '')));
+                            $valor_attr  = trim((string)($attr['valor'] ?? ''));
+                            if (stripos($nombre_attr, 'color') !== false && $valor_attr !== '') {
                                 $color_val = $valor_attr;
                                 break;
                             }
+                        }
 
-                            // 2) Si el valor parece un color HEX, usarlo
-                            if ($valor_attr !== '' && preg_match('/^#[0-9a-f]{6}$/i', $valor_attr)) {
-                                $color_val = $valor_attr;
-                                break;
+                        $recetas = obtener_receta_con_condiciones($pdo, $producto_id, $ancho_cm, $alto_cm, $atributos_seleccionados);
+                        if (empty($recetas)) continue;
+
+                        $alto_m  = $alto_cm / 100;
+                        $ancho_m = $ancho_cm / 100;
+                        $area_m2 = $alto_m * $ancho_m;
+
+                        foreach ($recetas as $r) {
+                            $factor        = (float)$r['factor'];
+                            $merma         = (float)$r['merma_pct'];
+                            $cantidad_base = 0;
+                            if ($r['tipo_calculo'] === 'fijo')         $cantidad_base = $factor;
+                            elseif ($r['tipo_calculo'] === 'por_area')  $cantidad_base = $area_m2 * $factor;
+                            elseif ($r['tipo_calculo'] === 'por_ancho') $cantidad_base = $ancho_m * $factor;
+                            elseif ($r['tipo_calculo'] === 'por_alto')  $cantidad_base = $alto_m  * $factor;
+                            $cantidad_total = $cantidad_base * (1 + ($merma / 100)) * (int)$it['cantidad'];
+                            $mat_id = (int)$r['material_producto_id'];
+
+                            $opcion_id = null;
+                            if (!empty($color_val)) {
+                                $cache_key = $mat_id . '|' . strtolower(trim($color_val));
+                                if (array_key_exists($cache_key, $color_cache)) {
+                                    $opcion_id = $color_cache[$cache_key];
+                                } else {
+                                    $stmtOpt = $pdo->prepare("
+                                        SELECT o.id FROM ecommerce_atributo_opciones o
+                                        JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
+                                        WHERE a.producto_id = ? AND a.tipo = 'select'
+                                          AND LOWER(a.nombre) LIKE '%color%'
+                                          AND (LOWER(o.nombre) = LOWER(?) OR o.color = ?)
+                                        LIMIT 1
+                                    ");
+                                    $stmtOpt->execute([$mat_id, $color_val, $color_val]);
+                                    $opcion_id = $stmtOpt->fetchColumn() ?: null;
+                                    $color_cache[$cache_key] = $opcion_id;
+                                }
                             }
 
-                            // 3) Si hay opción y tiene color definido, usar ese color
-                            if (!empty($opcion_id_attr)) {
-                                if (!array_key_exists($opcion_id_attr, $opcion_color_cache)) {
-                                    $stmtOptColor = $pdo->prepare("SELECT color, nombre FROM ecommerce_atributo_opciones WHERE id = ? LIMIT 1");
-                                    $stmtOptColor->execute([$opcion_id_attr]);
-                                    $opcion_color_cache[$opcion_id_attr] = $stmtOptColor->fetch(PDO::FETCH_ASSOC) ?: null;
-                                }
-                                $op = $opcion_color_cache[$opcion_id_attr];
-                                if (!empty($op['color']) && preg_match('/^#[0-9a-f]{6}$/i', $op['color'])) {
-                                    $color_val = $op['color'];
-                                    break;
-                                }
-                                if ($nombre_attr !== '' && stripos($nombre_attr, 'color') !== false && !empty($op['nombre'])) {
-                                    $color_val = $op['nombre'];
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Obtener receta con condiciones evaluadas
-                    $recetas = obtener_receta_con_condiciones(
-                        $pdo,
-                        $producto_id,
-                        $ancho_cm,
-                        $alto_cm,
-                        $atributos_seleccionados
-                    );
-                    
-                    if (empty($recetas)) {
-                        continue;
-                    }
-
-                    $alto_m = $alto_cm / 100;
-                    $ancho_m = $ancho_cm / 100;
-                    $area_m2 = $alto_m * $ancho_m;
-
-                    foreach ($recetas as $r) {
-                        $factor = (float)$r['factor'];
-                        $merma = (float)$r['merma_pct'];
-                        $cantidad_base = 0;
-                        if ($r['tipo_calculo'] === 'fijo') {
-                            $cantidad_base = $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_area') {
-                            $cantidad_base = $area_m2 * $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_ancho') {
-                            $cantidad_base = $ancho_m * $factor;
-                        } elseif ($r['tipo_calculo'] === 'por_alto') {
-                            $cantidad_base = $alto_m * $factor;
-                        }
-                        $cantidad_total = $cantidad_base * (1 + ($merma / 100));
-                        $cantidad_total = $cantidad_total * (int)$it['cantidad'];
-
-                        $mat_id = (int)$r['material_producto_id'];
-
-                        // Si hay color seleccionado, intentar descontar stock por opción de color del material
-                        $opcion_id = null;
-                        if (!empty($color_val)) {
-                            $cache_key = $mat_id . '|' . strtolower(trim($color_val));
-                            if (array_key_exists($cache_key, $color_cache)) {
-                                $opcion_id = $color_cache[$cache_key];
+                            if (!empty($opcion_id)) {
+                                $materiales_color[$mat_id][$opcion_id] = ($materiales_color[$mat_id][$opcion_id] ?? 0) + $cantidad_total;
                             } else {
-                                $stmtOpt = $pdo->prepare("
-                                    SELECT o.id
-                                    FROM ecommerce_atributo_opciones o
-                                    JOIN ecommerce_producto_atributos a ON a.id = o.atributo_id
-                                    WHERE a.producto_id = ?
-                                      AND a.tipo = 'select'
-                                      AND LOWER(a.nombre) LIKE '%color%'
-                                      AND (LOWER(o.nombre) = LOWER(?) OR o.color = ?)
-                                    LIMIT 1
-                                ");
-                                $stmtOpt->execute([$mat_id, $color_val, $color_val]);
-                                $opcion_id = $stmtOpt->fetchColumn() ?: null;
-                                $color_cache[$cache_key] = $opcion_id;
+                                $materiales[$mat_id] = ($materiales[$mat_id] ?? 0) + $cantidad_total;
                             }
                         }
+                    }
 
-                        if (!empty($opcion_id)) {
-                            if (!isset($materiales_color[$mat_id])) {
-                                $materiales_color[$mat_id] = [];
-                            }
-                            if (!isset($materiales_color[$mat_id][$opcion_id])) {
-                                $materiales_color[$mat_id][$opcion_id] = 0;
-                            }
-                            $materiales_color[$mat_id][$opcion_id] += $cantidad_total;
-                        } else {
-                            if (!isset($materiales[$mat_id])) {
-                                $materiales[$mat_id] = 0;
-                            }
-                            $materiales[$mat_id] += $cantidad_total;
+                    foreach ($materiales_color as $mat_id => $opciones) {
+                        foreach ($opciones as $opcion_id => $qty) {
+                            $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock - ? WHERE id = ?")->execute([$qty, $opcion_id]);
                         }
                     }
-                }
-
-                foreach ($materiales_color as $mat_id => $opciones) {
-                    foreach ($opciones as $opcion_id => $qty) {
-                        $stmt = $pdo->prepare("UPDATE ecommerce_atributo_opciones SET stock = stock - ? WHERE id = ?");
-                        $stmt->execute([$qty, $opcion_id]);
+                    foreach ($materiales as $mat_id => $qty) {
+                        $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?")->execute([$qty, $mat_id]);
                     }
+                    $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?")->execute([$orden['id']]);
                 }
-
-                foreach ($materiales as $mat_id => $qty) {
-                    $stmt = $pdo->prepare("UPDATE ecommerce_productos SET stock = stock - ? WHERE id = ?");
-                    $stmt->execute([$qty, $mat_id]);
-                }
-
-                $stmt = $pdo->prepare("UPDATE ecommerce_ordenes_produccion SET materiales_descontados = 1 WHERE id = ?");
-                $stmt->execute([$orden['id']]);
             }
+
+            header("Location: pedidos.php");
+            exit;
+        } catch (Exception $e) {
+            $error = "Error: " . $e->getMessage();
         }
-        
-        // Recargar
-        header("Location: pedidos.php");
-        exit;
-    } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
     }
 }
 
-// Consultar pedidos DESPUÉS de procesar POST
-$estado_filter = $_GET['estado'] ?? '';
-$fecha_desde = $_GET['fecha_desde'] ?? '';
-$fecha_hasta = $_GET['fecha_hasta'] ?? '';
-$cliente_busqueda = $_GET['cliente'] ?? '';
-$calidad_revision_filter = $_GET['calidad_revision'] ?? '';
+// Filtros
+$estado_filter              = $_GET['estado'] ?? '';
+$fecha_desde                = $_GET['fecha_desde'] ?? '';
+$fecha_hasta                = $_GET['fecha_hasta'] ?? '';
+$cliente_busqueda           = $_GET['cliente'] ?? '';
+$calidad_revision_filter    = $_GET['calidad_revision'] ?? '';
 $calidad_observacion_filter = $_GET['calidad_observacion'] ?? '';
 $per_page = 50;
-$page = max(1, intval($_GET['pagina'] ?? 1));
+$page     = max(1, intval($_GET['pagina'] ?? 1));
+
+// Verificar si existe la tabla de calidad
+$tabla_calidad_existe = false;
+try {
+    $pdo->query("SELECT 1 FROM `ecommerce_calidad_inspecciones` LIMIT 1");
+    $tabla_calidad_existe = true;
+} catch (PDOException $e) { /* tabla no existe */ }
+
+$calidad_join = $tabla_calidad_existe
+    ? "LEFT JOIN (
+        SELECT ci.*
+        FROM ecommerce_calidad_inspecciones ci
+        INNER JOIN (
+            SELECT pedido_id, MAX(id) AS max_id
+            FROM ecommerce_calidad_inspecciones
+            GROUP BY pedido_id
+        ) latest ON ci.id = latest.max_id
+    ) ci ON ci.pedido_id = p.id"
+    : "LEFT JOIN (SELECT NULL AS pedido_id, NULL AS id, NULL AS estado_calidad, NULL AS prueba_aprobada, NULL AS detalle_revision, NULL AS observaciones, NULL AS fecha_revision WHERE 1=0) ci ON ci.pedido_id = p.id";
 
 $query_from = "
     FROM ecommerce_pedidos p
     LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
-    LEFT JOIN (
-        SELECT pedido_id, SUM(monto) AS total_pagado
-        FROM ecommerce_pedido_pagos
-        GROUP BY pedido_id
-    ) pp ON pp.pedido_id = p.id
-    LEFT JOIN ecommerce_calidad_inspecciones ci ON ci.pedido_id = p.id
+    $calidad_join
     WHERE p.estado != 'cancelado'
 ";
 $params = [];
+
+if ($es_revendedor) {
+    if ($pedido_owner_col !== '' && $usuario_id_actual > 0) {
+        $query_from .= " AND p.`{$pedido_owner_col}` = ?";
+        $params[] = $usuario_id_actual;
+    } else {
+        // Si no hay forma de identificar dueño del pedido, un revendedor no debe ver pedidos de terceros.
+        $query_from .= " AND 1 = 0";
+    }
+}
 
 if (!empty($estado_filter)) {
     $query_from .= " AND p.estado = ?";
     $params[] = $estado_filter;
 }
-
 if (!empty($fecha_desde)) {
     $query_from .= " AND DATE(p.fecha_pedido) >= ?";
     $params[] = $fecha_desde;
 }
-
 if (!empty($fecha_hasta)) {
     $query_from .= " AND DATE(p.fecha_pedido) <= ?";
     $params[] = $fecha_hasta;
 }
-
 if (!empty($cliente_busqueda)) {
     $query_from .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
     $busqueda_wildcard = '%' . $cliente_busqueda . '%';
@@ -293,13 +266,11 @@ if (!empty($cliente_busqueda)) {
     $params[] = $busqueda_wildcard;
     $params[] = $busqueda_wildcard;
 }
-
 if ($calidad_revision_filter === 'chequeados') {
     $query_from .= " AND ci.id IS NOT NULL";
 } elseif ($calidad_revision_filter === 'sin_chequear') {
     $query_from .= " AND ci.id IS NULL";
 }
-
 if ($calidad_observacion_filter === 'con_observacion') {
     $query_from .= " AND (
         LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
@@ -308,8 +279,7 @@ if ($calidad_observacion_filter === 'con_observacion') {
     )";
 } elseif ($calidad_observacion_filter === 'sin_observacion') {
     $query_from .= " AND (
-        ci.id IS NULL
-        OR (
+        ci.id IS NULL OR (
             LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
             AND NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NULL
             AND NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NULL
@@ -317,27 +287,111 @@ if ($calidad_observacion_filter === 'con_observacion') {
     )";
 }
 
-// Contar total para paginación
-$stmt_count = $pdo->prepare("SELECT COUNT(*) " . $query_from);
-$stmt_count->execute($params);
-$total_pedidos = (int)$stmt_count->fetchColumn();
-$total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
-$page = min($page, $total_paginas);
-$offset = ($page - 1) * $per_page;
+try {
+    $stmt_count = $pdo->prepare("SELECT COUNT(DISTINCT p.id) " . $query_from);
+    $stmt_count->execute($params);
+    $total_pedidos = (int)$stmt_count->fetchColumn();
+    $total_paginas = max(1, (int)ceil($total_pedidos / $per_page));
+    $page   = min($page, $total_paginas);
+    $offset = ($page - 1) * $per_page;
+} catch (PDOException $e) {
+    echo '<div class="alert alert-danger">Error SQL: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Error SQL pedidos.php: ' . $e->getMessage());
+    exit;
+}
 
-$query = "SELECT p.*, c.nombre as cliente_nombre, c.email as cliente_email,
-           COALESCE(pp.total_pagado, 0) AS total_pagado,
-           ci.id AS calidad_inspeccion_id,
-           ci.estado_calidad,
-           ci.prueba_aprobada,
-           ci.detalle_revision,
-           ci.observaciones,
-           ci.fecha_revision AS calidad_fecha_revision
-    " . $query_from . " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
+$query = "
+SELECT
+    p.id,
+    p.numero_pedido,
+    p.fecha_pedido,
+    p.total,
+    p.estado,
+    p.public_token,
+    c.nombre  AS cliente_nombre,
+    c.email   AS cliente_email,
+    COALESCE(pagos.total_pagado, 0) AS total_pagado,
+    ci.id              AS calidad_id,
+    ci.estado_calidad,
+    ci.prueba_aprobada,
+    ci.detalle_revision,
+    ci.observaciones,
+    ci.fecha_revision
+FROM ecommerce_pedidos p
+LEFT JOIN ecommerce_clientes c ON p.cliente_id = c.id
+LEFT JOIN (
+    SELECT pedido_id, SUM(monto) AS total_pagado
+    FROM ecommerce_pedido_pagos
+    GROUP BY pedido_id
+) pagos ON pagos.pedido_id = p.id
+$calidad_join
+WHERE p.estado != 'cancelado'";
+if ($es_revendedor) {
+    if ($pedido_owner_col !== '' && $usuario_id_actual > 0) {
+        $query .= " AND p.`{$pedido_owner_col}` = ?";
+    } else {
+        $query .= " AND 1 = 0";
+    }
+}
+if (!empty($estado_filter))    $query .= " AND p.estado = ?";
+if (!empty($fecha_desde))      $query .= " AND DATE(p.fecha_pedido) >= ?";
+if (!empty($fecha_hasta))      $query .= " AND DATE(p.fecha_pedido) <= ?";
+if (!empty($cliente_busqueda)) $query .= " AND (c.nombre LIKE ? OR c.email LIKE ? OR p.numero_pedido LIKE ?)";
+if ($calidad_revision_filter === 'chequeados') {
+    $query .= " AND ci.id IS NOT NULL";
+} elseif ($calidad_revision_filter === 'sin_chequear') {
+    $query .= " AND ci.id IS NULL";
+}
+if ($calidad_observacion_filter === 'con_observacion') {
+    $query .= " AND (
+        LOWER(COALESCE(ci.estado_calidad, '')) IN ('observado', 'rechazado')
+        OR NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NOT NULL
+    )";
+} elseif ($calidad_observacion_filter === 'sin_observacion') {
+    $query .= " AND (
+        ci.id IS NULL OR (
+            LOWER(COALESCE(ci.estado_calidad, '')) NOT IN ('observado', 'rechazado')
+            AND NULLIF(TRIM(COALESCE(ci.observaciones, '')), '') IS NULL
+            AND NULLIF(TRIM(COALESCE(ci.detalle_revision, '')), '') IS NULL
+        )
+    )";
+}
+$query .= " ORDER BY p.fecha_pedido DESC LIMIT ? OFFSET ?";
 
-$stmt = $pdo->prepare($query);
-$stmt->execute(array_merge($params, [$per_page, $offset]));
-$pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare($query);
+    $pos = 1;
+    foreach ($params as $param) {
+        $stmt->bindValue($pos++, $param);
+    }
+    $stmt->bindValue($pos++, (int)$per_page, PDO::PARAM_INT);
+    $stmt->bindValue($pos++, (int)$offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    echo '<div class="alert alert-danger">Error SQL pedidos: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('Error SQL pedidos.php: ' . $e->getMessage());
+    exit;
+}
+
+if (isset($_GET['diag'])) {
+    echo '<div style="background:#222;color:#0f0;padding:1rem;margin:1rem 0;font-family:monospace;font-size:13px;border-radius:6px;white-space:pre-wrap;">';
+    echo '<strong>DIAGNÓSTICO pedidos.php</strong>' . "\n";
+    echo 'PHP version: ' . phpversion() . "\n";
+    echo 'Archivo: ' . __FILE__ . "\n";
+    echo 'Total pedidos (COUNT): ' . $total_pedidos . "\n";
+    echo 'Pedidos en esta página: ' . count($pedidos) . "\n";
+    echo 'Per page: ' . $per_page . ' | Offset: ' . $offset . "\n";
+    echo 'Tabla calidad existe: ' . ($tabla_calidad_existe ? 'SÍ' : 'NO') . "\n";
+    echo 'Query: ' . htmlspecialchars($query) . "\n";
+    echo 'Params filtros: ' . htmlspecialchars(json_encode($params)) . "\n";
+    if (!empty($pedidos)) {
+        echo 'IDs pedidos: ' . implode(', ', array_column($pedidos, 'id')) . "\n";
+        echo 'Estados: ' . implode(', ', array_column($pedidos, 'estado')) . "\n";
+    }
+    echo '</div>';
+}
 
 $request_scheme = 'http';
 if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
@@ -345,40 +399,49 @@ if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
 } elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
     $request_scheme = 'https';
 }
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$base_url = $request_scheme . '://' . $host . $public_base;
+$host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_url = $request_scheme . '://' . $host . ($public_base ?? '');
 
-// Marcar pedidos como pagados si corresponde
 foreach ($pedidos as &$pedido) {
+    $pid          = $pedido['id'];
     $total_pagado = (float)($pedido['total_pagado'] ?? 0);
     $total_pedido = (float)($pedido['total'] ?? 0);
     if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
-        $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?");
-        $stmt->execute([$pedido['id']]);
+        $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?")->execute([$pid]);
         $pedido['estado'] = 'pagado';
     }
-
     if (empty($pedido['public_token'])) {
         $nuevo_token = bin2hex(random_bytes(16));
         try {
-            $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?");
-            $stmt->execute([$nuevo_token, $pedido['id']]);
+            $pdo->prepare("UPDATE ecommerce_pedidos SET public_token = ? WHERE id = ?")->execute([$nuevo_token, $pid]);
             $pedido['public_token'] = $nuevo_token;
-        } catch (Exception $e) {
-            // Si falla, continuar sin token
-        }
+        } catch (Exception $e) { /* continuar */ }
     }
+    $pedido['calidad'] = [
+        'id'              => $pedido['calidad_id']        ?? null,
+        'estado_calidad'  => $pedido['estado_calidad']    ?? null,
+        'prueba_aprobada' => $pedido['prueba_aprobada']   ?? null,
+        'detalle_revision'=> $pedido['detalle_revision']  ?? null,
+        'observaciones'   => $pedido['observaciones']     ?? null,
+        'fecha_revision'  => $pedido['fecha_revision']    ?? null,
+    ];
 }
 unset($pedido);
 
-$pedido_items_map = [];
+$pedido_items_map      = [];
 $pedido_remito_resumen = [];
 
-if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
-    $pedido_ids = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
-    if (!empty($pedido_ids)) {
+if (!empty($pedidos)) {
+    $tabla_items_existe = false;
+    try {
+        $pdo->query("SELECT 1 FROM `ecommerce_pedido_items` LIMIT 1");
+        $tabla_items_existe = true;
+    } catch (PDOException $e) { /* tabla no existe */ }
+
+    if ($tabla_items_existe) {
+        $pedido_ids   = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
         $placeholders = implode(', ', array_fill(0, count($pedido_ids), '?'));
-        $sql_items_remito = "
+        $sql_items = "
             SELECT pi.id, pi.pedido_id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos,
                    COALESCE(pr.nombre, 'Producto') AS producto_nombre,
                    COALESCE(rem.cantidad_remitida, 0) AS cantidad_remitida
@@ -392,13 +455,13 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
             WHERE pi.pedido_id IN ($placeholders)
             ORDER BY pi.pedido_id ASC, pi.id ASC
         ";
-        $stmt = $pdo->prepare($sql_items_remito);
-        $stmt->execute($pedido_ids);
+        $stmtIt = $pdo->prepare($sql_items);
+        $stmtIt->execute($pedido_ids);
 
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $item) {
-            $pedidoId = (int)$item['pedido_id'];
-            $cantidadTotal = (float)($item['cantidad'] ?? 0);
-            $cantidadRemitida = min($cantidadTotal, (float)($item['cantidad_remitida'] ?? 0));
+        foreach ($stmtIt->fetchAll(PDO::FETCH_ASSOC) as $item) {
+            $pedidoId          = (int)$item['pedido_id'];
+            $cantidadTotal     = (float)($item['cantidad'] ?? 0);
+            $cantidadRemitida  = min($cantidadTotal, (float)($item['cantidad_remitida'] ?? 0));
             $cantidadPendiente = max(0, $cantidadTotal - $cantidadRemitida);
 
             $medidas = '';
@@ -411,40 +474,33 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
 
             $atributosTexto = '';
             if (!empty($item['atributos'])) {
-                $atributos = json_decode((string)$item['atributos'], true);
-                if (is_array($atributos)) {
+                $atrs = json_decode((string)$item['atributos'], true);
+                if (is_array($atrs)) {
                     $partes = [];
-                    foreach ($atributos as $attr) {
-                        $nombreAttr = trim((string)($attr['nombre'] ?? ''));
-                        $valorAttr = trim((string)($attr['valor'] ?? ''));
-                        if ($nombreAttr !== '' || $valorAttr !== '') {
-                            $partes[] = trim($nombreAttr . ': ' . $valorAttr, ': ');
-                        }
+                    foreach ($atrs as $attr) {
+                        $n = trim((string)($attr['nombre'] ?? ''));
+                        $v = trim((string)($attr['valor'] ?? ''));
+                        if ($n !== '' || $v !== '') $partes[] = trim($n . ': ' . $v, ': ');
                     }
                     $atributosTexto = implode(' · ', $partes);
                 }
             }
 
             $pedido_items_map[$pedidoId][] = [
-                'id' => (int)$item['id'],
+                'id'       => (int)$item['id'],
                 'producto' => (string)$item['producto_nombre'],
                 'cantidad' => $cantidadTotal,
                 'remitida' => $cantidadRemitida,
-                'pendiente' => $cantidadPendiente,
-                'medidas' => $medidas,
-                'atributos' => $atributosTexto,
+                'pendiente'=> $cantidadPendiente,
+                'medidas'  => $medidas,
+                'atributos'=> $atributosTexto,
             ];
 
             if (!isset($pedido_remito_resumen[$pedidoId])) {
-                $pedido_remito_resumen[$pedidoId] = [
-                    'cantidad_total' => 0,
-                    'cantidad_remitida' => 0,
-                    'cantidad_pendiente' => 0,
-                ];
+                $pedido_remito_resumen[$pedidoId] = ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0];
             }
-
-            $pedido_remito_resumen[$pedidoId]['cantidad_total'] += $cantidadTotal;
-            $pedido_remito_resumen[$pedidoId]['cantidad_remitida'] += $cantidadRemitida;
+            $pedido_remito_resumen[$pedidoId]['cantidad_total']     += $cantidadTotal;
+            $pedido_remito_resumen[$pedidoId]['cantidad_remitida']  += $cantidadRemitida;
             $pedido_remito_resumen[$pedidoId]['cantidad_pendiente'] += $cantidadPendiente;
         }
     }
@@ -456,7 +512,21 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
         <h1 class="mb-1">Pedidos</h1>
         <p class="text-muted mb-0">Gestión de pedidos y seguimiento de estados</p>
     </div>
-    <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= $total_pedidos ?></div>
+    <div class="d-flex align-items-center gap-2">
+        <div class="badge bg-primary-subtle text-primary-emphasis fs-6">Total: <?= $total_pedidos ?></div>
+        <?php
+            $pdf_params = http_build_query(array_filter([
+                'estado'      => $estado_filter,
+                'fecha_desde' => $fecha_desde,
+                'fecha_hasta' => $fecha_hasta,
+                'cliente'     => $cliente_busqueda,
+            ]));
+        ?>
+        <a href="pedidos_lista_pdf.php<?= $pdf_params ? '?' . htmlspecialchars($pdf_params) : '' ?>"
+           class="btn btn-danger btn-sm" target="_blank" title="Descargar PDF con los filtros actuales">
+            📄 Descargar PDF
+        </a>
+    </div>
 </div>
 
 <?php if (isset($error)): ?>
@@ -548,19 +618,20 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                         <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?></td>
                         <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                         <td>
-                            <span class="badge bg-<?= $colores[$pedido['estado']] ?>">
+                            <span class="badge bg-<?= $colores[$pedido['estado']] ?? 'secondary' ?>">
                                 <?= ucfirst($pedido['estado']) ?>
                             </span>
                         </td>
                         <td>
                             <?php
                                 $remito_resumen = $pedido_remito_resumen[(int)$pedido['id']] ?? ['cantidad_total' => 0, 'cantidad_remitida' => 0, 'cantidad_pendiente' => 0];
-                                $calidadEstado = strtolower(trim((string)($pedido['estado_calidad'] ?? '')));
+                                $calidad = $pedido['calidad'] ?? [];
+                                $calidadEstado = strtolower(trim((string)($calidad['estado_calidad'] ?? '')));
                                 $calidadBadge = 'secondary';
                                 $calidadTexto = 'Sin control';
                                 if ($calidadEstado === 'aprobado') {
                                     $calidadBadge = 'success';
-                                    $calidadTexto = ((int)($pedido['prueba_aprobada'] ?? 0) === 1) ? 'Calidad OK' : 'Aprobado';
+                                    $calidadTexto = ((int)($calidad['prueba_aprobada'] ?? 0) === 1) ? 'Calidad OK' : 'Aprobado';
                                 } elseif ($calidadEstado === 'observado') {
                                     $calidadBadge = 'warning text-dark';
                                     $calidadTexto = 'Observado';
@@ -577,6 +648,7 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                             <a class="btn btn-sm btn-outline-success" href="pedidos_detalle.php?pedido_id=<?= $pedido['id'] ?>#pagos">Pagos</a>
                             <a class="btn btn-sm btn-outline-warning" href="calidad.php?pedido_id=<?= $pedido['id'] ?>">Calidad</a>
                             <a class="btn btn-sm btn-outline-dark" href="pedido_imprimir.php?id=<?= $pedido['id'] ?>" target="_blank">Imprimir</a>
+                            <a class="btn btn-sm btn-outline-dark" href="pedido_factura_pdf.php?pedido_id=<?= $pedido['id'] ?>" target="_blank">Factura PDF</a>
                             <?php if ($calidadEstado !== ''): ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="calidad_inspeccion_pdf.php?pedido_id=<?= $pedido['id'] ?>" target="_blank">PDF calidad</a>
                             <?php endif; ?>
@@ -589,8 +661,8 @@ if (!empty($pedidos) && pedidos_tabla_existe($pdo, 'ecommerce_pedido_items')) {
                             </div>
                             <div class="mt-1">
                                 <span class="badge bg-<?= $calidadBadge ?>"><?= htmlspecialchars($calidadTexto) ?></span>
-                                <?php if (!empty($pedido['calidad_fecha_revision'])): ?>
-                                    <small class="text-muted ms-1">Revisado: <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$pedido['calidad_fecha_revision']))) ?></small>
+                                <?php if (!empty($calidad['fecha_revision'])): ?>
+                                    <small class="text-muted ms-1">Revisado: <?= htmlspecialchars(date('d/m/Y H:i', strtotime((string)$calidad['fecha_revision']))) ?></small>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($pedido_items_map[(int)$pedido['id']])): ?>

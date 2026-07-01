@@ -21,6 +21,15 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo = 1 ORDER BY nombre");
 $proveedores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Auto-migración ubicacion
+try { $pdo->query("ALTER TABLE `ecommerce_productos` ADD COLUMN `ubicacion` VARCHAR(120) NULL DEFAULT NULL"); } catch (Throwable $e) {}
+
+// Ubicaciones existentes para autocomplete
+$ubicaciones_productos = [];
+try {
+    $ubicaciones_productos = $pdo->query("SELECT DISTINCT ubicacion FROM ecommerce_productos WHERE ubicacion IS NOT NULL AND ubicacion != '' ORDER BY ubicacion")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $codigo = $_POST['codigo'] ?? '';
     $nombre = $_POST['nombre'] ?? '';
@@ -36,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tipo_origen = $_POST['tipo_origen'] ?? 'fabricacion_propia';
     $stock_minimo = floatval($_POST['stock_minimo'] ?? 0);
     $proveedor_habitual_id = !empty($_POST['proveedor_habitual_id']) ? intval($_POST['proveedor_habitual_id']) : null;
+    $ubicacion = trim($_POST['ubicacion'] ?? '');
     
     if (empty($nombre) || empty($codigo) || $categoria_id <= 0 || ($precio_base <= 0 && !$es_material)) {
         $error = "Falta completar campos obligatorios";
@@ -46,17 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UPDATE ecommerce_productos 
                     SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
                         precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?, usa_receta = ?,
-                        tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?
+                        tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?, ubicacion = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null, $id]);
                 $mensaje = "Producto actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, usa_receta, tipo_origen, stock_minimo, proveedor_habitual_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, usa_receta, tipo_origen, stock_minimo, proveedor_habitual_id, ubicacion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null]);
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
@@ -151,6 +161,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="ubicacion" class="form-label">📍 Ubicación / Sector</label>
+                    <input type="text" class="form-control" id="ubicacion" name="ubicacion"
+                        placeholder="Ej: Estante A, Depósito 2, Sector 3"
+                        value="<?= htmlspecialchars($producto['ubicacion'] ?? '') ?>"
+                        list="ubicaciones_prod_list">
+                    <datalist id="ubicaciones_prod_list">
+                        <?php foreach ($ubicaciones_productos as $ub): ?>
+                            <option value="<?= htmlspecialchars($ub) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                    <small class="text-muted">Sector o lugar físico donde está guardado</small>
                 </div>
             </div>
 

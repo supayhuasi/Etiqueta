@@ -19,6 +19,10 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 
 // Incluir header AQUÍ, antes de enviar HTML
 require 'includes/header.php';
+require_once 'includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+
+$cuentas = cuentas_listar($pdo);
 
 $error = '';
 $exito = '';
@@ -26,6 +30,7 @@ $resumen = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
     try {
+        $cuenta_id_import = intval($_POST['cuenta_id_import'] ?? 0) ?: cuentas_get_default_id($pdo);
         $pdo->beginTransaction();
 
         // 1. Importar pagos aprobados de gastos
@@ -44,9 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
 
             foreach ($gastos as $gasto) {
                 $stmt_insert = $pdo->prepare("
-                    INSERT INTO flujo_caja 
-                    (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                    VALUES (?, 'egreso', ?, ?, ?, ?, ?, ?, 'Importado de gastos')
+                    INSERT INTO flujo_caja
+                    (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                    VALUES (?, 'egreso', ?, ?, ?, ?, ?, ?, ?, 'Importado de gastos')
                 ");
                 $stmt_insert->execute([
                     $gasto['fecha'],
@@ -55,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                     $gasto['monto'],
                     'Gasto ' . $gasto['numero_gasto'],
                     $gasto['id'],
+                    $cuenta_id_import,
                     $_SESSION['user']['id']
                 ]);
             }
@@ -78,9 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
 
                 foreach ($compras as $compra) {
                     $stmt_insert = $pdo->prepare("
-                        INSERT INTO flujo_caja 
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'egreso', 'Compra', ?, ?, ?, ?, 'Importado de compras')
+                        INSERT INTO flujo_caja
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Compra', ?, ?, ?, ?, ?, 'Importado de compras')
                     ");
                     $stmt_insert->execute([
                         $compra['fecha'],
@@ -88,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                         $compra['total'],
                         'Compra ' . $compra['numero_compra'],
                         $compra['id'],
+                        $cuenta_id_import,
                         $_SESSION['user']['id']
                     ]);
                 }
@@ -116,9 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
 
             foreach ($pedidos as $pedido) {
                 $stmt_insert = $pdo->prepare("
-                    INSERT INTO flujo_caja 
-                    (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                    VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, 'Importado de pedidos')
+                    INSERT INTO flujo_caja
+                    (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                    VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, 'Importado de pedidos')
                 ");
                 $stmt_insert->execute([
                     $pedido['fecha_creacion'],
@@ -126,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                     $pedido['monto_pagado'],
                     'Pedido ' . $pedido['numero_pedido'],
                     $pedido['id'],
+                    $cuenta_id_import,
                     $_SESSION['user']['id']
                 ]);
             }
@@ -190,9 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
 
                 foreach ($sueldos as $sueldo) {
                     $stmt_insert = $pdo->prepare("
-                        INSERT INTO flujo_caja 
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, usuario_id, observaciones)
-                        VALUES (?, 'egreso', 'Pago de Sueldo', ?, ?, ?, ?, 'Importado de sueldos')
+                        INSERT INTO flujo_caja
+                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                        VALUES (?, 'egreso', 'Pago de Sueldo', ?, ?, ?, ?, ?, 'Importado de sueldos')
                     ");
                     $stmt_insert->execute([
                         date('Y-m-01', strtotime($sueldo['mes_pago'] . '-01')),
@@ -200,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['importar'])) {
                         $sueldo['monto_pagado'],
                         'Sueldo ' . $sueldo['mes_pago'],
                         $sueldo['id'],
+                        $cuenta_id_import,
                         $_SESSION['user']['id']
                     ]);
                 }
@@ -298,6 +307,14 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
     </div>
 
     <form method="POST" class="needs-validation">
+        <div class="mb-3">
+            <label for="cuenta_id_import" class="form-label">Cuenta destino para todo lo importado</label>
+            <select id="cuenta_id_import" name="cuenta_id_import" class="form-select">
+                <?php foreach ($cuentas as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="row">
             <div class="col-md-6">
                 <div class="card mb-3">
