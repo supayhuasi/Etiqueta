@@ -1,4 +1,8 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require 'config.php';
 header('Content-Type: application/json');
 
@@ -7,19 +11,45 @@ header('Content-Type: application/json');
  * Recibe datos del checkout y crea la preferencia de pago
  */
 
+// Crear archivo de log para debugging
+$log_file = __DIR__ . '/logs/mercadopago_debug.log';
+if (!is_dir(__DIR__ . '/logs')) {
+    mkdir(__DIR__ . '/logs', 0755, true);
+}
+
+function log_debug($message, $data = null) {
+    global $log_file;
+    $timestamp = date('Y-m-d H:i:s');
+    $log_message = "[$timestamp] " . $message;
+    if ($data) {
+        $log_message .= " | " . json_encode($data, JSON_UNESCAPED_UNICODE);
+    }
+    $log_message .= "\n";
+    error_log($log_message, 3, $log_file);
+}
+
+log_debug("=== Nueva solicitud de pago ===");
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(400);
     echo json_encode(['error' => 'Método no permitido']);
+    log_debug("Error: Método no permitido", $_SERVER['REQUEST_METHOD']);
     exit;
 }
 
 try {
     // Obtener configuración de Mercado Pago
-    $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
-    $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
+    try {
+        log_debug("Buscando configuración de Mercado Pago");
+        $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
+        $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
+        log_debug("Configuración obtenida", ['has_config' => !!$config_mp]);
+    } catch (PDOException $e) {
+        throw new Exception("Error al conectar a base de datos: " . $e->getMessage());
+    }
     
     if (!$config_mp) {
-        throw new Exception("Mercado Pago no está configurado");
+        throw new Exception("Mercado Pago no está configurado. Por favor contacte al administrador.");
     }
     
     // Seleccionar token según modo
@@ -28,11 +58,14 @@ try {
         : $config_mp['access_token_produccion'];
     
     if (empty($access_token)) {
-        throw new Exception("Access Token no configurado");
+        throw new Exception("Access Token no configurado para modo: " . $config_mp['modo']);
     }
+    
+    log_debug("Token seleccionado", ['modo' => $config_mp['modo']]);
     
     // Obtener datos del formulario
     $pedido_id = intval($_POST['pedido_id'] ?? 0);
+    log_debug("Pedido recibido", ['pedido_id' => $pedido_id]);
     
     if ($pedido_id <= 0) {
         throw new Exception("ID de pedido inválido");
@@ -46,6 +79,8 @@ try {
     if (!$pedido) {
         throw new Exception("Pedido no encontrado");
     }
+    
+    log_debug("Pedido encontrado", ['numero' => $pedido['numero_pedido'], 'total' => $pedido['total']]);
     
     // Obtener cliente
     $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE id = ?");
@@ -108,6 +143,7 @@ try {
     ];
     
     // Hacer request a API de Mercado Pago
+    log_debug("Enviando preferencia a API de Mercado Pago");
     $ch = curl_init('https://api.mercadopago.com/checkout/preferences');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -119,10 +155,18 @@ try {
     
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
     curl_close($ch);
     
+    log_debug("Respuesta de Mercado Pago", ['http_code' => $http_code, 'curl_error' => $curl_error]);
+    
+    if (!empty($curl_error)) {
+        throw new Exception("Error de conexión con Mercado Pago: " . $curl_error);
+    }
+    
     if ($http_code !== 201) {
-        throw new Exception("Error en Mercado Pago: " . $response);
+        log_debug("Error HTTP de Mercado Pago", ['code' => $http_code, 'response' => substr($response, 0, 500)]);
+        throw new Exception("Error en Mercado Pago (HTTP " . $http_code . "): " . substr($response, 0, 200));
     }
     
     $preference_data = json_decode($response, true);
@@ -130,6 +174,8 @@ try {
     if (!isset($preference_data['init_point'])) {
         throw new Exception("No se obtuvo URL de pago");
     }
+    
+    log_debug("Preferencia creada correctamente", ['preference_id' => $preference_data['id']]);
     
     // Guardar ID de preferencia en el pedido
     $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET mercadopago_preference_id = ? WHERE id = ?");
@@ -142,10 +188,14 @@ try {
         'preference_id' => $preference_data['id']
     ]);
     
+    log_debug("Respuesta exitosa enviada");
+    
 } catch (Exception $e) {
     http_response_code(400);
+    $error_msg = $e->getMessage();
+    log_debug("ERROR CAPTURADO", ['message' => $error_msg]);
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => $error_msg
     ]);
 }

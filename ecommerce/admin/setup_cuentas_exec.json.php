@@ -69,10 +69,10 @@ try {
         $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
         $stmt->execute(['flujo_caja']);
         if ($stmt->fetchColumn()) {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM flujo_caja LIKE ?");
+            $stmt = $pdo->prepare("SHOW COLUMNS FROM `flujo_caja` LIKE ?");
             $stmt->execute(['cuenta_id']);
             if (!$stmt->fetchColumn()) {
-                $pdo->exec("ALTER TABLE flujo_caja ADD COLUMN cuenta_id INT NULL");
+                $pdo->exec("ALTER TABLE `flujo_caja` ADD COLUMN `cuenta_id` INT NULL");
                 agregar_paso(3, "Agregar flujo_caja.cuenta_id", true, "Columna agregada");
             } else {
                 agregar_paso(3, "Agregar flujo_caja.cuenta_id", true, "Columna ya existe");
@@ -92,7 +92,7 @@ try {
         ");
         $stmt->execute();
         if ((int)$stmt->fetchColumn() === 0) {
-            $pdo->exec("ALTER TABLE flujo_caja ADD INDEX idx_cuenta_id (cuenta_id)");
+            $pdo->exec("ALTER TABLE `flujo_caja` ADD INDEX `idx_cuenta_id` (`cuenta_id`)");
             agregar_paso(4, "Crear índice flujo_caja", true, "Índice creado");
         } else {
             agregar_paso(4, "Crear índice flujo_caja", true, "Índice ya existe");
@@ -109,7 +109,7 @@ try {
         ");
         $stmtFk->execute();
         if ((int)$stmtFk->fetchColumn() === 0) {
-            $pdo->exec("ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta FOREIGN KEY (cuenta_id) REFERENCES cuentas(id)");
+            $pdo->exec("ALTER TABLE `flujo_caja` ADD CONSTRAINT `fk_flujo_caja_cuenta` FOREIGN KEY (`cuenta_id`) REFERENCES `cuentas`(`id`)");
             agregar_paso(5, "Crear FK flujo_caja", true, "FK creada");
         } else {
             agregar_paso(5, "Crear FK flujo_caja", true, "FK ya existe");
@@ -123,16 +123,16 @@ try {
         $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
         $stmt->execute(['gastos']);
         if ($stmt->fetchColumn()) {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM gastos LIKE ?");
+            $stmt = $pdo->prepare("SHOW COLUMNS FROM `gastos` LIKE ?");
             $stmt->execute(['cuenta_id']);
             if (!$stmt->fetchColumn()) {
-                $pdo->exec("ALTER TABLE gastos ADD COLUMN cuenta_id INT NULL");
+                $pdo->exec("ALTER TABLE `gastos` ADD COLUMN `cuenta_id` INT NULL");
                 agregar_paso(6, "Agregar gastos.cuenta_id", true, "Columna agregada");
             } else {
                 agregar_paso(6, "Agregar gastos.cuenta_id", true, "Columna ya existe");
             }
         } else {
-            agresar_paso(6, "Agregar gastos.cuenta_id", false, "Tabla gastos no existe");
+            agregar_paso(6, "Agregar gastos.cuenta_id", false, "Tabla gastos no existe");
         }
     } catch (Throwable $e) {
         agregar_paso(6, "Agregar gastos.cuenta_id", false, substr($e->getMessage(), 0, 100));
