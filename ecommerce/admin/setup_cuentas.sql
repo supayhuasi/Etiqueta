@@ -1,7 +1,7 @@
 -- ============================================================================
--- Script para crear/corregir el sistema de cuentas en tucuroller_produccion
+-- Script robusto para crear/corregir el sistema de cuentas en la base de datos
 -- ============================================================================
--- Ejecutar como administrador de BD o usuario con permisos CREATE/ALTER
+-- Ejecutar como administrador de BD o usuario con permisos CREATE/ALTER/INSERT/UPDATE
 -- ============================================================================
 
 -- 1. CREAR TABLA CUENTAS
@@ -19,67 +19,113 @@ CREATE TABLE IF NOT EXISTS cuentas (
     INDEX idx_activo (activo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
--- 2. AGREGAR COLUMNA A FLUJO_CAJA (si no existe)
+-- 2. AGREGAR COLUMNA cuenta_id A flujo_caja SI NO EXISTE
 -- ============================================================================
--- Primero verificar si la tabla existe
--- Si existe pero no la columna, agregarla
-ALTER TABLE flujo_caja ADD COLUMN cuenta_id INT NULL;
+SET @stmt := IF(
+    (
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE() AND table_name = 'flujo_caja'
+    ) = 1
+    AND (
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND column_name = 'cuenta_id'
+    ) = 0,
+    'ALTER TABLE flujo_caja ADD COLUMN cuenta_id INT NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @stmt;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- Agregar índice
-ALTER TABLE flujo_caja ADD INDEX idx_cuenta_id (cuenta_id);
-
--- Agregar Foreign Key (solo si no existe)
-ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta 
-    FOREIGN KEY (cuenta_id) REFERENCES cuentas(id);
-
-
--- 3. AGREGAR COLUMNA A GASTOS (si no existe)
+-- 3. AGREGAR ÍNDICE idx_cuenta_id A flujo_caja SI NO EXISTE
 -- ============================================================================
-ALTER TABLE gastos ADD COLUMN cuenta_id INT NULL;
+SET @stmt := IF(
+    (
+        SELECT COUNT(*)
+        FROM information_schema.statistics
+        WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND index_name = 'idx_cuenta_id'
+    ) = 0,
+    'ALTER TABLE flujo_caja ADD INDEX idx_cuenta_id (cuenta_id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @stmt;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-
--- 4. CREAR CUENTA POR DEFECTO
+-- 4. AGREGAR FOREIGN KEY fk_flujo_caja_cuenta SI NO EXISTE
 -- ============================================================================
--- Solo insertar si no existe
-INSERT IGNORE INTO cuentas (nombre, tipo, descripcion, activo)
-VALUES ('Caja / Operativa', 'Operativa', 'Cuenta por defecto para movimientos históricos y sin cuenta asignada', 1);
+SET @stmt := IF(
+    (
+        SELECT COUNT(*)
+        FROM information_schema.table_constraints
+        WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND constraint_name = 'fk_flujo_caja_cuenta'
+    ) = 0,
+    'ALTER TABLE flujo_caja ADD CONSTRAINT fk_flujo_caja_cuenta FOREIGN KEY (cuenta_id) REFERENCES cuentas(id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @stmt;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-
--- 5. BACKFILL - Asignar cuenta por defecto a registros históricos
+-- 5. AGREGAR COLUMNA cuenta_id A gastos SI NO EXISTE
 -- ============================================================================
--- Obtener el ID de la cuenta por defecto
-SET @default_cuenta_id = (SELECT id FROM cuentas WHERE nombre = 'Caja / Operativa' LIMIT 1);
+SET @stmt := IF(
+    (
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE() AND table_name = 'gastos'
+    ) = 1
+    AND (
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'gastos' AND column_name = 'cuenta_id'
+    ) = 0,
+    'ALTER TABLE gastos ADD COLUMN cuenta_id INT NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @stmt;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- Asignar a flujo_caja
-UPDATE flujo_caja SET cuenta_id = @default_cuenta_id WHERE cuenta_id IS NULL;
-
--- Asignar a gastos (si la tabla tiene registros históricos sin cuenta)
-UPDATE gastos SET cuenta_id = @default_cuenta_id WHERE cuenta_id IS NULL;
-
-
--- 6. VERIFICACIÓN FINAL
+-- 6. CREAR CUENTA POR DEFECTO SI NO EXISTE
 -- ============================================================================
--- Ejecutar estos SELECT para verificar que todo está correcto:
+INSERT INTO cuentas (nombre, tipo, descripcion, activo)
+SELECT 'Caja / Operativa', 'Operativa', 'Cuenta por defecto para movimientos históricos y sin cuenta asignada', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM cuentas WHERE nombre = 'Caja / Operativa'
+);
 
-SELECT 'Tabla cuentas' as verificacion, COUNT(*) as cantidad FROM cuentas;
-SELECT 'Registros con cuenta_id en flujo_caja' as verificacion, COUNT(*) as cantidad FROM flujo_caja WHERE cuenta_id IS NOT NULL;
-SELECT 'Registros sin cuenta_id en flujo_caja' as verificacion, COUNT(*) as cantidad FROM flujo_caja WHERE cuenta_id IS NULL;
-SELECT 'Columna flujo_caja.cuenta_id existe' as verificacion, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-WHERE TABLE_NAME = 'flujo_caja' AND COLUMN_NAME = 'cuenta_id' LIMIT 1;
-SELECT 'Columna gastos.cuenta_id existe' as verificacion, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-WHERE TABLE_NAME = 'gastos' AND COLUMN_NAME = 'cuenta_id' LIMIT 1;
-SELECT 'Cuenta por defecto' as verificacion, id, nombre FROM cuentas WHERE nombre = 'Caja / Operativa';
+-- 7. BACKFILL - ASIGNAR CUENTA POR DEFECTO A REGISTROS HISTÓRICOS
+-- ============================================================================
+SET @default_cuenta_id := (SELECT id FROM cuentas WHERE nombre = 'Caja / Operativa' LIMIT 1);
 
+-- Evitar el error 1175 de MySQL Safe Update Mode en Workbench/phpMyAdmin
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE flujo_caja
+SET cuenta_id = @default_cuenta_id
+WHERE id IS NOT NULL AND cuenta_id IS NULL;
+
+UPDATE gastos
+SET cuenta_id = @default_cuenta_id
+WHERE id IS NOT NULL AND cuenta_id IS NULL;
+
+SET SQL_SAFE_UPDATES = 1;
+
+-- 8. VERIFICACIÓN FINAL
+-- ============================================================================
+SELECT 'Tabla cuentas' AS verificacion, COUNT(*) AS cantidad FROM cuentas;
+SELECT 'Registros con cuenta_id en flujo_caja' AS verificacion, COUNT(*) AS cantidad FROM flujo_caja WHERE cuenta_id IS NOT NULL;
+SELECT 'Registros sin cuenta_id en flujo_caja' AS verificacion, COUNT(*) AS cantidad FROM flujo_caja WHERE cuenta_id IS NULL;
+SELECT 'Columna flujo_caja.cuenta_id existe' AS verificacion, COLUMN_NAME FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND column_name = 'cuenta_id' LIMIT 1;
+SELECT 'Columna gastos.cuenta_id existe' AS verificacion, COLUMN_NAME FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'gastos' AND column_name = 'cuenta_id' LIMIT 1;
+SELECT 'Cuenta por defecto' AS verificacion, id, nombre FROM cuentas WHERE nombre = 'Caja / Operativa';
 
 -- ============================================================================
--- PERMISOS NECESARIOS PARA EL USUARIO 'Roco'
+-- Si lo ejecutás desde phpMyAdmin o MySQL Workbench, seleccioná la base
+-- correspondiente antes de correr el script.
 -- ============================================================================
--- Si accedes desde el host 149.50.133.145, ejecuta como root/admin:
-
--- GRANT CREATE, ALTER, DROP ON tucuroller_produccion.* TO 'Roco'@'149.50.133.145';
--- GRANT INSERT, UPDATE, DELETE, SELECT ON tucuroller_produccion.* TO 'Roco'@'149.50.133.145';
--- FLUSH PRIVILEGES;
-
--- Para verificar permisos:
--- SHOW GRANTS FOR 'Roco'@'149.50.133.145';
