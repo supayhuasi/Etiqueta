@@ -8,6 +8,48 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
+// Acción: eliminar un pago parcial
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'eliminar_parcial') {
+    $parcial_id = intval($_POST['parcial_id'] ?? 0);
+    $mes_redirect = trim($_POST['mes_redirect'] ?? '') ?: date('Y-m');
+
+    if ($parcial_id > 0) {
+        try {
+            $pdo->beginTransaction();
+
+            $stmt_p = $pdo->prepare("SELECT * FROM pagos_sueldos_parciales WHERE id = ?");
+            $stmt_p->execute([$parcial_id]);
+            $parcial = $stmt_p->fetch(PDO::FETCH_ASSOC);
+
+            if ($parcial) {
+                // Eliminar también el egreso vinculado en flujo de caja, si existe
+                $stmt_fc = $pdo->prepare("
+                    DELETE FROM flujo_caja
+                    WHERE tipo = 'egreso'
+                      AND categoria = 'Pago de Sueldo'
+                      AND id_referencia = ?
+                      AND fecha = ?
+                      AND monto = ?
+                    LIMIT 1
+                ");
+                $stmt_fc->execute([$parcial['empleado_id'], $parcial['fecha_pago'], $parcial['monto_pagado']]);
+
+                $stmt_del = $pdo->prepare("DELETE FROM pagos_sueldos_parciales WHERE id = ?");
+                $stmt_del->execute([$parcial_id]);
+            }
+
+            $pdo->commit();
+            header('Location: sueldos.php?success=' . urlencode('Pago parcial eliminado') . '&mes=' . urlencode($mes_redirect));
+            exit;
+        } catch (Exception $ex) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $error_msg = $ex->getMessage();
+        }
+    } else {
+        $error_msg = 'Pago parcial inválido';
+    }
+}
+
 // Acción: aplicar aumento porcentual a sueldos
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'aplicar_aumento') {
     $porcentaje = floatval($_POST['porcentaje'] ?? 0);
@@ -201,7 +243,7 @@ $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Detalle de pagos parciales por empleado para el mes seleccionado
 $stmt_det = $pdo->prepare("
-    SELECT empleado_id, monto_pagado, fecha_pago, observaciones
+    SELECT id, empleado_id, monto_pagado, fecha_pago, observaciones
     FROM pagos_sueldos_parciales
     WHERE mes_pago = ?
     ORDER BY fecha_pago ASC
@@ -475,6 +517,7 @@ foreach ($empleados as $emp) {
                                                 <th>Fecha</th>
                                                 <th>Monto</th>
                                                 <th>Observaciones</th>
+                                                <th></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -483,6 +526,14 @@ foreach ($empleados as $emp) {
                                                 <td><?= date('d/m/Y', strtotime($det['fecha_pago'])) ?></td>
                                                 <td><strong>$<?= number_format((float)$det['monto_pagado'], 2, ',', '.') ?></strong></td>
                                                 <td><?= $det['observaciones'] ? htmlspecialchars($det['observaciones']) : '<span class="text-muted">—</span>' ?></td>
+                                                <td class="text-end">
+                                                    <form method="POST" onsubmit="return confirm('¿Eliminar este pago parcial de $<?= number_format((float)$det['monto_pagado'], 2, ',', '.') ?>?');">
+                                                        <input type="hidden" name="action" value="eliminar_parcial">
+                                                        <input type="hidden" name="parcial_id" value="<?= (int)$det['id'] ?>">
+                                                        <input type="hidden" name="mes_redirect" value="<?= htmlspecialchars($mes_filtro) ?>">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar pago parcial">🗑</button>
+                                                    </form>
+                                                </td>
                                             </tr>
                                             <?php endforeach; ?>
                                         </tbody>
