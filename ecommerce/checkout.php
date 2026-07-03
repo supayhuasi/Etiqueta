@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/cliente_auth.php';
 require 'includes/mailer.php';
 require 'includes/envio.php';
@@ -415,6 +414,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
     }
 }
 ?>
+
+<?php require 'includes/header.php'; ?>
 
 <div class="container py-5">
     <div class="row">
