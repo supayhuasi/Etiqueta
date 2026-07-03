@@ -456,14 +456,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$skip_checkout) {
                             <div class="border rounded p-3 bg-light mb-3">
                                 <label class="form-label fw-semibold mb-2">Tipo de comprobante</label>
                                 <div class="form-check">
-                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_factura" name="comprobante_tipo" value="factura" <?= $checkoutComprobanteTipo !== 'recibo' ? 'checked' : '' ?>>
+                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_factura" name="comprobante_tipo" value="factura" checked>
                                     <label class="form-check-label" for="comprobante_tipo_factura">Quiero factura fiscal</label>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input comprobante-tipo-input" type="radio" id="comprobante_tipo_recibo" name="comprobante_tipo" value="recibo" <?= $checkoutComprobanteTipo === 'recibo' ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="comprobante_tipo_recibo">Solo recibo interno (sin conexión a ARCA/AFIP)</label>
-                                </div>
-                                <small class="text-muted d-block mt-2">Si elegís recibo, el pedido no intentará facturarse fiscalmente hasta que lo cambies.</small>
                             </div>
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" id="factura_a" name="factura_a" value="1" <?= !empty($_POST['factura_a']) ? 'checked' : '' ?>>
