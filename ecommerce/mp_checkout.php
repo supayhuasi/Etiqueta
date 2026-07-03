@@ -96,8 +96,24 @@ document.addEventListener('DOMContentLoaded', function() {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        // Log para debugging
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Intentar parsear como JSON
+        return response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Invalid JSON response:', text);
+                throw new Error('Respuesta inválida del servidor: ' + text.substring(0, 200));
+            }
+        });
+    })
     .then(data => {
+        console.log('Parsed data:', data);
+        
         if (data.success && data.url) {
             // Redirigir a Mercado Pago
             document.getElementById('loading-container').style.display = 'none';
@@ -106,11 +122,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.location.href = data.url;
             }, 1500);
         } else {
-            throw new Error(data.error || 'Error desconocido');
+            throw new Error(data.error || 'Error desconocido al procesar el pago');
         }
     })
     .catch(error => {
-        console.error('Error:', error);
+        console.error('Error capturado:', error);
         document.getElementById('loading-container').style.display = 'none';
         document.getElementById('error-container').style.display = 'block';
         document.getElementById('error-message').textContent = error.message || 'No se pudo procesar el pago. Intenta nuevamente.';
