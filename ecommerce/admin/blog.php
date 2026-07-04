@@ -473,7 +473,7 @@ try {
     </div>
 </div>
 
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js"></script>
+<script src="https://cdn.tiny.cloud/1/mysjhtl2zbzhcu7j6pip9bzwzyj97dz2rltrkpbqinn7eam3/tinymce/6/tinymce.min.js"></script>
 <script>
 tinymce.init({
     selector: '#contenido',
