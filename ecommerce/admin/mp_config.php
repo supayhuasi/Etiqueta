@@ -31,6 +31,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($modo === 'produccion' && empty($access_token_produccion)) {
             throw new Exception("Falta Access Token para modo de producción");
         }
+
+        if ($activo && $modo === 'test' && empty($public_key_test)) {
+            throw new Exception("Falta Public Key para modo de prueba");
+        }
+
+        if ($activo && $modo === 'produccion' && empty($public_key_produccion)) {
+            throw new Exception("Falta Public Key para modo de producción");
+        }
         
         // Preparar URL de notificación
         $notification_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/admin/mp_webhook.php';

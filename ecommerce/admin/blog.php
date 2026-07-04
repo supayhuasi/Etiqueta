@@ -369,8 +369,8 @@ try {
                 </div>
                 <div class="col-12">
                     <label class="form-label">Contenido *</label>
-                    <textarea name="contenido" class="form-control" rows="12" required><?= htmlspecialchars($articulo_edit['contenido'] ?? '') ?></textarea>
-                    <div class="form-text">Podés pegar HTML básico o texto formateado desde un editor externo.</div>
+                    <textarea id="contenido" name="contenido" class="form-control" rows="12" required><?= htmlspecialchars($articulo_edit['contenido'] ?? '') ?></textarea>
+                    <div class="form-text">Utilizá el editor para formatear el texto con negritas, cursivas, títulos, listas y más.</div>
                 </div>
                 <div class="col-12 col-md-3">
                     <label class="form-label">Estado</label>
@@ -472,6 +472,22 @@ try {
         <?php endif; ?>
     </div>
 </div>
+
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js"></script>
+<script>
+tinymce.init({
+    selector: '#contenido',
+    plugins: 'link image lists code table',
+    toolbar: 'undo redo | formatselect | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright | bullist numlist outdent indent | link image | code | removeformat',
+    menubar: 'file edit view insert format tools',
+    height: 500,
+    setup: function(editor) {
+        editor.on('change', function() {
+            tinymce.triggerSave();
+        });
+    }
+});
+</script>
 
 <script>
 (function () {

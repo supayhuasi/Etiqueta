@@ -8,10 +8,9 @@ header('Content-Type: application/json');
 
 /**
  * Procesador de Pagos Mercado Pago
- * Recibe datos del checkout y crea la preferencia de pago
+ * Recibe token de tarjeta y crea el pago directamente con la API de Mercado Pago
  */
 
-// Crear archivo de log para debugging
 $log_file = __DIR__ . '/logs/mercadopago_debug.log';
 if (!is_dir(__DIR__ . '/logs')) {
     mkdir(__DIR__ . '/logs', 0755, true);
@@ -28,174 +27,213 @@ function log_debug($message, $data = null) {
     error_log($log_message, 3, $log_file);
 }
 
-log_debug("=== Nueva solicitud de pago ===");
+log_debug('=== Nueva solicitud de pago ===', ['method' => $_SERVER['REQUEST_METHOD'], 'post' => $_POST]);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(400);
-    echo json_encode(['error' => 'Método no permitido']);
-    log_debug("Error: Método no permitido", $_SERVER['REQUEST_METHOD']);
+    echo json_encode(['success' => false, 'error' => 'Método no permitido']);
+    log_debug('Error: Método no permitido', $_SERVER['REQUEST_METHOD']);
     exit;
 }
 
 try {
-    // Obtener configuración de Mercado Pago
-    try {
-        log_debug("Buscando configuración de Mercado Pago");
-        $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
-        $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
-        log_debug("Configuración obtenida", ['has_config' => !!$config_mp]);
-    } catch (PDOException $e) {
-        throw new Exception("Error al conectar a base de datos: " . $e->getMessage());
-    }
-    
+    $stmt = $pdo->query("SELECT * FROM ecommerce_mercadopago_config WHERE activo = 1 LIMIT 1");
+    $config_mp = $stmt->fetch(PDO::FETCH_ASSOC);
+
     if (!$config_mp) {
-        throw new Exception("Mercado Pago no está configurado. Por favor contacte al administrador.");
+        throw new Exception('Mercado Pago no está configurado. Por favor contacte al administrador.');
     }
-    
-    // Seleccionar token según modo
-    $access_token = $config_mp['modo'] === 'test' 
-        ? $config_mp['access_token_test'] 
+
+    $access_token = $config_mp['modo'] === 'test'
+        ? $config_mp['access_token_test']
         : $config_mp['access_token_produccion'];
-    
+
     if (empty($access_token)) {
-        throw new Exception("Access Token no configurado para modo: " . $config_mp['modo']);
+        throw new Exception('Access Token no configurado para modo: ' . $config_mp['modo']);
     }
-    
-    log_debug("Token seleccionado", ['modo' => $config_mp['modo']]);
-    
-    // Obtener datos del formulario
+
     $pedido_id = intval($_POST['pedido_id'] ?? 0);
-    log_debug("Pedido recibido", ['pedido_id' => $pedido_id]);
-    
     if ($pedido_id <= 0) {
-        throw new Exception("ID de pedido inválido");
+        throw new Exception('ID de pedido inválido');
     }
-    
-    // Obtener pedido con sus items
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_pedidos WHERE id = ?");
+
+    $stmt = $pdo->prepare('SELECT * FROM ecommerce_pedidos WHERE id = ?');
     $stmt->execute([$pedido_id]);
     $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
-    
     if (!$pedido) {
-        throw new Exception("Pedido no encontrado");
+        throw new Exception('Pedido no encontrado');
     }
-    
-    log_debug("Pedido encontrado", ['numero' => $pedido['numero_pedido'], 'total' => $pedido['total']]);
-    
-    // Obtener cliente
-    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE id = ?");
+
+    $stmt = $pdo->prepare('SELECT * FROM ecommerce_clientes WHERE id = ?');
     $stmt->execute([$pedido['cliente_id']]);
-    $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    // Obtener items del pedido
-    $stmt = $pdo->prepare("
-        SELECT pi.*, p.nombre as producto_nombre
-        FROM ecommerce_pedido_items pi
-        LEFT JOIN ecommerce_productos p ON pi.producto_id = p.id
-        WHERE pi.pedido_id = ?
-    ");
-    $stmt->execute([$pedido_id]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Construir array de items para Mercado Pago
-    $items_mp = [];
-    foreach ($items as $item) {
-        $items_mp[] = [
-            'title' => $item['producto_nombre'] ?? 'Producto',
-            'description' => 'Compra en tienda',
-            'quantity' => $item['cantidad'],
-            'unit_price' => (float)$item['precio_unitario'],
-            'picture_url' => (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/uploads/productos/placeholder.jpg'
-        ];
+    $cliente = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    $token = trim($_POST['token'] ?? '');
+    $payment_method_id = trim($_POST['payment_method_id'] ?? '');
+    $installments = max(1, min(12, intval($_POST['installments'] ?? 1)));
+    $doc_type = trim($_POST['docType'] ?? '') ?: 'DNI';
+    $doc_number = trim($_POST['docNumber'] ?? '');
+
+    if ($token === '') {
+        throw new Exception('Token de tarjeta inválido');
     }
-    
-    // URL de retorno
-    $success_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_success.php?pedido_id=' . $pedido_id;
-    $failure_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_failure.php?pedido_id=' . $pedido_id;
-    $pending_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/ecommerce/mp_pending.php?pedido_id=' . $pedido_id;
-    
-    // Construir preferencia de pago
-    $preference = [
-        'items' => $items_mp,
+
+    $payer_email = trim($cliente['email'] ?? '');
+    if ($payer_email === '') {
+        $payer_email = 'sin-email@tucuroller.local';
+    }
+
+    $name = trim($cliente['nombre'] ?? 'Cliente');
+    $nameParts = preg_split('/\s+/', $name, 2, PREG_SPLIT_NO_EMPTY);
+    $payer_first_name = $nameParts[0] ?? 'Cliente';
+    $payer_last_name = $nameParts[1] ?? '';
+
+    $payment_payload = [
+        'transaction_amount' => round((float)$pedido['total'], 2),
+        'token' => $token,
+        'description' => trim($config_mp['descripcion_defecto'] ?? '') ?: ('Pago pedido ' . $pedido['numero_pedido']),
+        'installments' => $installments,
+        'payment_method_id' => $payment_method_id ?: 'visa',
         'payer' => [
-            'name' => $cliente['nombre'] ?? 'Cliente',
-            'email' => $cliente['email'] ?? '',
-            'phone' => [
-                'area_code' => '54',
-                'number' => str_replace([' ', '-', '(', ')'], '', $cliente['telefono'] ?? '')
-            ],
-            'address' => [
-                'street_name' => $cliente['direccion'] ?? '',
-                'street_number' => 1,
-                'zip_code' => $cliente['codigo_postal'] ?? ''
+            'email' => $payer_email,
+            'first_name' => $payer_first_name,
+            'last_name' => $payer_last_name,
+            'identification' => [
+                'type' => $doc_type,
+                'number' => $doc_number !== '' ? $doc_number : '0'
             ]
         ],
-        'back_urls' => [
-            'success' => $success_url,
-            'failure' => $failure_url,
-            'pending' => $pending_url
-        ],
-        'auto_return' => 'approved',
-        'external_reference' => 'PEDIDO-' . $pedido['numero_pedido'],
-        'notification_url' => $config_mp['notification_url'],
-        'description' => $config_mp['descripcion_defecto'],
-        'total_amount' => (float)$pedido['total']
+        'external_reference' => 'PEDIDO-' . $pedido['numero_pedido']
     ];
-    
-    // Hacer request a API de Mercado Pago
-    log_debug("Enviando preferencia a API de Mercado Pago");
-    $ch = curl_init('https://api.mercadopago.com/checkout/preferences');
+
+    log_debug('Creando pago con Mercado Pago', ['pedido_id' => $pedido_id, 'payload' => $payment_payload]);
+
+    $ch = curl_init('https://api.mercadopago.com/v1/payments');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'Authorization: Bearer ' . $access_token
     ]);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($preference));
-    
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payment_payload, JSON_UNESCAPED_UNICODE));
+
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curl_error = curl_error($ch);
     curl_close($ch);
-    
-    log_debug("Respuesta de Mercado Pago", ['http_code' => $http_code, 'curl_error' => $curl_error]);
-    
+
+    log_debug('Respuesta de Mercado Pago', ['http_code' => $http_code, 'curl_error' => $curl_error, 'response' => $response]);
+
     if (!empty($curl_error)) {
-        throw new Exception("Error de conexión con Mercado Pago: " . $curl_error);
+        throw new Exception('Error de conexión con Mercado Pago: ' . $curl_error);
     }
-    
-    if ($http_code !== 201) {
-        log_debug("Error HTTP de Mercado Pago", ['code' => $http_code, 'response' => substr($response, 0, 500)]);
-        throw new Exception("Error en Mercado Pago (HTTP " . $http_code . "): " . substr($response, 0, 200));
+
+    if ($http_code !== 201 && $http_code !== 200) {
+        $errorData = json_decode($response, true);
+        $message = $errorData['message'] ?? 'Error en Mercado Pago';
+        throw new Exception('Mercado Pago rechazó el pago: ' . $message);
     }
-    
-    $preference_data = json_decode($response, true);
-    
-    if (!isset($preference_data['init_point'])) {
-        throw new Exception("No se obtuvo URL de pago");
+
+    $payment = json_decode($response, true);
+    if (!$payment || empty($payment['id'])) {
+        throw new Exception('Respuesta inválida de Mercado Pago');
     }
-    
-    log_debug("Preferencia creada correctamente", ['preference_id' => $preference_data['id']]);
-    
-    // Guardar ID de preferencia en el pedido
-    $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET mercadopago_preference_id = ? WHERE id = ?");
-    $stmt->execute([$preference_data['id'], $pedido_id]);
-    
-    // Retornar URL de pago
+
+    $status = $payment['status'] ?? 'unknown';
+    $payment_id = (string)$payment['id'];
+
+    $estado_pedido = 'pendiente_pago';
+    switch ($status) {
+        case 'approved':
+            $estado_pedido = 'pagado';
+            break;
+        case 'pending':
+            $estado_pedido = 'pago_pendiente';
+            break;
+        case 'authorized':
+            $estado_pedido = 'pago_autorizado';
+            break;
+        case 'in_process':
+            $estado_pedido = 'pago_en_proceso';
+            break;
+        case 'rejected':
+        case 'cancelled':
+            $estado_pedido = 'pago_rechazado';
+            break;
+        case 'refunded':
+            $estado_pedido = 'pago_reembolsado';
+            break;
+        default:
+            $estado_pedido = 'pendiente_pago';
+    }
+
+    $stmt = $pdo->prepare('UPDATE ecommerce_pedidos SET estado = ?, mercadopago_payment_id = ?, mercadopago_status = ? WHERE id = ?');
+    $stmt->execute([$estado_pedido, $payment_id, $status, $pedido_id]);
+
+    if ($status === 'approved') {
+        $cols_pago = $pdo->query('SHOW COLUMNS FROM ecommerce_pedido_pagos')->fetchAll(PDO::FETCH_COLUMN, 0);
+        $cols_map = array_flip($cols_pago);
+        $existe_pago = false;
+
+        if (isset($cols_map['referencia'])) {
+            $stmt_check = $pdo->prepare('SELECT id FROM ecommerce_pedido_pagos WHERE referencia = ? LIMIT 1');
+            $stmt_check->execute([$payment_id]);
+            $existe_pago = (bool)$stmt_check->fetch(PDO::FETCH_ASSOC);
+        }
+
+        if (!$existe_pago) {
+            $campos = [];
+            $valores = [];
+
+            if (isset($cols_map['pedido_id'])) {
+                $campos[] = 'pedido_id';
+                $valores[] = $pedido_id;
+            }
+            if (isset($cols_map['monto'])) {
+                $campos[] = 'monto';
+                $valores[] = (float)($payment['transaction_amount'] ?? $pedido['total']);
+            }
+            if (isset($cols_map['metodo'])) {
+                $campos[] = 'metodo';
+                $valores[] = 'Mercado Pago';
+            }
+            if (isset($cols_map['referencia'])) {
+                $campos[] = 'referencia';
+                $valores[] = $payment_id;
+            }
+            if (isset($cols_map['notas'])) {
+                $campos[] = 'notas';
+                $valores[] = 'MP:' . $payment_id;
+            }
+            if (isset($cols_map['creado_por'])) {
+                $campos[] = 'creado_por';
+                $valores[] = null;
+            }
+            if (isset($cols_map['fecha_pago'])) {
+                $campos[] = 'fecha_pago';
+                $valores[] = date('Y-m-d H:i:s');
+            }
+
+            if (!empty($campos)) {
+                $placeholders = implode(', ', array_fill(0, count($campos), '?'));
+                $sql = 'INSERT INTO ecommerce_pedido_pagos (' . implode(', ', $campos) . ') VALUES (' . $placeholders . ')';
+                $stmt_pago = $pdo->prepare($sql);
+                $stmt_pago->execute($valores);
+            }
+        }
+    }
+
     echo json_encode([
         'success' => true,
-        'url' => $preference_data['init_point'],
-        'preference_id' => $preference_data['id']
+        'status' => $status,
+        'payment_id' => $payment_id,
+        'pedido_id' => $pedido_id
     ]);
-    
-    log_debug("Respuesta exitosa enviada");
-    
+
+    log_debug('Pago procesado correctamente', ['pedido_id' => $pedido_id, 'status' => $status, 'payment_id' => $payment_id]);
 } catch (Exception $e) {
     http_response_code(400);
     $error_msg = $e->getMessage();
-    log_debug("ERROR CAPTURADO", ['message' => $error_msg]);
-    echo json_encode([
-        'success' => false,
-        'error' => $error_msg
-    ]);
+    log_debug('ERROR CAPTURADO', ['message' => $error_msg]);
+    echo json_encode(['success' => false, 'error' => $error_msg]);
 }
