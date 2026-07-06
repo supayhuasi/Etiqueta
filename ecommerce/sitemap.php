@@ -29,7 +29,8 @@ $urls = [
   $base_url . '/contacto.php',
   $base_url . '/distribuidores.php',
   $base_url . '/carrito.php',
-  $base_url . '/checkout.php'
+  $base_url . '/checkout.php',
+  $base_url . '/blog.php'
 ];
 
 try {
@@ -37,6 +38,15 @@ try {
   $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
   foreach ($productos as $p) {
     $urls[] = $base_url . '/producto.php?id=' . (int)$p['id'];
+  }
+} catch (Exception $e) {
+}
+
+try {
+  $stmt = $pdo->query("SELECT slug FROM ecommerce_blog_articulos WHERE estado = 'publicado'");
+  $articulos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($articulos as $a) {
+    $urls[] = $base_url . '/blog_articulo.php?slug=' . urlencode($a['slug']);
   }
 } catch (Exception $e) {
 }

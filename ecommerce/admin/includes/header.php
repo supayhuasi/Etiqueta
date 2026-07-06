@@ -2037,6 +2037,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                         <?php if ($can_access('empresa')): ?>
                         <a href="<?= $admin_url ?>empresa.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empresa.php' ? 'active' : '' ?>"><i class="bi bi-info-circle"></i> Información</a>
                         <?php endif; ?>
+                        <?php if ($role === 'admin'): ?>
+                        <a href="<?= $admin_url ?>menu_publico_configuracion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'menu_publico_configuracion.php' ? 'active' : '' ?>"><i class="bi bi-list-ul"></i> Menú Sitio Web</a>
+                        <a href="<?= $admin_url ?>menu_configuracion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'menu_configuracion.php' ? 'active' : '' ?>"><i class="bi bi-menu-button-wide"></i> Menú Panel Admin</a>
+                        <?php endif; ?>
                         <?php if ($can_access('trabajos')): ?>
                         <a href="<?= $admin_url ?>trabajos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'trabajos.php' ? 'active' : '' ?>"><i class="bi bi-images"></i> Trabajos Realizados</a>
                         <?php endif; ?>

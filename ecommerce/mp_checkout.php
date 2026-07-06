@@ -62,7 +62,7 @@ $pedido_id = (int)$pedido['id'];
                     <div class="mb-3">
                         <p class="mb-1"><strong>Número de pedido:</strong> <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
                         <p class="mb-1"><strong>Total a pagar:</strong> <span class="text-success">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
-                        <p class="text-muted mb-0">Completa los datos de tu tarjeta para procesar el pago directamente con la API de Mercado Pago.</p>
+                        <p class="text-muted mb-0">Completa los datos de tu tarjeta para procesar el pago directamente con Mercado Pago.</p>
                     </div>
 
                     <div id="error-container" class="alert alert-danger" style="display:none;"></div>

@@ -96,7 +96,9 @@ $page_titles = [
   'contacto.php' => 'Contacto',
   'nosotros.php' => 'Nosotros',
   'distribuidores.php' => 'Distribuidores',
-  'mis_pedidos.php' => 'Mis pedidos'
+  'mis_pedidos.php' => 'Mis pedidos',
+  'blog.php' => 'Blog',
+  'blog_articulo.php' => 'Blog'
 ];
 
 $site_name = $empresa_menu['nombre'] ?? 'Tucu Roller';
@@ -470,6 +472,9 @@ $seo_robots = isset($seo_robots) && $seo_robots ? $seo_robots : 'index,follow';
         </li>
         <li class="nav-item">
           <a class="nav-link" href="faq.php">FAQ</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="blog.php">Blog</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="distribuidores.php">Distribuidores</a>

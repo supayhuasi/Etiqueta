@@ -208,7 +208,8 @@ try {
             ['Nosotros', 'nosotros.php', 'bi bi-info-circle', 2, 1],
             ['Contacto', 'contacto.php', 'bi bi-envelope', 3, 1],
             ['FAQ', 'faq.php', 'bi bi-question-circle', 4, 1],
-            ['Distribuidores', 'distribuidores.php', 'bi bi-truck', 5, 1],
+            ['Blog', 'blog.php', 'bi bi-journal-text', 5, 1],
+            ['Distribuidores', 'distribuidores.php', 'bi bi-truck', 6, 1],
         ];
 
         $stmt = $pdo->prepare("
