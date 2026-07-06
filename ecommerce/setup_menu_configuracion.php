@@ -58,6 +58,35 @@ try {
         $messages[] = "ℹ Tabla 'ecommerce_menu_items' ya existe.";
     }
 
+    // Crear tabla de menú público
+    $stmt = $pdo->query("SHOW TABLES LIKE 'ecommerce_menu_publico'");
+    $publico_table_exists = $stmt->rowCount() > 0;
+
+    if (!$publico_table_exists) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS ecommerce_menu_publico (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                titulo VARCHAR(100) NOT NULL,
+                url VARCHAR(255),
+                icono VARCHAR(100),
+                orden INT DEFAULT 0,
+                activo BOOLEAN DEFAULT 1,
+                mostrar_en_navbar BOOLEAN DEFAULT 1,
+                es_dropdown BOOLEAN DEFAULT 0,
+                padre_id INT,
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (padre_id) REFERENCES ecommerce_menu_publico(id) ON DELETE CASCADE,
+                INDEX idx_orden (orden),
+                INDEX idx_activo (activo),
+                INDEX idx_padre (padre_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+        $messages[] = "✓ Tabla 'ecommerce_menu_publico' creada correctamente.";
+    } else {
+        $messages[] = "ℹ Tabla 'ecommerce_menu_publico' ya existe.";
+    }
+
     // Insertar configuraciones por defecto si no existen
     $stmt = $pdo->query("SELECT COUNT(*) as count FROM ecommerce_menu_configuracion");
     $result = $stmt->fetch();
@@ -166,6 +195,35 @@ try {
         $messages[] = "✓ Items de menú por defecto insertados.";
     } else {
         $messages[] = "ℹ Los items de menú ya existen.";
+    }
+
+    // Insertar menú público por defecto
+    $stmt = $pdo->query("SELECT COUNT(*) as count FROM ecommerce_menu_publico");
+    $result = $stmt->fetch();
+
+    if ($result['count'] == 0) {
+        $default_public_menu = [
+            ['Inicio', 'index.php', 'bi bi-house-door', 0, 1],
+            ['Tienda', 'tienda.php', 'bi bi-shop', 1, 1],
+            ['Nosotros', 'nosotros.php', 'bi bi-info-circle', 2, 1],
+            ['Contacto', 'contacto.php', 'bi bi-envelope', 3, 1],
+            ['FAQ', 'faq.php', 'bi bi-question-circle', 4, 1],
+            ['Distribuidores', 'distribuidores.php', 'bi bi-truck', 5, 1],
+        ];
+
+        $stmt = $pdo->prepare("
+            INSERT INTO ecommerce_menu_publico 
+            (titulo, url, icono, orden, activo, mostrar_en_navbar, es_dropdown, padre_id) 
+            VALUES (?, ?, ?, ?, ?, 1, 0, NULL)
+        ");
+
+        foreach ($default_public_menu as $item) {
+            $stmt->execute($item);
+        }
+
+        $messages[] = "✓ Items del menú público por defecto insertados.";
+    } else {
+        $messages[] = "ℹ Los items del menú público ya existen.";
     }
 
 } catch (PDOException $e) {
