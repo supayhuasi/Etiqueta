@@ -213,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imagen_actual = $articulo_edit['imagen'] ?? null;
             $imagen_guardada = $imagen_actual;
             if (!empty($_FILES['imagen']['name'])) {
-                $upload_dir = dirname(__DIR__, 2) . '/uploads/blog';
+                $upload_dir = dirname(__DIR__) . '/uploads/blog';
                 if (!is_dir($upload_dir)) {
                     @mkdir($upload_dir, 0775, true);
                 }
@@ -298,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare('DELETE FROM ecommerce_blog_articulos WHERE id = ?');
                 $stmt->execute([$id]);
                 if ($imagen_borrar !== '') {
-                    $ruta = dirname(__DIR__, 2) . '/uploads/blog/' . $imagen_borrar;
+                    $ruta = dirname(__DIR__) . '/uploads/blog/' . $imagen_borrar;
                     if (is_file($ruta)) {
                         @unlink($ruta);
                     }

@@ -32,12 +32,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "La sección y el label son requeridos.";
         } else {
             try {
+                $orden = (int)$pdo->query("SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_configuracion")->fetchColumn();
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_menu_configuracion 
+                    INSERT INTO ecommerce_menu_configuracion
                     (seccion, label, icono, titulo, permisos, orden, activo)
-                    VALUES (?, ?, ?, ?, '[]', (SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_configuracion), 1)
+                    VALUES (?, ?, ?, ?, '[]', ?, 1)
                 ");
-                $stmt->execute([$seccion, $label, $icono, $titulo]);
+                $stmt->execute([$seccion, $label, $icono, $titulo, $orden]);
                 $mensaje = "Sección agregada correctamente.";
                 header("Location: " . $_SERVER['PHP_SELF']);
                 exit;

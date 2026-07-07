@@ -32,12 +32,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "El título es requerido.";
         } else {
             try {
+                $orden = (int)$pdo->query("SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_publico WHERE padre_id IS NULL")->fetchColumn();
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_menu_publico 
+                    INSERT INTO ecommerce_menu_publico
                     (titulo, url, icono, orden, activo, mostrar_en_navbar, es_dropdown, padre_id)
-                    VALUES (?, ?, ?, (SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_publico WHERE padre_id IS NULL), 1, 1, 0, NULL)
+                    VALUES (?, ?, ?, ?, 1, 1, 0, NULL)
                 ");
-                $stmt->execute([$titulo, $url, $icono]);
+                $stmt->execute([$titulo, $url, $icono, $orden]);
                 $mensaje = "Item agregado correctamente.";
                 header("Location: " . $_SERVER['PHP_SELF']);
                 exit;

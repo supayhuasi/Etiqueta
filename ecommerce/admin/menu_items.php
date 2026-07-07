@@ -49,12 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "El título y URL son requeridos.";
         } else {
             try {
+                $stmt_orden = $pdo->prepare("SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_items WHERE seccion_id = ?");
+                $stmt_orden->execute([$seccion_id]);
+                $orden = (int)$stmt_orden->fetchColumn();
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_menu_items 
+                    INSERT INTO ecommerce_menu_items
                     (seccion_id, titulo, url, icono, permiso, orden, activo)
-                    VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(orden), 0) + 1 FROM ecommerce_menu_items WHERE seccion_id = ?), 1)
+                    VALUES (?, ?, ?, ?, ?, ?, 1)
                 ");
-                $stmt->execute([$seccion_id, $titulo, $url, $icono, $permiso ?: null, $seccion_id]);
+                $stmt->execute([$seccion_id, $titulo, $url, $icono, $permiso ?: null, $orden]);
                 $mensaje = "Item agregado correctamente.";
                 header("Location: " . $_SERVER['PHP_SELF'] . "?seccion_id=" . $seccion_id);
                 exit;
