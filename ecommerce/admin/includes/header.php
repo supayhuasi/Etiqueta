@@ -486,10 +486,15 @@ $notificaciones_mensajes = [];
 $notificaciones_mensajes_total = 0;
 $notificaciones_pedidos_recientes = [];
 $notificaciones_pedidos_recientes_total = 0;
+$notificaciones_pedidos_entregados = [];
+$notificaciones_pedidos_entregados_total = 0;
 $notificaciones_pagos_recientes = [];
 $notificaciones_pagos_recientes_total = 0;
 $notificaciones_cotizaciones_altas = [];
 $notificaciones_cotizaciones_altas_total = 0;
+$notificaciones_gastos_por_vencer = [];
+$notificaciones_gastos_por_vencer_total = 0;
+$notificaciones_gasto_vencimiento_dias = 5;
 $notificacion_prueba_manual = [];
 $notificacion_prueba_manual_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
@@ -893,6 +898,44 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- Sección 6b: Pedidos entregados (últimas 24h) ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'ecommerce_pedidos')
+        && admin_column_exists($pdo, 'ecommerce_pedidos', 'fecha_entregado')
+    ) {
+        try {
+            $sqlPedidosEntregadosCount = "
+                SELECT COUNT(*)
+                FROM ecommerce_pedidos p
+                WHERE p.fecha_entregado IS NOT NULL
+                  AND p.fecha_entregado >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+            ";
+            $notificaciones_pedidos_entregados_total = (int)$pdo->query($sqlPedidosEntregadosCount)->fetchColumn();
+
+            if ($notificaciones_pedidos_entregados_total > 0) {
+                $sqlPedidosEntregadosLista = "
+                    SELECT
+                        p.id,
+                        p.numero_pedido,
+                        p.total,
+                        p.fecha_entregado AS fecha_evento,
+                        COALESCE(NULLIF(TRIM(c.nombre), ''), 'Cliente sin nombre') AS cliente_nombre
+                    FROM ecommerce_pedidos p
+                    LEFT JOIN ecommerce_clientes c ON c.id = p.cliente_id
+                    WHERE p.fecha_entregado IS NOT NULL
+                      AND p.fecha_entregado >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                    ORDER BY p.fecha_entregado DESC, p.id DESC
+                    LIMIT 6
+                ";
+                $notificaciones_pedidos_entregados = $pdo->query($sqlPedidosEntregadosLista)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        } catch (Throwable $e) {
+            error_log('Notif pedidos entregados error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[pedidos_entregados] ' . $e->getMessage();
+        }
+    }
+
     // --- Sección 7: Pagos cargados (últimas 24h) ---
     if ($notificaciones_permiso_admin && admin_table_exists($pdo, 'ecommerce_pedido_pagos')) {
         try {
@@ -1039,6 +1082,52 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- Sección 9: Gastos por vencer ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'gastos')
+        && admin_column_exists($pdo, 'gastos', 'fecha_vencimiento')
+    ) {
+        try {
+            $sqlGastosVencerCount = "
+                SELECT COUNT(*)
+                FROM gastos g
+                LEFT JOIN estados_gastos e ON e.id = g.estado_gasto_id
+                WHERE g.fecha_vencimiento IS NOT NULL
+                  AND g.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+                  AND LOWER(COALESCE(e.nombre, '')) <> 'pagado'
+            ";
+            $stmtGastosVencerCount = $pdo->prepare($sqlGastosVencerCount);
+            $stmtGastosVencerCount->execute([$notificaciones_gasto_vencimiento_dias]);
+            $notificaciones_gastos_por_vencer_total = (int)$stmtGastosVencerCount->fetchColumn();
+
+            if ($notificaciones_gastos_por_vencer_total > 0) {
+                $sqlGastosVencerLista = "
+                    SELECT
+                        g.id,
+                        g.numero_gasto,
+                        g.descripcion,
+                        g.monto,
+                        g.fecha_vencimiento,
+                        DATEDIFF(g.fecha_vencimiento, CURDATE()) AS dias_para_vencer
+                    FROM gastos g
+                    LEFT JOIN estados_gastos e ON e.id = g.estado_gasto_id
+                    WHERE g.fecha_vencimiento IS NOT NULL
+                      AND g.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+                      AND LOWER(COALESCE(e.nombre, '')) <> 'pagado'
+                    ORDER BY g.fecha_vencimiento ASC
+                    LIMIT 8
+                ";
+                $stmtGastosVencerLista = $pdo->prepare($sqlGastosVencerLista);
+                $stmtGastosVencerLista->execute([$notificaciones_gasto_vencimiento_dias]);
+                $notificaciones_gastos_por_vencer = $stmtGastosVencerLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        } catch (Throwable $e) {
+            error_log('Notif gastos por vencer error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[gastos_vencer] ' . $e->getMessage();
+        }
+    }
+
     // --- Sección: Tareas personales pendientes del usuario actual ---
     if (
         admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
@@ -1101,8 +1190,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_sin_tareas_total
             + (int)$notificaciones_mensajes_total
             + (int)$notificaciones_pedidos_recientes_total
+            + (int)$notificaciones_pedidos_entregados_total
             + (int)$notificaciones_pagos_recientes_total
             + (int)$notificaciones_cotizaciones_altas_total
+            + (int)$notificaciones_gastos_por_vencer_total
             + (int)$notificacion_prueba_manual_total;
     }
     
@@ -1733,6 +1824,21 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pedidos</a>
                         <?php endif; ?>
 
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_entregados_total > 0): ?>
+                            <div class="notif-section-title">Pedidos entregados (ultimas 24h) (<?= (int)$notificaciones_pedidos_entregados_total ?>)</div>
+                            <?php foreach ($notificaciones_pedidos_entregados as $entregaNotif): ?>
+                                <a class="notif-item" href="<?= $admin_url ?>pedidos_detalle.php?pedido_id=<?= (int)($entregaNotif['id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($entregaNotif['numero_pedido'] ?? ('Pedido #' . (int)($entregaNotif['id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($entregaNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
+                                    <div class="small text-success">
+                                        Total: $<?= number_format((float)($entregaNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        · Entregado <?= !empty($entregaNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$entregaNotif['fecha_evento']))) : '-' ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>pedidos.php">Ver pedidos</a>
+                        <?php endif; ?>
+
                         <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
                             <div class="notif-section-title">Pagos cargados (ultimas 24h) (<?= (int)$notificaciones_pagos_recientes_total ?>)</div>
                             <?php foreach ($notificaciones_pagos_recientes as $pagoNotif): ?>
@@ -1817,6 +1923,28 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                 </a>
                             <?php endforeach; ?>
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>cotizaciones.php">Ver cotizaciones</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_gastos_por_vencer_total > 0): ?>
+                            <div class="notif-section-title">Gastos por vencer (<?= (int)$notificaciones_gastos_por_vencer_total ?>)</div>
+                            <?php foreach ($notificaciones_gastos_por_vencer as $gastoNotif): ?>
+                                <?php $dias_para_vencer = (int)($gastoNotif['dias_para_vencer'] ?? 0); ?>
+                                <a class="notif-item" href="<?= $admin_url ?>gastos/gastos_editar.php?id=<?= (int)($gastoNotif['id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($gastoNotif['numero_gasto'] ?? ('Gasto #' . (int)($gastoNotif['id'] ?? 0))) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($gastoNotif['descripcion'] ?? '') ?></div>
+                                    <div class="small <?= $dias_para_vencer < 0 ? 'text-danger fw-bold' : 'text-warning' ?>">
+                                        Monto: $<?= number_format((float)($gastoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        · <?php if ($dias_para_vencer < 0): ?>
+                                            Vencido el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$gastoNotif['fecha_vencimiento']))) ?>
+                                        <?php elseif ($dias_para_vencer === 0): ?>
+                                            Vence hoy
+                                        <?php else: ?>
+                                            Vence el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$gastoNotif['fecha_vencimiento']))) ?> (<?= $dias_para_vencer ?> día(s))
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>gastos/gastos.php">Ver gastos</a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_atrasos_total > 0): ?>
@@ -1910,42 +2038,54 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     </div>
 </div>
 
-<?php if (($notificaciones_permiso_produccion && $notificaciones_atrasos_total > 0) || ($notificaciones_permiso_admin && ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tareas_recientes_total > 0 || $notificaciones_tardanzas_total > 0 || $notificaciones_sin_tareas_total > 0))): ?>
+<?php
+$notif_strip_parts = [];
+if ($notificaciones_permiso_admin && $notificaciones_mensajes_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_mensajes_total . ' mensaje(s) sin leer';
+}
+if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_pedidos_recientes_total . ' pedido(s) nuevo(s) (ultimas 24h)';
+}
+if ($notificaciones_permiso_admin && $notificaciones_pedidos_entregados_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_pedidos_entregados_total . ' pedido(s) entregado(s) (ultimas 24h)';
+}
+if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_pagos_recientes_total . ' pago(s) cargado(s) (ultimas 24h)';
+}
+if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_cotizaciones_altas_total . ' cotización(es) alta(s) (>$' . number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') . ')';
+}
+if ($notificaciones_permiso_admin && $notificaciones_gastos_por_vencer_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_gastos_por_vencer_total . ' gasto(s) por vencer';
+}
+if ($notificaciones_atrasos_total > 0) {
+    $notif_strip_atrasos = (int)$notificaciones_atrasos_total . ' orden(es) de producción atrasada(s)';
+    if ($notificaciones_atrasos_clientes_texto !== '') {
+        $notif_strip_atrasos .= ' · Clientes: ' . $notificaciones_atrasos_clientes_texto;
+    }
+    $notif_strip_parts[] = $notif_strip_atrasos;
+}
+if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0) {
+    $notif_strip_tareas_venc = (int)$notificaciones_tareas_vencidas_total . ' tarea(s) manual(es) vencida(s)';
+    if ($notificaciones_tareas_vencidas_criticas_total > 0) {
+        $notif_strip_tareas_venc .= ' (' . (int)$notificaciones_tareas_vencidas_criticas_total . ' crítica(s))';
+    }
+    $notif_strip_parts[] = $notif_strip_tareas_venc;
+}
+if ($notificaciones_permiso_admin && $notificaciones_tareas_recientes_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_tareas_recientes_total . ' tarea(s) asignada(s) recientemente';
+}
+if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_tardanzas_total . ' llegada(s) tarde hoy';
+}
+if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_sin_tareas_total . ' usuario(s) sin tarea activa';
+}
+?>
+<?php if (!empty($notif_strip_parts)): ?>
     <div class="notif-alert-strip">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_mensajes_total > 0): ?>
-            <?= (int)$notificaciones_mensajes_total ?> mensaje(s) sin leer
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_pedidos_recientes_total > 0): ?>
-            <?= $notificaciones_mensajes_total > 0 ? ' · ' : '' ?><?= (int)$notificaciones_pedidos_recientes_total ?> pedido(s) nuevo(s) (ultimas 24h)
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_pagos_recientes_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_pagos_recientes_total ?> pago(s) cargado(s) (ultimas 24h)
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_cotizaciones_altas_total ?> cotización(es) alta(s) (>$<?= number_format($notificaciones_cotizacion_alta_monto, 0, ',', '.') ?>)
-        <?php endif; ?>
-        <?php if ($notificaciones_atrasos_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_atrasos_total ?> orden(es) de producción atrasada(s)
-            <?php if ($notificaciones_atrasos_clientes_texto !== ''): ?>
-                · Clientes: <?= htmlspecialchars($notificaciones_atrasos_clientes_texto) ?>
-            <?php endif; ?>
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_vencidas_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tareas_vencidas_total ?> tarea(s) manual(es) vencida(s)
-            <?php if ($notificaciones_tareas_vencidas_criticas_total > 0): ?>
-                (<?= (int)$notificaciones_tareas_vencidas_criticas_total ?> crítica(s))
-            <?php endif; ?>
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_tareas_recientes_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tareas_recientes_total ?> tarea(s) asignada(s) recientemente
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_tardanzas_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tareas_recientes_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_tardanzas_total ?> llegada(s) tarde hoy
-        <?php endif; ?>
-        <?php if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0): ?>
-            <?= ($notificaciones_mensajes_total > 0 || $notificaciones_pedidos_recientes_total > 0 || $notificaciones_pagos_recientes_total > 0 || $notificaciones_cotizaciones_altas_total > 0 || $notificaciones_atrasos_total > 0 || $notificaciones_tareas_vencidas_total > 0 || $notificaciones_tareas_recientes_total > 0 || $notificaciones_tardanzas_total > 0) ? ' · ' : '' ?><?= (int)$notificaciones_sin_tareas_total ?> usuario(s) sin tarea activa
-        <?php endif; ?>
+        <?= implode(' · ', array_map('htmlspecialchars', $notif_strip_parts)) ?>
     </div>
 <?php endif; ?>
 
@@ -2253,4 +2393,4 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         <!-- Main Content -->
         <div class="col-md-10 main-content">
 
-<script src="/ecommerce/admin/assets/js/admin-sidebar-theme.js?v=1"></script>
+<script src="<?= $admin_url ?>assets/js/admin-sidebar-theme.js?v=1"></script>

@@ -53,6 +53,9 @@ try {
             break;
         }
     }
+    if (!in_array('fecha_entregado', $cols_pedidos_owner, true)) {
+        $pdo->exec("ALTER TABLE ecommerce_pedidos ADD COLUMN fecha_entregado DATETIME NULL DEFAULT NULL AFTER estado");
+    }
 } catch (Throwable $e) {
     $pedido_owner_col = '';
 }
@@ -81,13 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pedido_id'], $_POST['
                 if ($pedido_owner_col === '' || $usuario_id_actual <= 0) {
                     throw new Exception('No tenes permisos para cambiar estados de pedidos en esta instalacion.');
                 }
-                $stmt_upd = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ? AND `{$pedido_owner_col}` = ?");
-                $stmt_upd->execute([$nuevo_estado, $pedido_id, $usuario_id_actual]);
+                $stmt_upd = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ?, fecha_entregado = CASE WHEN ? = 'entregado' THEN NOW() ELSE NULL END WHERE id = ? AND `{$pedido_owner_col}` = ?");
+                $stmt_upd->execute([$nuevo_estado, $nuevo_estado, $pedido_id, $usuario_id_actual]);
                 if ($stmt_upd->rowCount() === 0) {
                     throw new Exception('No tenes permisos para cambiar este pedido.');
                 }
             } else {
-                $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ? WHERE id = ?")->execute([$nuevo_estado, $pedido_id]);
+                $pdo->prepare("UPDATE ecommerce_pedidos SET estado = ?, fecha_entregado = CASE WHEN ? = 'entregado' THEN NOW() ELSE NULL END WHERE id = ?")->execute([$nuevo_estado, $nuevo_estado, $pedido_id]);
             }
 
             if ($nuevo_estado === 'confirmado') {

@@ -24,6 +24,11 @@ if (!function_exists('ensureGastosBudgetSchema')) {
             $pdo->exec("ALTER TABLE tipos_gastos ADD COLUMN bloquear_exceso TINYINT(1) NOT NULL DEFAULT 1 AFTER porcentaje_alerta");
         }
 
+        $colsGastos = $pdo->query("SHOW COLUMNS FROM gastos")->fetchAll(PDO::FETCH_COLUMN, 0);
+        if (!in_array('fecha_vencimiento', $colsGastos, true)) {
+            $pdo->exec("ALTER TABLE gastos ADD COLUMN fecha_vencimiento DATE NULL DEFAULT NULL AFTER fecha");
+        }
+
         $tiposDefault = [
             ['Servicios', 'Servicios profesionales', '#007BFF'],
             ['Insumos', 'Materiales e insumos', '#28A745'],

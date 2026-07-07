@@ -44,6 +44,7 @@ $alerta_presupuesto = null;
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha = $_POST['fecha'] ?? '';
+    $fecha_vencimiento = trim($_POST['fecha_vencimiento'] ?? '') ?: null;
     $tipo_gasto_id = $_POST['tipo_gasto_id'] ?? 0;
     $estado_gasto_id = $_POST['estado_gasto_id'] ?? 0;
     $descripcion = $_POST['descripcion'] ?? '';
@@ -110,11 +111,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare("
                 UPDATE gastos
-                SET fecha = ?, tipo_gasto_id = ?, empleado_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?,
+                SET fecha = ?, fecha_vencimiento = ?, tipo_gasto_id = ?, empleado_id = ?, estado_gasto_id = ?, descripcion = ?, monto = ?,
                     observaciones = ?, archivo = ?, cuenta_id = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
+            $stmt->execute([$fecha, $fecha_vencimiento, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
                            $observaciones, $archivo, $cuenta_id, $id]);
             
             // Si el nuevo estado es "Pagado", registrar en flujo de caja
@@ -209,16 +210,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="card-body">
                     <form method="POST" enctype="multipart/form-data">
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label for="fecha" class="form-label">Fecha *</label>
-                                <input type="date" class="form-control" id="fecha" name="fecha" 
+                                <input type="date" class="form-control" id="fecha" name="fecha"
                                        value="<?= $gasto['fecha'] ?>" required>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <label for="fecha_vencimiento" class="form-label">Fecha de Vencimiento</label>
+                                <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento"
+                                       value="<?= htmlspecialchars($gasto['fecha_vencimiento'] ?? '') ?>">
+                                <small class="text-muted">Opcional. Se usa para avisar antes de que venza.</small>
+                            </div>
+                            <div class="col-md-4 mb-3">
                                 <label for="monto" class="form-label">Monto *</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
-                                    <input type="number" class="form-control" id="monto" name="monto" 
+                                    <input type="number" class="form-control" id="monto" name="monto"
                                            value="<?= $gasto['monto'] ?>" step="0.01" min="0" required>
                                 </div>
                             </div>

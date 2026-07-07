@@ -34,6 +34,7 @@ $flujo_error = null;
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha = $_POST['fecha'] ?? '';
+    $fecha_vencimiento = trim($_POST['fecha_vencimiento'] ?? '') ?: null;
     $tipo_gasto_id = $_POST['tipo_gasto_id'] ?? 0;
     $estado_gasto_id = $_POST['estado_gasto_id'] ?? 0;
     $descripcion = $_POST['descripcion'] ?? '';
@@ -111,11 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $numero_gasto = "G-" . str_pad($ultimoNumero + 1, 6, '0', STR_PAD_LEFT);
 
                 $stmt = $pdo->prepare("
-                    INSERT INTO gastos (numero_gasto, fecha, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto,
+                    INSERT INTO gastos (numero_gasto, fecha, fecha_vencimiento, tipo_gasto_id, empleado_id, estado_gasto_id, descripcion, monto,
                                        observaciones, archivo, cuenta_id, usuario_registra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$numero_gasto, $fecha, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
+                $stmt->execute([$numero_gasto, $fecha, $fecha_vencimiento, $tipo_gasto_id, $empleado_id, $estado_gasto_id, $descripcion, $monto,
                                $observaciones, $archivo, $cuenta_id, $_SESSION['user']['id']]);
                 $gasto_id = $pdo->lastInsertId();
             
@@ -206,11 +207,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="card-body">
                     <form method="POST" enctype="multipart/form-data">
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label for="fecha" class="form-label">Fecha *</label>
                                 <input type="date" class="form-control" id="fecha" name="fecha" required>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <label for="fecha_vencimiento" class="form-label">Fecha de Vencimiento</label>
+                                <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento">
+                                <small class="text-muted">Opcional. Se usa para avisar antes de que venza.</small>
+                            </div>
+                            <div class="col-md-4 mb-3">
                                 <label for="monto" class="form-label">Monto *</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
