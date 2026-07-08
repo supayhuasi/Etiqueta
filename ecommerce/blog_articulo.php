@@ -46,9 +46,11 @@ if ($articulo) {
 require 'includes/header.php';
 require 'includes/blog_publico_helper.php';
 require 'includes/precios_publico.php';
+require 'includes/banners_publico_helper.php';
 
 $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
+$banners_sidebar = $articulo ? obtener_banners_zona($pdo, 'blog_sidebar') : [];
 ?>
 
 <div class="container py-5">
@@ -57,6 +59,8 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
         <p class="text-muted">El artículo que buscás no existe o ya no está disponible.</p>
         <a href="blog.php" class="btn btn-outline-primary">Volver al blog</a>
     <?php else: ?>
+    <div class="row">
+        <div class="<?= !empty($banners_sidebar) ? 'col-lg-9' : 'col-12' ?>">
         <?php $imagen_url = blog_publico_imagen_url($articulo['imagen'], $public_base); ?>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
@@ -65,27 +69,8 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
             </ol>
         </nav>
 
-        <article class="mx-auto" style="max-width: 800px;">
-            <h1><?= htmlspecialchars($articulo['titulo']) ?></h1>
-            <?php if (!empty($articulo['publicado_en'])): ?>
-                <p class="text-muted small">Publicado el <?= htmlspecialchars(date('d/m/Y', strtotime($articulo['publicado_en']))) ?></p>
-            <?php endif; ?>
-
-            <?php if ($imagen_url): ?>
-                <img src="<?= htmlspecialchars($imagen_url) ?>" alt="<?= htmlspecialchars($articulo['titulo']) ?>" class="img-fluid rounded mb-4">
-            <?php endif; ?>
-
-            <div class="blog-contenido">
-                <?= $articulo['contenido'] ?>
-            </div>
-
-            <div class="mt-5">
-                <a href="blog.php" class="btn btn-outline-primary">← Volver al blog</a>
-            </div>
-        </article>
-
         <?php if (!empty($productos_sugeridos)): ?>
-            <section class="mx-auto mt-5" style="max-width: 1140px;">
+            <section class="mx-auto mb-5" style="max-width: 1140px;">
                 <h3 class="text-center mb-4">Quizás te interese</h3>
                 <div class="row">
                     <?php foreach ($productos_sugeridos as $producto): ?>
@@ -141,6 +126,43 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
                 </div>
             </section>
         <?php endif; ?>
+
+        <article class="mx-auto" style="max-width: 800px;">
+            <h1><?= htmlspecialchars($articulo['titulo']) ?></h1>
+            <?php if (!empty($articulo['publicado_en'])): ?>
+                <p class="text-muted small">Publicado el <?= htmlspecialchars(date('d/m/Y', strtotime($articulo['publicado_en']))) ?></p>
+            <?php endif; ?>
+
+            <?php if ($imagen_url): ?>
+                <img src="<?= htmlspecialchars($imagen_url) ?>" alt="<?= htmlspecialchars($articulo['titulo']) ?>" class="img-fluid rounded mb-4">
+            <?php endif; ?>
+
+            <div class="blog-contenido">
+                <?= $articulo['contenido'] ?>
+            </div>
+
+            <div class="mt-5">
+                <a href="blog.php" class="btn btn-outline-primary">← Volver al blog</a>
+            </div>
+        </article>
+        </div>
+
+        <?php if (!empty($banners_sidebar)): ?>
+            <div class="col-lg-3">
+                <?php foreach ($banners_sidebar as $banner): ?>
+                    <div class="card mb-4">
+                        <?php if (!empty($banner['enlace'])): ?>
+                            <a href="<?= htmlspecialchars($banner['enlace']) ?>">
+                                <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>">
+                            </a>
+                        <?php else: ?>
+                            <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>">
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
     <?php endif; ?>
 </div>
 

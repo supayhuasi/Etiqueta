@@ -2,6 +2,9 @@
 require 'config.php';
 require 'includes/header.php';
 require 'includes/precios_publico.php';
+require 'includes/banners_publico_helper.php';
+
+$banners_sidebar = obtener_banners_zona($pdo, 'tienda_sidebar');
 
 // Obtener slideshow activos (Tienda)
 $stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 AND ubicacion = 'tienda' ORDER BY orden ASC");
@@ -145,6 +148,20 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php endforeach; ?>
                 </div>
             </div>
+
+            <?php if (!empty($banners_sidebar)): ?>
+                <?php foreach ($banners_sidebar as $banner): ?>
+                    <div class="card mt-4">
+                        <?php if (!empty($banner['enlace'])): ?>
+                            <a href="<?= htmlspecialchars($banner['enlace']) ?>">
+                                <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>">
+                            </a>
+                        <?php else: ?>
+                            <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>">
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
 
         <!-- Grid de productos -->

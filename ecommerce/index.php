@@ -2,9 +2,12 @@
 require 'config.php';
 require 'includes/header.php';
 require 'includes/precios_publico.php';
+require 'includes/banners_publico_helper.php';
 
 // Determinar la ruta correcta para las imágenes
 $image_path = 'uploads/';
+
+$banners_inicio = obtener_banners_zona($pdo, 'inicio');
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
@@ -297,6 +300,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
         </div>
     </div>
 </section>
+
+<!-- Banners promocionales -->
+<?php if (!empty($banners_inicio)): ?>
+<section class="py-5">
+    <div class="container">
+        <div class="row">
+            <?php foreach ($banners_inicio as $banner): ?>
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <?php if (!empty($banner['enlace'])): ?>
+                            <a href="<?= htmlspecialchars($banner['enlace']) ?>">
+                                <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>" style="height: 220px; object-fit: cover;">
+                            </a>
+                        <?php else: ?>
+                            <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>" style="height: 220px; object-fit: cover;">
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <!-- Trabajos realizados -->
 <?php if (!empty($trabajos)): ?>

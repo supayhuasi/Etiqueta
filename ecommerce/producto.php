@@ -2,6 +2,7 @@
 require 'config.php';
 require 'includes/header.php';
 require 'includes/precios_publico.php';
+require 'includes/banners_publico_helper.php';
 
 $producto_id = $_GET['id'] ?? 0;
 
@@ -40,6 +41,8 @@ if (!$producto) {
 }
 
 $tipo_precio = strtolower(trim($producto['tipo_precio'] ?? 'fijo'));
+
+$banners_producto = obtener_banners_zona($pdo, 'producto_detalle');
 
 // Obtener imágenes del producto
 $stmt = $pdo->prepare("
@@ -643,6 +646,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
+
+    <?php if (!empty($banners_producto)): ?>
+        <div class="row mt-5">
+            <?php foreach ($banners_producto as $banner): ?>
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <?php if (!empty($banner['enlace'])): ?>
+                            <a href="<?= htmlspecialchars($banner['enlace']) ?>">
+                                <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>" style="height: 180px; object-fit: cover;">
+                            </a>
+                        <?php else: ?>
+                            <img src="<?= $image_path . htmlspecialchars($banner['imagen']) ?>" class="card-img-top" alt="<?= htmlspecialchars($banner['titulo']) ?>" style="height: 180px; object-fit: cover;">
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 
 </div>
 
