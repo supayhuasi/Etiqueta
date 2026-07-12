@@ -5,15 +5,21 @@ require 'includes/google_oauth.php';
 
 $empresa = null;
 try {
-    $stmt = $pdo->query("SELECT nombre, logo FROM ecommerce_empresa LIMIT 1");
+    $stmt = $pdo->query("SELECT nombre, logo, dominio_alt, logo_alt FROM ecommerce_empresa LIMIT 1");
     $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $empresa = null;
 }
 
+// Rebranding por dominio: mismo login, logo según el dominio de acceso.
+$host_actual = strtolower(preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? ''));
+$host_actual = preg_replace('#^www\.#', '', $host_actual);
+$dominio_alt_normalizado = strtolower(preg_replace('#^www\.#', '', trim((string)($empresa['dominio_alt'] ?? ''))));
+$usar_marca_alt = $dominio_alt_normalizado !== '' && $host_actual === $dominio_alt_normalizado && !empty($empresa['logo_alt']);
+
 $logo_src = null;
-if (!empty($empresa['logo'])) {
-    $logo_filename = $empresa['logo'];
+$logo_filename = $usar_marca_alt ? $empresa['logo_alt'] : ($empresa['logo'] ?? null);
+if (!empty($logo_filename)) {
     $logo_local_path = __DIR__ . '/uploads/' . $logo_filename; // ecommerce/uploads
     $logo_root_path = __DIR__ . '/../uploads/' . $logo_filename; // raiz /uploads
 

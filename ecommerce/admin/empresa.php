@@ -39,6 +39,14 @@ try {
     if ($col->rowCount() === 0) {
         $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN marquesina_text_color VARCHAR(20) NULL AFTER marquesina_bg");
     }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'dominio_alt'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN dominio_alt VARCHAR(255) NULL AFTER favicon");
+    }
+    $col = $pdo->query("SHOW COLUMNS FROM ecommerce_empresa LIKE 'logo_alt'");
+    if ($col->rowCount() === 0) {
+        $pdo->exec("ALTER TABLE ecommerce_empresa ADD COLUMN logo_alt VARCHAR(255) NULL AFTER dominio_alt");
+    }
 } catch (Exception $e) {
     // Ignorar errores de migración
 }
@@ -82,7 +90,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $responsabilidad_fiscal = $_POST['responsabilidad_fiscal'] ?? '';
     $iibb = $_POST['iibb'] ?? '';
     $regimen_iva = $_POST['regimen_iva'] ?? '';
-    
+    $dominio_alt = trim(strtolower((string)($_POST['dominio_alt'] ?? '')));
+    $dominio_alt = preg_replace('#^https?://#', '', $dominio_alt);
+    $dominio_alt = preg_replace('#^www\.#', '', $dominio_alt);
+    $dominio_alt = rtrim($dominio_alt, '/');
+
     if (empty($nombre) || empty($email)) {
         $error = "Nombre y email son obligatorios";
     } else {
@@ -90,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Procesar logo y favicon
             $logo = $empresa['logo'] ?? null;
             $favicon = $empresa['favicon'] ?? null;
+            $logo_alt = $empresa['logo_alt'] ?? null;
             if (isset($_FILES['logo']) && $_FILES['logo']['error'] == 0) {
                 $tipos_permitidos = ['jpg', 'jpeg', 'png', 'gif'];
                 $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
@@ -107,6 +120,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!move_uploaded_file($_FILES['logo']['tmp_name'], $dir_logo . $logo)) {
                         $error = "Error al subir la imagen";
                         $logo = $empresa['logo'] ?? null;
+                    }
+                }
+            }
+
+            if (isset($_FILES['logo_alt']) && $_FILES['logo_alt']['error'] !== UPLOAD_ERR_NO_FILE) {
+                if ($_FILES['logo_alt']['error'] !== UPLOAD_ERR_OK) {
+                    $error = "Error al subir el logo alternativo (código " . (int)$_FILES['logo_alt']['error'] . ")";
+                } else {
+                    $tipos_permitidos = ['jpg', 'jpeg', 'png', 'gif'];
+                    $ext = strtolower(pathinfo($_FILES['logo_alt']['name'], PATHINFO_EXTENSION));
+
+                    if (!in_array($ext, $tipos_permitidos)) {
+                        $error = "Tipo de imagen no permitido para el logo alternativo";
+                    } else if ($_FILES['logo_alt']['size'] > 5242880) {
+                        $error = "El logo alternativo es muy grande (máx 5MB)";
+                    } else {
+                        $logo_alt = "logo_alt_" . time() . "." . $ext;
+                        $dir_logo = "../../uploads/";
+                        if (!is_dir($dir_logo)) {
+                            mkdir($dir_logo, 0755, true);
+                        }
+                        if (!move_uploaded_file($_FILES['logo_alt']['tmp_name'], $dir_logo . $logo_alt)) {
+                            $error = "Error al subir el logo alternativo";
+                            $logo_alt = $empresa['logo_alt'] ?? null;
+                        }
                     }
                 }
             }
@@ -156,8 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 
                 $stmt = $pdo->prepare("
-                    UPDATE ecommerce_empresa 
+                    UPDATE ecommerce_empresa
                     SET nombre = ?, descripcion = ?, seo_title = ?, seo_description = ?, seo_image = ?, logo = ?, favicon = ?,
+                        dominio_alt = ?, logo_alt = ?,
                         marquesina_activa = ?, marquesina_texto = ?, marquesina_link = ?, marquesina_bg = ?, marquesina_text_color = ?,
                         email = ?, telefono = ?,
                         direccion = ?, ciudad = ?, provincia = ?, pais = ?,
@@ -168,6 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $stmt->execute([
                     $nombre, $descripcion, $seo_title, $seo_description, $seo_image, $logo, $favicon,
+                    $dominio_alt ?: null, $logo_alt,
                     $marquesina_activa, $marquesina_texto, $marquesina_link, $marquesina_bg, $marquesina_text_color,
                     $email, $telefono,
                     $direccion, $ciudad, $provincia, $pais,
@@ -422,6 +462,33 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                     
                     <div class="mb-3">
                         <input type="file" class="form-control" id="logo" name="logo" accept="image/*">
+                        <small class="text-muted">PNG, JPG o GIF (máx 5MB)</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>Logo por dominio (rebranding)</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Si el sitio se accede desde este dominio, se muestra el logo alternativo en vez del logo principal. El resto del sitio (productos, precios, pedidos) sigue siendo el mismo.</p>
+                    <div class="mb-3">
+                        <label for="dominio_alt" class="form-label">Dominio alternativo</label>
+                        <input type="text" class="form-control" id="dominio_alt" name="dominio_alt" placeholder="Ej: stul.com.ar" value="<?= htmlspecialchars($empresa['dominio_alt'] ?? '') ?>">
+                        <small class="text-muted">Sin "https://" ni "www.".</small>
+                    </div>
+                    <?php if (!empty($empresa['logo_alt'])): ?>
+                        <div class="mb-3">
+                            <img src="../uploads/<?= htmlspecialchars($empresa['logo_alt']) ?>" class="img-fluid rounded" style="max-height: 200px;">
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-info text-center mb-3">
+                            Sin logo alternativo
+                        </div>
+                    <?php endif; ?>
+                    <div class="mb-3">
+                        <input type="file" class="form-control" id="logo_alt" name="logo_alt" accept="image/*">
                         <small class="text-muted">PNG, JPG o GIF (máx 5MB)</small>
                     </div>
                 </div>

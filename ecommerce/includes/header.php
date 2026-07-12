@@ -32,7 +32,7 @@ $ga_config = [
 $empresa_menu = cache_get('ecommerce_empresa_menu', 300);
 if (!$empresa_menu) {
   try {
-    $stmt = $pdo->query("SELECT nombre, logo, redes_sociales, ga_enabled, ga_measurement_id, descripcion, about_us, direccion, ciudad, provincia, telefono, email, favicon, seo_title, seo_description, seo_image FROM ecommerce_empresa LIMIT 1");
+    $stmt = $pdo->query("SELECT nombre, logo, dominio_alt, logo_alt, redes_sociales, ga_enabled, ga_measurement_id, descripcion, about_us, direccion, ciudad, provincia, telefono, email, favicon, seo_title, seo_description, seo_image FROM ecommerce_empresa LIMIT 1");
     $empresa_menu = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($empresa_menu) {
       cache_set('ecommerce_empresa_menu', $empresa_menu);
@@ -46,9 +46,16 @@ if ($empresa_menu) {
   $ga_config['measurement_id'] = $empresa_menu['ga_measurement_id'] ?? '';
 }
 
+// Rebranding por dominio: si se ingresa desde el dominio alternativo configurado,
+// se muestra el logo alternativo en vez del logo principal (mismo sitio y catálogo).
+$host_actual = strtolower(preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? ''));
+$host_actual = preg_replace('#^www\.#', '', $host_actual);
+$dominio_alt_normalizado = strtolower(preg_replace('#^www\.#', '', trim((string)($empresa_menu['dominio_alt'] ?? ''))));
+$usar_marca_alt = $dominio_alt_normalizado !== '' && $host_actual === $dominio_alt_normalizado && !empty($empresa_menu['logo_alt']);
+
 $logo_menu_src = null;
-if (!empty($empresa_menu['logo'])) {
-  $logo_filename = $empresa_menu['logo'];
+$logo_filename = $usar_marca_alt ? $empresa_menu['logo_alt'] : ($empresa_menu['logo'] ?? null);
+if (!empty($logo_filename)) {
   $logo_local_path = __DIR__ . '/../uploads/' . $logo_filename; // ecommerce/uploads
   $logo_root_path = __DIR__ . '/../../uploads/' . $logo_filename; // raiz /uploads
 
