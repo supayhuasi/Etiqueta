@@ -1,0 +1,43 @@
+User-agent: *
+Disallow: /
+
+Allow: /ecommerce/
+Allow: /ecommerce/index.php
+Allow: /ecommerce/tienda.php
+Allow: /ecommerce/producto.php
+Allow: /ecommerce/nosotros.php
+Allow: /ecommerce/contacto.php
+Allow: /ecommerce/faq.php
+Allow: /ecommerce/distribuidores.php
+Allow: /ecommerce/blog.php
+Allow: /ecommerce/blog_articulo.php
+Allow: /ecommerce/politica_privacidad.php
+Allow: /ecommerce/terminos_servicio.php
+Allow: /ecommerce/assets/
+Allow: /ecommerce/uploads/
+
+# Área privada / backoffice del ecommerce (login, carrito, pagos, checkout)
+Disallow: /ecommerce/admin/
+Disallow: /ecommerce/api/
+Disallow: /ecommerce/carrito.php
+Disallow: /ecommerce/checkout.php
+Disallow: /ecommerce/checkout_confirmacion.php
+Disallow: /ecommerce/mis_pedidos.php
+Disallow: /ecommerce/pedido_*.php
+Disallow: /ecommerce/cliente_*.php
+Disallow: /ecommerce/mp_*.php
+Disallow: /ecommerce/procesar_pago_mp.php
+Disallow: /ecommerce/setup_*.php
+Disallow: /ecommerce/debug_*.php
+Disallow: /ecommerce/diagnostico.php
+Disallow: /ecommerce/scan.php
+Disallow: /ecommerce/scan_api.php
+Disallow: /ecommerce/generar_matriz.php
+Disallow: /ecommerce/uploads/facturas_pedidos/
+
+# Sistema interno (asistencias, sueldos, gastos, cheques, usuarios) - no es contenido público
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /api/
+
+Sitemap: https://tucuroller.com.ar/ecommerce/sitemap.php

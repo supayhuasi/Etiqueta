@@ -1,5 +1,39 @@
 <?php
 require 'config.php';
+require 'includes/seo_helper.php';
+
+// Obtener categorías
+$stmt = $pdo->query("SELECT * FROM ecommerce_categorias WHERE activo = 1 ORDER BY orden, nombre");
+$categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Filtro por categoría
+$categoria_filtro = $_GET['categoria'] ?? 'todos';
+$busqueda = trim((string)($_GET['busqueda'] ?? ''));
+
+$categoria_actual = null;
+if ($categoria_filtro !== 'todos') {
+    foreach ($categorias as $cat) {
+        if ((string)$cat['id'] === (string)$categoria_filtro) {
+            $categoria_actual = $cat;
+            break;
+        }
+    }
+}
+
+// SEO: título y descripción según filtro/búsqueda activos
+if ($busqueda !== '') {
+    $page_title = 'Resultados para "' . $busqueda . '"';
+    $seo_description = seo_truncar_descripcion('Resultados de búsqueda de "' . $busqueda . '" en nuestra tienda online.');
+    // Las páginas de resultados de búsqueda no aportan valor único: se excluyen del índice pero se sigue el enlace.
+    $seo_robots = 'noindex,follow';
+} elseif ($categoria_actual) {
+    $page_title = $categoria_actual['nombre'] . ' - Tienda Online';
+    $seo_description = seo_truncar_descripcion('Comprá ' . $categoria_actual['nombre'] . ' online. Envío gratis y hasta 3 cuotas sin interés.');
+} else {
+    $page_title = 'Tienda Online';
+    $seo_description = 'Comprá cortinas, toldos y persianas online. Envío gratis, instalación en Tucumán y hasta 3 cuotas sin interés.';
+}
+
 require 'includes/header.php';
 require 'includes/precios_publico.php';
 require 'includes/banners_publico_helper.php';
@@ -9,14 +43,6 @@ $banners_sidebar = obtener_banners_zona($pdo, 'tienda_sidebar');
 // Obtener slideshow activos (Tienda)
 $stmt = $pdo->query("SELECT * FROM ecommerce_slideshow WHERE activo = 1 AND ubicacion = 'tienda' ORDER BY orden ASC");
 $slideshows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Obtener categorías
-$stmt = $pdo->query("SELECT * FROM ecommerce_categorias WHERE activo = 1 ORDER BY orden, nombre");
-$categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Filtro por categoría
-$categoria_filtro = $_GET['categoria'] ?? 'todos';
-$busqueda = $_GET['busqueda'] ?? '';
 
 // Configuración de lista de precios pública
 $lista_publica_id = obtener_lista_precio_publica($pdo);
@@ -88,7 +114,7 @@ $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <!-- Encabezado de la tienda -->
 <div class="bg-light py-4 mb-5">
     <div class="container">
-        <h1>🛒 Tienda Online</h1>
+        <h1>🛒 <?= htmlspecialchars($categoria_actual['nombre'] ?? 'Tienda Online') ?></h1>
         <p class="text-muted">Explora nuestro catálogo de productos</p>
     </div>
 </div>

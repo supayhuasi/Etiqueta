@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/mailer.php';
 
 $mensaje = '';
@@ -25,6 +24,11 @@ try {
     }
 } catch (Exception $e) {
 }
+
+$page_title = 'Contacto';
+$seo_description = 'Contactá a ' . $empresa['nombre'] . ' para consultas, cotizaciones y soporte sobre cortinas, toldos y persianas en Tucumán.';
+
+require 'includes/header.php';
 
 $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
 $whatsapp_num = preg_replace('/\D+/', '', (string)($redes['whatsapp'] ?? ''));

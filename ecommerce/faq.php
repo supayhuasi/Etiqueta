@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 
 $faqs = [];
 try {
@@ -8,7 +7,31 @@ try {
     $faqs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
 }
+
+$page_title = 'Preguntas Frecuentes';
+$seo_description = 'Resolvé tus dudas sobre compra, instalación, envíos y garantía de nuestras cortinas, toldos y persianas.';
+
+require 'includes/header.php';
 ?>
+
+<?php if (!empty($faqs)): ?>
+<script type="application/ld+json">
+<?= json_encode([
+    '@context' => 'https://schema.org',
+    '@type' => 'FAQPage',
+    'mainEntity' => array_map(static function ($f) {
+        return [
+            '@type' => 'Question',
+            'name' => $f['pregunta'],
+            'acceptedAnswer' => [
+                '@type' => 'Answer',
+                'text' => $f['respuesta']
+            ]
+        ];
+    }, $faqs)
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
+</script>
+<?php endif; ?>
 
 <div class="container py-5">
     <h1>Preguntas Frecuentes</h1>

@@ -1,8 +1,7 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/precios_publico.php';
-require 'includes/banners_publico_helper.php';
+require 'includes/seo_helper.php';
 
 $producto_id = $_GET['id'] ?? 0;
 
@@ -28,7 +27,7 @@ $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 
 // Obtener producto
 $stmt = $pdo->prepare("
-    SELECT p.*, c.nombre as categoria_nombre, c.manual_archivo, c.manual_titulo 
+    SELECT p.*, c.nombre as categoria_nombre, c.manual_archivo, c.manual_titulo
     FROM ecommerce_productos p
     LEFT JOIN ecommerce_categorias c ON p.categoria_id = c.id
         WHERE p.id = ? AND p.activo = 1 AND p.mostrar_ecommerce = 1
@@ -37,21 +36,78 @@ $stmt->execute([$producto_id]);
 $producto = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$producto) {
-    die("Producto no encontrado");
+    http_response_code(404);
+    $page_title = 'Producto no encontrado';
+    $seo_robots = 'noindex,follow';
+    require 'includes/header.php';
+    echo '<div class="container py-5"><h1>Producto no encontrado</h1><p class="text-muted">El producto que buscás no existe o ya no está disponible.</p><a href="tienda.php" class="btn btn-outline-primary">Volver a la tienda</a></div>';
+    require 'includes/footer.php';
+    exit;
 }
+
+// Obtener imágenes del producto
+$stmt = $pdo->prepare("
+    SELECT * FROM ecommerce_producto_imagenes
+    WHERE producto_id = ?
+    ORDER BY orden, es_principal DESC
+");
+$stmt->execute([$producto_id]);
+$imagenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// SEO: título, descripción, imagen, canonical y schema específicos del producto
+$precio_info_base = calcular_precio_publico(
+    (int)$producto['id'],
+    (int)($producto['categoria_id'] ?? 0),
+    (float)$producto['precio_base'],
+    $lista_publica_id,
+    $mapas_lista_publica['items'],
+    $mapas_lista_publica['categorias']
+);
+
+$page_title = $producto['nombre'] . (!empty($producto['categoria_nombre']) ? ' - ' . $producto['categoria_nombre'] : '');
+$seo_description = seo_truncar_descripcion(
+    $producto['descripcion'] ?: ('Comprá ' . $producto['nombre'] . ' online con envío gratis y cuotas sin interés.')
+);
+$seo_type = 'product';
+
+$seo_base = seo_resolver_base();
+$imagen_principal_seo = !empty($imagenes) ? $imagenes[0]['imagen'] : ($producto['imagen'] ?? '');
+if ($imagen_principal_seo) {
+    $img_rel_seo = resolver_upload_url($imagen_principal_seo);
+    $seo_image = ($img_rel_seo !== '' && $img_rel_seo[0] === '/')
+        ? $seo_base['scheme'] . '://' . $seo_base['host'] . $img_rel_seo
+        : $seo_base['base_url'] . '/' . $img_rel_seo;
+}
+$seo_canonical = $seo_base['base_url'] . '/producto.php?id=' . (int)$producto['id'];
+
+require 'includes/header.php';
+require 'includes/banners_publico_helper.php';
 
 $tipo_precio = strtolower(trim($producto['tipo_precio'] ?? 'fijo'));
 
 $banners_producto = obtener_banners_zona($pdo, 'producto_detalle');
 
-// Obtener imágenes del producto
-$stmt = $pdo->prepare("
-    SELECT * FROM ecommerce_producto_imagenes 
-    WHERE producto_id = ? 
-    ORDER BY orden, es_principal DESC
-");
-$stmt->execute([$producto_id]);
-$imagenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$producto_disponible = $tipo_precio === 'variable' || (int)($producto['stock'] ?? 0) > 0;
+?>
+<script type="application/ld+json">
+<?= json_encode([
+    '@context' => 'https://schema.org',
+    '@type' => 'Product',
+    'name' => $producto['nombre'],
+    'description' => $seo_description,
+    'image' => $seo_image ?: null,
+    'sku' => $producto['codigo'] ?? null,
+    'url' => $seo_canonical,
+    'offers' => [
+        '@type' => 'Offer',
+        'url' => $seo_canonical,
+        'priceCurrency' => 'ARS',
+        'price' => number_format((float)$precio_info_base['precio'], 2, '.', ''),
+        'availability' => $producto_disponible ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+    ]
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
+</script>
+<?php
 
 // Obtener atributos del producto
 $stmt = $pdo->prepare("
@@ -429,16 +485,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <form method="POST">
                     <!-- Mostrar precio base -->
                     <div class="mb-4 pb-3 border-bottom">
-                        <?php
-                        $precio_info_base = calcular_precio_publico(
-                            (int)$producto['id'],
-                            (int)($producto['categoria_id'] ?? 0),
-                            (float)$producto['precio_base'],
-                            $lista_publica_id,
-                            $mapas_lista_publica['items'],
-                            $mapas_lista_publica['categorias']
-                        );
-                        ?>
                         <h3 id="precio_display" class="text-primary">
                             Precio:
                             <?php if ($precio_info_base['descuento_pct'] > 0): ?>

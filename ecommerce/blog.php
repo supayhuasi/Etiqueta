@@ -1,5 +1,9 @@
 <?php
 require 'config.php';
+
+$page_title = 'Blog';
+$seo_description = 'Consejos, novedades e ideas sobre cortinas, toldos y persianas en nuestro blog.';
+
 require 'includes/header.php';
 require 'includes/blog_publico_helper.php';
 require 'includes/banners_publico_helper.php';

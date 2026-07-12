@@ -1,5 +1,7 @@
 <?php
 require 'config.php';
+require 'includes/seo_helper.php';
+require 'includes/blog_publico_helper.php';
 
 $slug = trim((string)($_GET['slug'] ?? ''));
 $articulo = null;
@@ -15,15 +17,21 @@ if ($slug !== '') {
 
 $productos_sugeridos = [];
 $image_path = 'uploads/';
+$seo_base = seo_resolver_base();
 
 if ($articulo) {
-    $seo_title = $articulo['titulo'];
+    $page_title = $articulo['titulo'];
     $seo_type = 'article';
     if (!empty($articulo['resumen'])) {
-        $seo_description = trim(preg_replace('/\s+/', ' ', strip_tags($articulo['resumen'])));
+        $seo_description = seo_truncar_descripcion($articulo['resumen']);
     } else {
-        $seo_description = mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($articulo['contenido']))), 0, 160);
+        $seo_description = seo_truncar_descripcion($articulo['contenido']);
     }
+    $articulo_imagen_url = blog_publico_imagen_url($articulo['imagen'], $seo_base['public_base']);
+    if ($articulo_imagen_url) {
+        $seo_image = $seo_base['scheme'] . '://' . $seo_base['host'] . $articulo_imagen_url;
+    }
+    $seo_canonical = $seo_base['base_url'] . '/blog_articulo.php?slug=' . rawurlencode($articulo['slug']);
 
     try {
         $stmt = $pdo->query("
@@ -41,10 +49,13 @@ if ($articulo) {
         $productos_sugeridos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
     }
+} else {
+    http_response_code(404);
+    $page_title = 'Artículo no encontrado';
+    $seo_robots = 'noindex,follow';
 }
 
 require 'includes/header.php';
-require 'includes/blog_publico_helper.php';
 require 'includes/precios_publico.php';
 require 'includes/banners_publico_helper.php';
 
@@ -52,6 +63,24 @@ $lista_publica_id = obtener_lista_precio_publica($pdo);
 $mapas_lista_publica = cargar_mapas_lista_publica($pdo, $lista_publica_id);
 $banners_sidebar = $articulo ? obtener_banners_zona($pdo, 'blog_sidebar') : [];
 ?>
+<?php if ($articulo): ?>
+<script type="application/ld+json">
+<?= json_encode([
+    '@context' => 'https://schema.org',
+    '@type' => 'BlogPosting',
+    'headline' => $articulo['titulo'],
+    'description' => $seo_description,
+    'image' => $seo_image ?? null,
+    'datePublished' => !empty($articulo['publicado_en']) ? date('c', strtotime($articulo['publicado_en'])) : null,
+    'dateModified' => !empty($articulo['updated_at']) ? date('c', strtotime($articulo['updated_at'])) : null,
+    'mainEntityOfPage' => $seo_canonical,
+    'publisher' => [
+        '@type' => 'Organization',
+        'name' => $site_name
+    ]
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
+</script>
+<?php endif; ?>
 
 <div class="container py-5">
     <?php if (!$articulo): ?>

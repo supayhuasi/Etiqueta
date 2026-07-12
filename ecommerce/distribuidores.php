@@ -1,6 +1,5 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 require 'includes/mailer.php';
 
 $mensaje = '';
@@ -25,6 +24,11 @@ try {
     }
 } catch (Exception $e) {
 }
+
+$page_title = 'Distribuidores';
+$seo_description = 'Sumate como distribuidor de ' . $empresa['nombre'] . ' o encontrá el distribuidor más cercano de cortinas, toldos y persianas.';
+
+require 'includes/header.php';
 
 $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
 $whatsapp_num = preg_replace('/\D+/', '', (string)($redes['whatsapp'] ?? ''));

@@ -102,7 +102,8 @@ $page_titles = [
 ];
 
 $site_name = $empresa_menu['nombre'] ?? 'Tucu Roller';
-$default_title = ($page_titles[$page_key] ?? 'Tienda') . ' | ' . $site_name;
+$page_title_text = (isset($page_title) && $page_title !== '') ? $page_title : ($page_titles[$page_key] ?? 'Tienda');
+$default_title = $page_title_text . ' | ' . $site_name;
 
 $raw_description = $empresa_menu['seo_description'] ?? $empresa_menu['descripcion'] ?? $empresa_menu['about_us'] ?? 'Tienda online de ' . $site_name;
 $raw_description = trim(preg_replace('/\s+/', ' ', strip_tags($raw_description)));

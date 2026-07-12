@@ -1,10 +1,14 @@
 <?php
 require 'config.php';
-require 'includes/header.php';
 
 // Obtener información de la empresa
 $stmt = $pdo->query("SELECT * FROM ecommerce_empresa LIMIT 1");
 $empresa = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$page_title = 'Sobre Nosotros';
+$seo_description = 'Conocé la historia y los valores de ' . ($empresa['nombre'] ?? 'nuestra empresa') . '. Fabricamos e instalamos cortinas, toldos y persianas de calidad en Tucumán.';
+
+require 'includes/header.php';
 ?>
 
 <div class="container py-5">

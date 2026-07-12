@@ -1,4 +1,23 @@
 User-agent: *
 Allow: /
 
+# Área privada / backoffice (login, carrito, pagos, checkout) - no aporta valor en buscadores
+Disallow: /admin/
+Disallow: /api/
+Disallow: /carrito.php
+Disallow: /checkout.php
+Disallow: /checkout_confirmacion.php
+Disallow: /mis_pedidos.php
+Disallow: /pedido_*.php
+Disallow: /cliente_*.php
+Disallow: /mp_*.php
+Disallow: /procesar_pago_mp.php
+Disallow: /setup_*.php
+Disallow: /debug_*.php
+Disallow: /diagnostico.php
+Disallow: /scan.php
+Disallow: /scan_api.php
+Disallow: /generar_matriz.php
+Disallow: /uploads/facturas_pedidos/
+
 Sitemap: https://tucuroller.com.ar/ecommerce/sitemap.php
