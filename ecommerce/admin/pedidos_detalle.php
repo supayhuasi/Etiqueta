@@ -233,11 +233,6 @@ $stmt->execute([$pedido_id]);
 $total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
 $total_pagado = round($total_pagado, 2);
 
-$estados_pagados = ['pagado', 'pago_autorizado', 'confirmado', 'esperando_envio', 'preparando', 'enviado', 'entregado'];
-if ($total_pagado <= 0 && in_array($pedido['estado'], $estados_pagados, true)) {
-    $total_pagado = (float)$pedido['total'];
-}
-
 $saldo = round((float)$pedido['total'] - $total_pagado, 2);
 
 $error = '';
@@ -482,6 +477,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt_fc_del->execute([$pago_id]);
             } catch (Exception $e) {
                 // Si falla, no afecta la eliminación del pago
+            }
+
+            // Si el pedido estaba marcado como pagado, revertir el estado ahora que
+            // ya no tiene pagos suficientes para cubrir el total (evita saldos fantasma).
+            if ($pedido['estado'] === 'pagado') {
+                $stmt_sum = $pdo->prepare("SELECT COALESCE(SUM(monto), 0) FROM ecommerce_pedido_pagos WHERE pedido_id = ?");
+                $stmt_sum->execute([$pedido_id]);
+                $total_pagado_restante = round((float)$stmt_sum->fetchColumn(), 2);
+                if ($total_pagado_restante < round((float)$pedido['total'], 2)) {
+                    $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pendiente_pago' WHERE id = ?")->execute([$pedido_id]);
+                }
             }
 
             header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
