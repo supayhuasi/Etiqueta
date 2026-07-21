@@ -62,6 +62,7 @@ $sql = "
         SELECT p.cliente_id, SUM(pp.monto) AS total_pagado
         FROM ecommerce_pedido_pagos pp
         JOIN ecommerce_pedidos p ON pp.pedido_id = p.id
+        WHERE p.estado != 'cancelado'
         GROUP BY p.cliente_id
     ) pag ON pag.cliente_id = c.id
     LEFT JOIN ecommerce_pedidos p_last ON p_last.id = ped.ultimo_pedido_id

@@ -344,44 +344,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $row = null;
                 if ($email_normalizado !== '') {
-                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE email = ? LIMIT 1");
+                    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE email = ? LIMIT 1");
                     $stmt->execute([$email_normalizado]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 }
                 if (!$row && $telefono !== '') {
-                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
+                    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE telefono = ? LIMIT 1");
                     $stmt->execute([$telefono]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 }
                 if (!$row && $documento_numero !== null) {
-                    $stmt = $pdo->prepare("SELECT id FROM ecommerce_clientes WHERE documento_numero = ? LIMIT 1");
+                    $stmt = $pdo->prepare("SELECT * FROM ecommerce_clientes WHERE documento_numero = ? LIMIT 1");
                     $stmt->execute([$documento_numero]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 }
 
                 if ($row) {
-                    // Cliente existe, usar ese ID
+                    // Cliente existe, usar ese ID. Nunca pisar datos de identidad ya cargados
+                    // (teléfono y documento pueden repetirse entre personas distintas):
+                    // solo se completan los campos que estaban vacíos.
                     $cliente_id = (int)$row['id'];
-                    // Actualizar datos del cliente con la info más reciente
+                    $nombreFinal = !empty($row['nombre']) ? $row['nombre'] : ($nombre ?: ($telefono ?: 'Cliente'));
+                    $emailFinal = !empty($row['email']) ? $row['email'] : $email_normalizado;
+                    $telefonoFinal = !empty($row['telefono']) ? $row['telefono'] : ($telefono ?: null);
+                    $direccionFinal = !empty($row['direccion']) ? $row['direccion'] : $direccion;
+                    $respFiscalFinal = !empty($row['responsabilidad_fiscal']) ? $row['responsabilidad_fiscal'] : ($factura_a ? 'Responsable Inscripto' : 'Consumidor Final');
+                    $documentoTipoFinal = !empty($row['documento_tipo']) ? $row['documento_tipo'] : $documento_tipo;
+                    $documentoNumeroFinal = !empty($row['documento_numero']) ? $row['documento_numero'] : $documento_numero;
                     try {
                         $stmt = $pdo->prepare("
-                            UPDATE ecommerce_clientes 
+                            UPDATE ecommerce_clientes
                             SET nombre = ?, email = ?, telefono = ?, direccion = ?, responsabilidad_fiscal = ?, documento_tipo = ?, documento_numero = ?
                             WHERE id = ?
                         ");
                         $stmt->execute([
-                            $nombre ?: ($telefono ?: 'Cliente'),
-                            $email_normalizado,
-                            $telefono ?: null,
-                            $direccion,
-                            $factura_a ? 'Responsable Inscripto' : 'Consumidor Final',
-                            $documento_tipo,
-                            $documento_numero,
+                            $nombreFinal,
+                            $emailFinal,
+                            $telefonoFinal,
+                            $direccionFinal,
+                            $respFiscalFinal,
+                            $documentoTipoFinal,
+                            $documentoNumeroFinal,
                             $cliente_id,
                         ]);
                     } catch (Exception $e) {
                         $stmt = $pdo->prepare("UPDATE ecommerce_clientes SET nombre = ?, email = ? WHERE id = ?");
-                        $stmt->execute([$nombre ?: ($telefono ?: 'Cliente'), $email_normalizado, $cliente_id]);
+                        $stmt->execute([$nombreFinal, $emailFinal, $cliente_id]);
                     }
                 } else {
                     // Cliente no existe, crear uno nuevo
