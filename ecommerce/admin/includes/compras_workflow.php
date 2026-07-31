@@ -91,6 +91,56 @@ if (!function_exists('compraRecepcionMeta')) {
     }
 }
 
+if (!function_exists('registrarEgresoCompraEnFlujoCaja')) {
+    function registrarEgresoCompraEnFlujoCaja(PDO $pdo, array $compra): void
+    {
+        try {
+            $compraId = (int)($compra['id'] ?? 0);
+            $total = (float)($compra['total'] ?? 0);
+            if ($compraId <= 0 || $total <= 0) {
+                return;
+            }
+
+            $stmtCheck = $pdo->prepare("SELECT id FROM flujo_caja WHERE id_referencia = ? AND categoria = 'Compra a Proveedor' LIMIT 1");
+            $stmtCheck->execute([$compraId]);
+            if ($stmtCheck->fetch(PDO::FETCH_ASSOC)) {
+                return; // ya registrado, evita duplicar si "aprobar" se dispara más de una vez
+            }
+
+            $proveedorNombre = '';
+            if (!empty($compra['proveedor_id'])) {
+                $stmtProv = $pdo->prepare("SELECT nombre FROM ecommerce_proveedores WHERE id = ?");
+                $stmtProv->execute([(int)$compra['proveedor_id']]);
+                $proveedorNombre = (string)($stmtProv->fetchColumn() ?: '');
+            }
+
+            $descripcion = 'Compra ' . ($compra['numero_compra'] ?? ('#' . $compraId));
+            if ($proveedorNombre !== '') {
+                $descripcion .= ' - ' . $proveedorNombre;
+            }
+
+            $cuentaId = function_exists('cuentas_get_default_id') ? cuentas_get_default_id($pdo) : null;
+
+            $stmt = $pdo->prepare("
+                INSERT INTO flujo_caja
+                (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+                VALUES (CURDATE(), 'egreso', 'Compra a Proveedor', ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $descripcion,
+                $total,
+                $compra['numero_compra'] ?? null,
+                $compraId,
+                $cuentaId ?: null,
+                $_SESSION['user']['id'] ?? null,
+                'Registrado automáticamente al aprobar la orden de compra',
+            ]);
+        } catch (Throwable $e) {
+            error_log('compras_workflow: no se pudo registrar el egreso en flujo_caja: ' . $e->getMessage());
+        }
+    }
+}
+
 if (!function_exists('aplicarStockCompraDelta')) {
     function aplicarStockCompraDelta(PDO $pdo, array $item, int $delta, string $referencia): void
     {

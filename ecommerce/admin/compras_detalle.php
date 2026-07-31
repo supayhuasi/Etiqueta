@@ -1,7 +1,9 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/includes/compras_workflow.php';
+require_once __DIR__ . '/includes/cuentas_helper.php';
 ensureComprasWorkflowSchema($pdo);
+ensureCuentasSchema($pdo);
 
 $compra_id = intval($_GET['id'] ?? 0);
 $mensaje = $_GET['mensaje'] ?? '';
@@ -25,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (($compraLock['estado'] ?? 'orden_pendiente') !== 'aprobada') {
                 $stmt = $pdo->prepare("UPDATE ecommerce_compras SET estado = 'aprobada', fecha_aprobacion = COALESCE(fecha_aprobacion, NOW()) WHERE id = ?");
                 $stmt->execute([$compra_id]);
+
+                registrarEgresoCompraEnFlujoCaja($pdo, $compraLock);
             }
 
             $pdo->commit();
