@@ -522,6 +522,47 @@ if ($notificaciones_permiso_admin && isset($_GET['test_notif'])) {
     $notif_debug_info['test_notif'] = 'ACTIVA';
 }
 
+// Notificaciones "persistentes" (tareas vencidas, gastos por vencer, órdenes atrasadas,
+// usuarios sin tarea activa): no se autolimpian con el tiempo, así que un usuario puede
+// marcarlas como leídas para dejar de verlas hasta que aparezca un ítem nuevo.
+$notif_usuario_id = (int)($_SESSION['user']['id'] ?? 0);
+$notif_leidos_por_categoria = [];
+if (($notificaciones_permiso_produccion || $notificaciones_permiso_admin) && $notif_usuario_id > 0) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_notif_leidas (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            usuario_id INT NOT NULL,
+            categoria VARCHAR(50) NOT NULL,
+            item_id VARCHAR(50) NOT NULL,
+            leido_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_usuario_categoria_item (usuario_id, categoria, item_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $stmtLeidos = $pdo->prepare("SELECT categoria, item_id FROM ecommerce_notif_leidas WHERE usuario_id = ?");
+        $stmtLeidos->execute([$notif_usuario_id]);
+        foreach ($stmtLeidos->fetchAll(PDO::FETCH_ASSOC) as $rowLeido) {
+            $notif_leidos_por_categoria[$rowLeido['categoria']][] = $rowLeido['item_id'];
+        }
+    } catch (Throwable $e) {
+        error_log('Notif leidas setup error: ' . $e->getMessage());
+    }
+}
+
+if (!function_exists('notif_filtrar_leidos')) {
+    // Descarta de $lista los elementos cuyo $idField ya está marcado como leído para esta categoría.
+    function notif_filtrar_leidos(array $lista, array $leidosPorCategoria, string $categoria, string $idField): array
+    {
+        $leidos = $leidosPorCategoria[$categoria] ?? [];
+        if (empty($leidos)) {
+            return $lista;
+        }
+        $leidos = array_flip($leidos);
+        return array_values(array_filter($lista, function ($item) use ($leidos, $idField) {
+            return !isset($leidos[(string)($item[$idField] ?? '')]);
+        }));
+    }
+}
+
 if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 
     // --- Sección 1: Órdenes de producción atrasadas (cache diario) ---
@@ -603,6 +644,16 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 ]);
             }
 
+            // El total viene del cache diario (compartido entre usuarios); si la lista completa
+            // entra en el payload (no fue truncado por el LIMIT 20), el total filtrado es exacto.
+            $notif_atrasos_total_antes_filtro = count($notificaciones_atrasos);
+            $notificaciones_atrasos = notif_filtrar_leidos($notificaciones_atrasos, $notif_leidos_por_categoria, 'atrasos', 'orden_produccion_id');
+            if ($notificaciones_atrasos_total <= 20) {
+                $notificaciones_atrasos_total = count($notificaciones_atrasos);
+            } elseif ($notif_atrasos_total_antes_filtro > 0) {
+                $notificaciones_atrasos_total -= ($notif_atrasos_total_antes_filtro - count($notificaciones_atrasos));
+            }
+
             if (!empty($notificaciones_atrasos)) {
                 $clientes_unicos = [];
                 foreach ($notificaciones_atrasos as $notif_cli) {
@@ -637,12 +688,16 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         && admin_column_exists($pdo, 'ecommerce_tareas_usuarios', 'fecha_limite')
     ) {
         try {
+            $notif_leido_excl = $notif_usuario_id > 0
+                ? "AND NOT EXISTS (SELECT 1 FROM ecommerce_notif_leidas nl WHERE nl.usuario_id = {$notif_usuario_id} AND nl.categoria = 'tareas_vencidas' AND nl.item_id = t.id)"
+                : '';
             $sql_tareas_vencidas_count = "
                 SELECT COUNT(*)
                 FROM ecommerce_tareas_usuarios t
                 WHERE t.fecha_limite IS NOT NULL
                   AND t.fecha_limite < CURDATE()
                   AND LOWER(COALESCE(t.estado, '')) IN ('pendiente', 'en_progreso')
+                  {$notif_leido_excl}
             ";
             $notificaciones_tareas_vencidas_total = (int)$pdo->query($sql_tareas_vencidas_count)->fetchColumn();
 
@@ -660,6 +715,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     WHERE t.fecha_limite IS NOT NULL
                       AND t.fecha_limite < CURDATE()
                       AND LOWER(COALESCE(t.estado, '')) IN ('pendiente', 'en_progreso')
+                      {$notif_leido_excl}
                     ORDER BY t.fecha_limite ASC
                     LIMIT 8
                 ";
@@ -778,6 +834,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         && admin_column_exists($pdo, 'ecommerce_produccion_items_barcode', 'estado')
     ) {
         try {
+            $notif_leido_excl_sin_tareas = $notif_usuario_id > 0
+                ? "AND NOT EXISTS (SELECT 1 FROM ecommerce_notif_leidas nl WHERE nl.usuario_id = {$notif_usuario_id} AND nl.categoria = 'sin_tareas' AND nl.item_id = u.id)"
+                : '';
             $sql_sin_tareas_count = "
                 SELECT COUNT(*)
                 FROM usuarios u
@@ -790,6 +849,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                       WHERE pib.usuario_inicio = u.id
                         AND LOWER(COALESCE(pib.estado, '')) IN ('armado', 'en_armado', 'en_produccion')
                   )
+                  {$notif_leido_excl_sin_tareas}
             ";
             $notificaciones_sin_tareas_total = (int)$pdo->query($sql_sin_tareas_count)->fetchColumn();
 
@@ -809,6 +869,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                           WHERE pib.usuario_inicio = u.id
                             AND LOWER(COALESCE(pib.estado, '')) IN ('armado', 'en_armado', 'en_produccion')
                       )
+                      {$notif_leido_excl_sin_tareas}
                     ORDER BY usuario_nombre ASC
                     LIMIT 8
                 ";
@@ -1094,6 +1155,9 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         && admin_column_exists($pdo, 'gastos', 'fecha_vencimiento')
     ) {
         try {
+            $notif_leido_excl_gastos = $notif_usuario_id > 0
+                ? "AND NOT EXISTS (SELECT 1 FROM ecommerce_notif_leidas nl WHERE nl.usuario_id = {$notif_usuario_id} AND nl.categoria = 'gastos_vencer' AND nl.item_id = g.id)"
+                : '';
             $sqlGastosVencerCount = "
                 SELECT COUNT(*)
                 FROM gastos g
@@ -1101,6 +1165,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                 WHERE g.fecha_vencimiento IS NOT NULL
                   AND g.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
                   AND LOWER(COALESCE(e.nombre, '')) <> 'pagado'
+                  {$notif_leido_excl_gastos}
             ";
             $stmtGastosVencerCount = $pdo->prepare($sqlGastosVencerCount);
             $stmtGastosVencerCount->execute([$notificaciones_gasto_vencimiento_dias]);
@@ -1120,6 +1185,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     WHERE g.fecha_vencimiento IS NOT NULL
                       AND g.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
                       AND LOWER(COALESCE(e.nombre, '')) <> 'pagado'
+                      {$notif_leido_excl_gastos}
                     ORDER BY g.fecha_vencimiento ASC
                     LIMIT 8
                 ";
@@ -1211,6 +1277,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?= htmlspecialchars(admin_csrf_token()) ?>">
     <title>Admin - Tucu Roller</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -1768,7 +1835,17 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     <?php endif; ?>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end notif-dropdown">
-                    <div class="notif-header">Notificaciones Admin</div>
+                    <div class="notif-header d-flex justify-content-between align-items-center">
+                        <span>Notificaciones Admin</span>
+                        <?php
+                        $notif_hay_persistentes = ((int)$notificaciones_tareas_vencidas_total + (int)$notificaciones_sin_tareas_total + (int)$notificaciones_gastos_por_vencer_total + (int)$notificaciones_atrasos_total) > 0;
+                        ?>
+                        <?php if ($notif_hay_persistentes): ?>
+                            <button type="button" id="btnMarcarNotifLeidas" class="btn btn-sm btn-link p-0" style="font-size:12px;" title="Oculta tareas vencidas, gastos por vencer, órdenes atrasadas y usuarios sin tarea hasta que aparezca algo nuevo">
+                                Marcar todo como leído
+                            </button>
+                        <?php endif; ?>
+                    </div>
                     <?php if (isset($_GET['debug_notif'])): ?>
                         <div style="background:#fff3cd;color:#856404;padding:6px 10px;font-size:11px;border-bottom:1px solid #ffc107;white-space:pre-wrap;">
                             <strong>DEBUG NOTIF</strong><br>
@@ -2402,3 +2479,26 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
         <div class="col-md-10 main-content">
 
 <script src="<?= $admin_url ?>assets/js/admin-sidebar-theme.js?v=1"></script>
+<script>
+    (function () {
+        var btn = document.getElementById('btnMarcarNotifLeidas');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            btn.disabled = true;
+            btn.textContent = 'Marcando...';
+            var token = document.querySelector('meta[name="csrf-token"]');
+            var body = new URLSearchParams();
+            body.set('csrf_token', token ? token.getAttribute('content') : '');
+            fetch('<?= htmlspecialchars($admin_url) ?>notificaciones_marcar_leidas.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: body.toString()
+            })
+                .then(function () { window.location.reload(); })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.textContent = 'Marcar todo como leído';
+                });
+        });
+    })();
+</script>
