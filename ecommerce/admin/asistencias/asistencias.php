@@ -103,6 +103,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
         <div class="col-md-6 mt-3 mt-md-0">
             <div class="d-flex flex-wrap gap-2 justify-content-md-end">
                 <a href="/scan.php" class="btn btn-success">📱 Escanear Asistencia</a>
+                <a href="fichaje.php" class="btn btn-success">🖱️ Fichaje Rápido</a>
                 <a href="asistencias_crear.php" class="btn btn-primary">➕ Cargar Manual</a>
                 <a href="asistencias_rango.php" class="btn btn-primary">📅 Cargar Rango</a>
                 <a href="asistencias_horarios.php" class="btn btn-info">⏰ Gestionar Horarios</a>
