@@ -11,12 +11,8 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-$rol = strtolower(trim((string)($_SESSION['rol'] ?? '')));
-if (!in_array($rol, ['admin', 'ventas', 'operario'], true)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Sin permiso para registrar asistencias']);
-    exit;
-}
+// Fichaje rápido: cualquier usuario interno logueado puede marcar su entrada/salida
+// (no se restringe por rol, a diferencia del resto del módulo de asistencias).
 
 require dirname(__DIR__, 3) . '/config.php';
 

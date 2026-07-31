@@ -2221,6 +2221,14 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 </div>
                 <?php endif; ?>
 
+                <!-- Fichaje rápido: visible para cualquier usuario logueado, sin gate de permisos,
+                     ya que cualquiera necesita poder marcar su propia entrada/salida. -->
+                <div class="menu-section">
+                    <a href="<?= $admin_url ?>asistencias/fichaje.php" class="menu-header <?= basename($_SERVER['PHP_SELF']) === 'fichaje.php' ? '' : 'collapsed' ?>" style="cursor: default;" title="Fichaje Rápido">
+                        <span><i class="bi bi-clock-history"></i><span class="menu-label"> Fichaje Rápido</span></span>
+                    </a>
+                </div>
+
                 <!-- Catálogo -->
                 <?php if ($can_access_any(['categorias', 'productos', 'matriz_precios', 'listas_precios', 'precios_ecommerce'])): ?>
                 <div class="menu-section">
