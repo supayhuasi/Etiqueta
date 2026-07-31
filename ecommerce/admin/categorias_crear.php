@@ -46,7 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($ext, $allowed, true)) {
             $error = "El manual debe ser un archivo PDF";
         } else {
-            $dir = '../../uploads/manuales/';
+            // ecommerce/ es la raíz pública del sitio (tucuroller.com.ar sirve desde acá),
+            // por eso el destino es un solo nivel arriba de admin/, no dos (eso caía fuera del docroot).
+            $dir = '../uploads/manuales/';
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
