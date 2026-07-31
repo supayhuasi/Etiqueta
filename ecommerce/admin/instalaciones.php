@@ -26,39 +26,11 @@ function verificar_sesion_json() {
 }
 
 function tabla_existe($pdo, $tabla) {
-    try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-        $stmt->execute([$tabla]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Exception $e) {
-    }
-
-    try {
-        $pdo->query("SELECT 1 FROM {$tabla} LIMIT 1");
-        return true;
-    } catch (Exception $e) {
-        return false;
-    }
+    return admin_table_exists($pdo, $tabla);
 }
 
 function columna_existe($pdo, $tabla, $columna) {
-    try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$tabla} LIKE ?");
-        $stmt->execute([$columna]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Exception $e) {
-    }
-
-    try {
-        $pdo->query("SELECT {$columna} FROM {$tabla} LIMIT 1");
-        return true;
-    } catch (Exception $e) {
-        return false;
-    }
+    return admin_column_exists($pdo, $tabla, $columna);
 }
 
 function asegurar_estructura_minima_instalaciones($pdo) {

@@ -19,7 +19,7 @@ function reponer_pdf_trim(string $value, int $width, string $suffix = '...'): st
 function reponer_pdf_table_exists(PDO $pdo, string $table): bool
 {
     try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+        $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
         $stmt->execute([$table]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
@@ -30,8 +30,8 @@ function reponer_pdf_table_exists(PDO $pdo, string $table): bool
 function reponer_pdf_column_exists(PDO $pdo, string $table, string $column): bool
 {
     try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-        $stmt->execute([$column]);
+        $stmt = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1");
+        $stmt->execute([$table, $column]);
         return (bool)$stmt->fetchColumn();
     } catch (Throwable $e) {
         return false;

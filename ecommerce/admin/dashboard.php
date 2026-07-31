@@ -4,7 +4,9 @@ require 'includes/header.php';
 $errores = [];
 
 function tabla_existe($pdo, $tabla) {
-    $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+    // SHOW TABLES LIKE ? no se puede preparar como statement nativo en este servidor
+    // (PDO::ATTR_EMULATE_PREPARES está desactivado en config.php); information_schema sí soporta placeholders.
+    $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
     $stmt->execute([$tabla]);
     return $stmt->rowCount() > 0;
 }

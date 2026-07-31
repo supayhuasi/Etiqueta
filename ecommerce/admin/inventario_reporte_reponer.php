@@ -8,40 +8,12 @@ if (!($pdo instanceof PDO)) {
 
 function inv_table_exists(PDO $pdo, string $table): bool
 {
-    try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-        $stmt->execute([$table]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Throwable $e) {
-    }
-
-    try {
-        $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
-        return true;
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_table_exists($pdo, $table);
 }
 
 function inv_column_exists(PDO $pdo, string $table, string $column): bool
 {
-    try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-        $stmt->execute([$column]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Throwable $e) {
-    }
-
-    try {
-        $pdo->query("SELECT {$column} FROM {$table} LIMIT 1");
-        return true;
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_column_exists($pdo, $table, $column);
 }
 
 function inv_fetch_all(PDO $pdo, string $sql): array

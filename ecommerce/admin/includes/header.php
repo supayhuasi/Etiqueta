@@ -426,7 +426,9 @@ if (!function_exists('admin_table_exists')) {
     function admin_table_exists(PDO $pdo, string $table): bool
     {
         try {
-            $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+            // SHOW TABLES LIKE ? no se puede preparar como statement nativo en este
+            // servidor (PDO::ATTR_EMULATE_PREPARES está desactivado); information_schema sí soporta placeholders.
+            $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
             $stmt->execute([$table]);
             return (bool)$stmt->fetchColumn();
         } catch (Throwable $e) {
@@ -439,8 +441,8 @@ if (!function_exists('admin_column_exists')) {
     function admin_column_exists(PDO $pdo, string $table, string $column): bool
     {
         try {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-            $stmt->execute([$column]);
+            $stmt = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1");
+            $stmt->execute([$table, $column]);
             return (bool)$stmt->fetchColumn();
         } catch (Throwable $e) {
             return false;

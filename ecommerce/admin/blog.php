@@ -9,26 +9,14 @@ if (!($pdo instanceof PDO)) {
 if (!function_exists('blog_table_exists')) {
     function blog_table_exists(PDO $pdo, string $table): bool
     {
-        try {
-            $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-            $stmt->execute([$table]);
-            return (bool)$stmt->fetchColumn();
-        } catch (Throwable $e) {
-            return false;
-        }
+        return admin_table_exists($pdo, $table);
     }
 }
 
 if (!function_exists('blog_column_exists')) {
     function blog_column_exists(PDO $pdo, string $table, string $column): bool
     {
-        try {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-            $stmt->execute([$column]);
-            return (bool)$stmt->fetchColumn();
-        } catch (Throwable $e) {
-            return false;
-        }
+        return admin_column_exists($pdo, $table, $column);
     }
 }
 

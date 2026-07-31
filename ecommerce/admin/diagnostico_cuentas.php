@@ -21,23 +21,11 @@ $diagnostico = [];
 
 // Helper de utilidad
 function admin_table_exists_local(PDO $pdo, string $table): bool {
-    try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
-        $stmt->execute([$table]);
-        return (bool)$stmt->fetchColumn();
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_table_exists($pdo, $table);
 }
 
 function admin_column_exists_local(PDO $pdo, string $table, string $column): bool {
-    try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-        $stmt->execute([$column]);
-        return (bool)$stmt->fetchColumn();
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_column_exists($pdo, $table, $column);
 }
 
 // 1. Verificar usuario MySQL y permisos básicos

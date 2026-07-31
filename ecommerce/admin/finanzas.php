@@ -6,32 +6,12 @@ ensureContabilidadSchema($pdo);
 
 function fin_table_exists(PDO $pdo, $table)
 {
-    try {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-        $stmt->execute([$table]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Throwable $e) {
-    }
-
-    try {
-        $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
-        return true;
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_table_exists($pdo, $table);
 }
 
 function fin_column_exists(PDO $pdo, $table, $column)
 {
-    try {
-        $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
-        $stmt->execute([$column]);
-        return (bool)$stmt->fetchColumn();
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_column_exists($pdo, $table, $column);
 }
 
 function fin_scalar(PDO $pdo, $sql, $default = 0)

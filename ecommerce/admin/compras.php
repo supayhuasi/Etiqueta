@@ -19,6 +19,7 @@ if ($mensaje === 'eliminada') {
 
 $fechaDesde = $_GET['fecha_desde'] ?? '';
 $fechaHasta = $_GET['fecha_hasta'] ?? '';
+$proveedorId = (int)($_GET['proveedor_id'] ?? 0);
 
 $whereClauses = [];
 $params = [];
@@ -31,6 +32,11 @@ if ($fechaDesde !== '') {
 if ($fechaHasta !== '') {
     $whereClauses[] = 'DATE(c.fecha_compra) <= ?';
     $params[] = $fechaHasta;
+}
+
+if ($proveedorId > 0) {
+    $whereClauses[] = 'c.proveedor_id = ?';
+    $params[] = $proveedorId;
 }
 
 $sql = "
@@ -48,6 +54,8 @@ $sql .= ' ORDER BY c.fecha_compra DESC';
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $compras = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$proveedoresFiltro = $pdo->query('SELECT id, nombre FROM ecommerce_proveedores ORDER BY nombre ASC')->fetchAll(PDO::FETCH_ASSOC);
 
 $totalOrdenes = count($compras);
 $totalImporte = 0;
@@ -86,10 +94,17 @@ foreach ($compras as $compra) {
                 <label for="fecha_hasta" class="form-label">Fecha hasta</label>
                 <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="<?= htmlspecialchars($fechaHasta) ?>">
             </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            <div class="col-md-3">
+                <label for="proveedor_id" class="form-label">Proveedor</label>
+                <select class="form-select" id="proveedor_id" name="proveedor_id">
+                    <option value="0">Todos</option>
+                    <?php foreach ($proveedoresFiltro as $prov): ?>
+                        <option value="<?= (int)$prov['id'] ?>" <?= $proveedorId === (int)$prov['id'] ? 'selected' : '' ?>><?= htmlspecialchars($prov['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
                 <a href="compras.php" class="btn btn-outline-secondary w-100">Limpiar</a>
             </div>
         </form>

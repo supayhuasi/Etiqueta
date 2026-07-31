@@ -8,21 +8,7 @@ if (!($pdo instanceof PDO)) {
 
 function dashboard_table_exists(PDO $pdo, $table)
 {
-    try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
-        $stmt->execute([$table]);
-        if ($stmt->fetchColumn()) {
-            return true;
-        }
-    } catch (Throwable $e) {
-    }
-
-    try {
-        $pdo->query("SELECT 1 FROM {$table} LIMIT 1");
-        return true;
-    } catch (Throwable $e) {
-        return false;
-    }
+    return admin_table_exists($pdo, $table);
 }
 
 function dashboard_scalar(PDO $pdo, $sql, $default = 0)

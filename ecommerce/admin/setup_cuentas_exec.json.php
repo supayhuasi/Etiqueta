@@ -66,10 +66,10 @@ try {
 
     // 3. Agregar columna flujo_caja.cuenta_id
     try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
         $stmt->execute(['flujo_caja']);
         if ($stmt->fetchColumn()) {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM `flujo_caja` LIKE ?");
+            $stmt = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'flujo_caja' AND column_name = ? LIMIT 1");
             $stmt->execute(['cuenta_id']);
             if (!$stmt->fetchColumn()) {
                 $pdo->exec("ALTER TABLE `flujo_caja` ADD COLUMN `cuenta_id` INT NULL");
@@ -120,10 +120,10 @@ try {
 
     // 6. Agregar columna gastos.cuenta_id
     try {
-        $stmt = $pdo->prepare("SHOW TABLES LIKE ?");
+        $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1");
         $stmt->execute(['gastos']);
         if ($stmt->fetchColumn()) {
-            $stmt = $pdo->prepare("SHOW COLUMNS FROM `gastos` LIKE ?");
+            $stmt = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'gastos' AND column_name = ? LIMIT 1");
             $stmt->execute(['cuenta_id']);
             if (!$stmt->fetchColumn()) {
                 $pdo->exec("ALTER TABLE `gastos` ADD COLUMN `cuenta_id` INT NULL");
