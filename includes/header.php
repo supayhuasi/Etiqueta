@@ -20,7 +20,7 @@ if (isset($_SESSION['rol']) && in_array($_SESSION['rol'], ['ventas','operario'])
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Sistema Tucu Roller</title>
+<title>Sistema STUL</title>
 <link href="assets/bootstrap.min.css" rel="stylesheet">
 <style>
 	.top-promo-bar { background: linear-gradient(90deg,#27ae60 0%,#2ecc71 100%); color: #fff; text-align: center; padding: 10px 16px; position: fixed; top: 0; left: 0; right: 0; z-index: 1050; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,.08); display:flex; align-items:center; justify-content:center; gap:12px; }

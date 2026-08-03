@@ -65,7 +65,7 @@ class PDFCalidad extends FPDF
         }
 
         $this->SetFont('Arial', 'B', 16);
-        $this->Cell(0, 8, utf8_decode($this->empresa['nombre'] ?? 'Tucu Roller'), 0, 1, 'C');
+        $this->Cell(0, 8, utf8_decode($this->empresa['nombre'] ?? 'STUL'), 0, 1, 'C');
         $this->SetFont('Arial', 'I', 9);
         $this->Cell(0, 5, utf8_decode('Informe interno de control de calidad'), 0, 1, 'C');
         $this->SetFont('Arial', '', 9);

@@ -5,7 +5,7 @@ require 'includes/header.php';
 
 <div class="container py-5">
     <h1 class="mb-4">Política de privacidad</h1>
-    <p>En Tucu Roller respetamos tu privacidad. Esta política describe cómo recopilamos, usamos y protegemos la información personal cuando navegas o realizas compras en nuestro sitio.</p>
+    <p>En STUL respetamos tu privacidad. Esta política describe cómo recopilamos, usamos y protegemos la información personal cuando navegas o realizas compras en nuestro sitio.</p>
 
     <h2 class="h5 mt-4">Datos que recopilamos</h2>
     <ul>

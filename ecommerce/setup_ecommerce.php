@@ -379,7 +379,7 @@ try {
     // Métodos de pago iniciales
     $pdo->exec("INSERT INTO ecommerce_metodos_pago (codigo, nombre, tipo, instrucciones_html, activo, orden)
         SELECT 'transferencia_bancaria', 'Transferencia Bancaria', 'manual',
-        '<p><strong>Datos para transferencia:</strong></p><ul><li>Banco: Banco Ejemplo</li><li>CBU: 0000000000000000000000</li><li>Alias: TUCU.ROLLER</li><li>Titular: Tucu Roller</li></ul><p>Luego de transferir, envíanos el comprobante.</p>',
+        '<p><strong>Datos para transferencia:</strong></p><ul><li>Banco: Banco Ejemplo</li><li>CBU: 0000000000000000000000</li><li>Alias: STUL</li><li>Titular: STUL</li></ul><p>Luego de transferir, envíanos el comprobante.</p>',
         1, 1
         WHERE NOT EXISTS (SELECT 1 FROM ecommerce_metodos_pago WHERE codigo = 'transferencia_bancaria')
     ");

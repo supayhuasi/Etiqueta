@@ -13,7 +13,7 @@
     </div>
     <div class="row">
       <div class="col-md-4">
-        <h5>🏢 Tucu Roller</h5>
+        <h5>🏢 STUL</h5>
         <p>Somos especialistas en cortinas, toldos y persianas de la más alta calidad.</p>
       </div>
       <div class="col-md-4">

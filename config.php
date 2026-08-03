@@ -30,7 +30,7 @@ try {
 // Configuración de correo (SMTP)
 $email_config = [
     'from_email' => getenv('SMTP_FROM_EMAIL') ?: 'contacto@tucuroller.com.ar',
-    'from_name' => getenv('SMTP_FROM_NAME') ?: 'Tucu Roller',
+    'from_name' => getenv('SMTP_FROM_NAME') ?: 'STUL',
     'smtp_host' => getenv('SMTP_HOST') ?: 'c2331001.ferozo.com',
     'smtp_port' => (int)(getenv('SMTP_PORT') ?: 465),
     'smtp_user' => getenv('SMTP_USER') ?: 'contacto@tucuroller.com.ar',

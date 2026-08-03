@@ -334,7 +334,7 @@ if (contabilidad_table_exists($pdo, 'ecommerce_pedidos')) {
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Alias del certificado</label>
-                        <input type="text" name="afip_alias_certificado" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['alias_certificado'] ?? '')) ?>" placeholder="Ej: AFIP Tucu Roller">
+                        <input type="text" name="afip_alias_certificado" class="form-control" value="<?= htmlspecialchars((string)($afipConfig['alias_certificado'] ?? '')) ?>" placeholder="Ej: AFIP STUL">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email de contacto</label>

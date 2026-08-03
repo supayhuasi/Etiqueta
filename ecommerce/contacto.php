@@ -6,7 +6,7 @@ $mensaje = '';
 $error = '';
 
 $empresa = [
-    'nombre' => 'Tucu Roller',
+    'nombre' => 'STUL',
     'email' => 'info@tucuroller.com',
     'telefono' => '+54 (XXXX) XXX-XXXX',
     'direccion' => '',

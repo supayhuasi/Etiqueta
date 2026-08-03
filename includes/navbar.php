@@ -18,7 +18,7 @@ $scan_url = ($base_path !== '' ? $base_path : '') . '/scan.php';
   <div class="container-fluid">
 
     <a class="navbar-brand" href="index.php">
-      Tucu Roller
+      STUL
     </a>
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse"

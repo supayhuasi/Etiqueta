@@ -208,7 +208,7 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                     
                     <!-- Botones de Acción -->
                     <div class="mt-4 d-flex gap-2 justify-content-end">
-                        <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+                        <a href="sueldo_recibo_pdf.php?id=<?= (int)$id ?>&mes=<?= urlencode($mes) ?>" target="_blank" rel="noopener" class="btn btn-primary">Descargar PDF</a>
                         <a href="sueldo_conceptos.php?id=<?= $id ?>" class="btn btn-warning">Editar Conceptos</a>
                         <a href="sueldos.php" class="btn btn-secondary">Volver</a>
                     </div>

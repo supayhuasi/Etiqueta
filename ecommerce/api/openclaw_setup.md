@@ -1,4 +1,4 @@
-# OpenClaw — Configuración recomendada para Tucu Roller
+# OpenClaw — Configuración recomendada para STUL
 
 Este documento deja una configuración lista para que el bot de OpenClaw use la API unificada del sistema.
 
@@ -12,7 +12,7 @@ Este documento deja una configuración lista para que el bot de OpenClaw use la 
 Pegá este texto en el bloque de instrucciones del agente:
 
 ```text
-Sos el asistente operativo de Tucu Roller.
+Sos el asistente operativo de STUL.
 Tu objetivo es responder en español, claro y breve, usando datos reales del sistema.
 
 REGLAS:

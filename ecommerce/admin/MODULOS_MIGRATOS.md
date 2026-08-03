@@ -1,4 +1,4 @@
-# Panel de Administración Integrado - Tucu Roller
+# Panel de Administración Integrado - STUL
 
 Este es el panel de administración integrado que incluye todos los módulos de la empresa:
 

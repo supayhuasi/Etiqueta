@@ -108,7 +108,7 @@ $page_titles = [
   'blog_articulo.php' => 'Blog'
 ];
 
-$site_name = $empresa_menu['nombre'] ?? 'Tucu Roller';
+$site_name = $empresa_menu['nombre'] ?? 'STUL';
 $page_title_text = (isset($page_title) && $page_title !== '') ? $page_title : ($page_titles[$page_key] ?? 'Tienda');
 $default_title = $page_title_text . ' | ' . $site_name;
 

@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'suscr
 <!-- Sección Hero por defecto -->
 <section class="hero">
     <div class="container">
-        <h1>Bienvenido a Tucu Roller</h1>
+        <h1>Bienvenido a STUL</h1>
         <p>Los mejores productos en cortinas, toldos y persianas</p>
         <a href="tienda.php" class="btn btn-light btn-lg">Ir a la Tienda</a>
     </div>

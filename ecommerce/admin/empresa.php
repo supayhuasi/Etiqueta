@@ -271,7 +271,7 @@ $redes = json_decode($empresa['redes_sociales'] ?? '{}', true) ?? [];
                         <div class="card-body">
                             <div class="mb-3">
                                 <label for="seo_title" class="form-label">Título SEO</label>
-                                <input type="text" class="form-control" id="seo_title" name="seo_title" value="<?= htmlspecialchars($empresa['seo_title'] ?? '') ?>" placeholder="Ej: Tucu Roller | Cortinas y Toldos">
+                                <input type="text" class="form-control" id="seo_title" name="seo_title" value="<?= htmlspecialchars($empresa['seo_title'] ?? '') ?>" placeholder="Ej: STUL | Cortinas y Toldos">
                                 <small class="text-muted">Si está vacío, se usa el nombre y la página.</small>
                             </div>
                             <div class="mb-3">

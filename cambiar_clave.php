@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="index.php">Tucu Roller</a>
+        <a class="navbar-brand" href="index.php">STUL</a>
         <a href="index.php" class="btn btn-outline-light btn-sm">← Volver</a>
     </div>
 </nav>

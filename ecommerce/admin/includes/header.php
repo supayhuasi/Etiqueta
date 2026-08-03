@@ -1278,7 +1278,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?= htmlspecialchars(admin_csrf_token()) ?>">
-    <title>Admin - Tucu Roller</title>
+    <title>Admin - STUL</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script>
@@ -2197,17 +2197,17 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php 
                         else:
                 ?>
-                    <h4 class="text-primary mb-0">Tucu Roller</h4>
+                    <h4 class="text-primary mb-0">STUL</h4>
                 <?php 
                         endif;
                     else:
                 ?>
-                    <h4 class="text-primary mb-0">Tucu Roller</h4>
+                    <h4 class="text-primary mb-0">STUL</h4>
                 <?php 
                     endif;
                 } catch (Exception $e) {
                 ?>
-                    <h4 class="text-primary mb-0">Tucu Roller</h4>
+                    <h4 class="text-primary mb-0">STUL</h4>
                 <?php } ?>
             </div>
             
