@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require __DIR__ . '/../includes/cache.php';
 
 // Asegurar columnas SEO
 try {
@@ -218,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $mensaje = "Información actualizada correctamente";
                 // Recargar datos
+                cache_delete('ecommerce_empresa_menu');
                 $stmt_reload = $pdo->prepare("SELECT * FROM ecommerce_empresa WHERE id = ?");
                 $stmt_reload->execute([$empresa['id']]);
                 $empresa = $stmt_reload->fetch(PDO::FETCH_ASSOC) ?? $empresa;

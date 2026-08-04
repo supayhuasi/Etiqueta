@@ -2183,13 +2183,17 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     $empresa_logo = $stmt_logo->fetch(PDO::FETCH_ASSOC);
                     if (!empty($empresa_logo['logo'])):
                         $logo_filename = $empresa_logo['logo'];
-                        $logo_local_path = $base_path . '/ecommerce/uploads/' . $logo_filename;
-                        $logo_root_path = $base_path . '/uploads/' . $logo_filename;
+                        $logo_candidates = [
+                            ['local' => $base_path . '/ecommerce/uploads/' . $logo_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $logo_filename],
+                            ['local' => $base_path . '/uploads/' . $logo_filename, 'public' => '/uploads/' . $logo_filename],
+                            ['local' => $base_path . '/../uploads/' . $logo_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $logo_filename],
+                        ];
                         $logo_src = null;
-                        if (file_exists($logo_local_path)) {
-                            $logo_src = $public_base . '/uploads/' . $logo_filename;
-                        } elseif (file_exists($logo_root_path)) {
-                            $logo_src = '/uploads/' . $logo_filename;
+                        foreach ($logo_candidates as $candidate) {
+                            if (file_exists($candidate['local'])) {
+                                $logo_src = $candidate['public'];
+                                break;
+                            }
                         }
                         if ($logo_src):
                 ?>

@@ -56,26 +56,34 @@ $usar_marca_alt = $dominio_alt_normalizado !== '' && $host_actual === $dominio_a
 $logo_menu_src = null;
 $logo_filename = $usar_marca_alt ? $empresa_menu['logo_alt'] : ($empresa_menu['logo'] ?? null);
 if (!empty($logo_filename)) {
-  $logo_local_path = __DIR__ . '/../uploads/' . $logo_filename; // ecommerce/uploads
-  $logo_root_path = __DIR__ . '/../../uploads/' . $logo_filename; // raiz /uploads
+  $candidatos_logo = [
+    ['local' => __DIR__ . '/../uploads/' . $logo_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $logo_filename],
+    ['local' => __DIR__ . '/../../uploads/' . $logo_filename, 'public' => '/uploads/' . $logo_filename],
+    ['local' => __DIR__ . '/../../../../uploads/' . $logo_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $logo_filename],
+  ];
 
-  if (file_exists($logo_local_path)) {
-    $logo_menu_src = $public_base . '/uploads/' . $logo_filename;
-  } elseif (file_exists($logo_root_path)) {
-    $logo_menu_src = '/uploads/' . $logo_filename;
+  foreach ($candidatos_logo as $c) {
+    if (file_exists($c['local'])) {
+      $logo_menu_src = $c['public'];
+      break;
+    }
   }
 }
 
 $favicon_src = null;
 if (!empty($empresa_menu['favicon'])) {
   $favicon_filename = $empresa_menu['favicon'];
-  $favicon_local_path = __DIR__ . '/../uploads/' . $favicon_filename;
-  $favicon_root_path = __DIR__ . '/../../uploads/' . $favicon_filename;
+  $candidatos_favicon = [
+    ['local' => __DIR__ . '/../uploads/' . $favicon_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $favicon_filename],
+    ['local' => __DIR__ . '/../../uploads/' . $favicon_filename, 'public' => '/uploads/' . $favicon_filename],
+    ['local' => __DIR__ . '/../../../../uploads/' . $favicon_filename, 'public' => ($public_base === '' ? '' : $public_base) . '/uploads/' . $favicon_filename],
+  ];
 
-  if (file_exists($favicon_local_path)) {
-    $favicon_src = $public_base . '/uploads/' . $favicon_filename;
-  } elseif (file_exists($favicon_root_path)) {
-    $favicon_src = '/uploads/' . $favicon_filename;
+  foreach ($candidatos_favicon as $c) {
+    if (file_exists($c['local'])) {
+      $favicon_src = $c['public'];
+      break;
+    }
   }
 }
 
