@@ -56,38 +56,18 @@ $usar_marca_alt = $dominio_alt_normalizado !== '' && $host_actual === $dominio_a
 $logo_menu_src = null;
 $logo_filename = $usar_marca_alt ? $empresa_menu['logo_alt'] : ($empresa_menu['logo'] ?? null);
 if (!empty($logo_filename)) {
-  $upload_base_path = rtrim($public_base, '/');
-  $upload_public_base = $upload_base_path === '' ? 'uploads/' : $upload_base_path . '/uploads/';
-  $candidatos_logo = [
-    ['local' => __DIR__ . '/../uploads/' . $logo_filename, 'public' => $upload_public_base . $logo_filename],
-    ['local' => __DIR__ . '/../../uploads/' . $logo_filename, 'public' => '/uploads/' . $logo_filename],
-    ['local' => __DIR__ . '/../../../../uploads/' . $logo_filename, 'public' => $upload_public_base . $logo_filename],
-  ];
-
-  foreach ($candidatos_logo as $c) {
-    if (file_exists($c['local'])) {
-      $logo_menu_src = $c['public'];
-      break;
-    }
+  $logo_local_path = __DIR__ . '/uploads/' . $logo_filename;
+  if (file_exists($logo_local_path)) {
+    $logo_menu_src = 'uploads/' . $logo_filename;
   }
 }
 
 $favicon_src = null;
 if (!empty($empresa_menu['favicon'])) {
   $favicon_filename = $empresa_menu['favicon'];
-  $upload_base_path = rtrim($public_base, '/');
-  $upload_public_base = $upload_base_path === '' ? 'uploads/' : $upload_base_path . '/uploads/';
-  $candidatos_favicon = [
-    ['local' => __DIR__ . '/../uploads/' . $favicon_filename, 'public' => $upload_public_base . $favicon_filename],
-    ['local' => __DIR__ . '/../../uploads/' . $favicon_filename, 'public' => '/uploads/' . $favicon_filename],
-    ['local' => __DIR__ . '/../../../../uploads/' . $favicon_filename, 'public' => $upload_public_base . $favicon_filename],
-  ];
-
-  foreach ($candidatos_favicon as $c) {
-    if (file_exists($c['local'])) {
-      $favicon_src = $c['public'];
-      break;
-    }
+  $favicon_local_path = __DIR__ . '/uploads/' . $favicon_filename;
+  if (file_exists($favicon_local_path)) {
+    $favicon_src = 'uploads/' . $favicon_filename;
   }
 }
 

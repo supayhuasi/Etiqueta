@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "La imagen es muy grande (máx 5MB)";
                 } else {
                     $logo = "logo_" . time() . "." . $ext;
-                    $dir_logo = "../../uploads/";
+                    $dir_logo = __DIR__ . '/../uploads/';
                     if (!is_dir($dir_logo)) {
                         mkdir($dir_logo, 0755, true);
                     }
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $error = "El logo alternativo es muy grande (máx 5MB)";
                     } else {
                         $logo_alt = "logo_alt_" . time() . "." . $ext;
-                        $dir_logo = "../../uploads/";
+                        $dir_logo = __DIR__ . '/../uploads/';
                         if (!is_dir($dir_logo)) {
                             mkdir($dir_logo, 0755, true);
                         }
@@ -163,23 +163,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $error = "El favicon es muy grande (máx 2MB)";
                     } else {
                         $favicon = "favicon_" . time() . "." . $ext;
-                        $dirs_posibles = ["../../uploads/", "../uploads/"];
-                        $subido = false;
-
-                        foreach ($dirs_posibles as $dir_logo) {
-                            if (!is_dir($dir_logo)) {
-                                @mkdir($dir_logo, 0755, true);
-                            }
-                            if (is_dir($dir_logo) && is_writable($dir_logo)) {
-                                if (move_uploaded_file($_FILES['favicon']['tmp_name'], $dir_logo . $favicon)) {
-                                    $subido = true;
-                                    break;
-                                }
-                            }
+                        $dir_logo = __DIR__ . '/../uploads/';
+                        if (!is_dir($dir_logo)) {
+                            @mkdir($dir_logo, 0755, true);
                         }
-
-                        if (!$subido) {
-                            $error = "Error al subir el favicon. Verificá permisos de la carpeta uploads.";
+                        if (is_dir($dir_logo) && is_writable($dir_logo)) {
+                            if (!move_uploaded_file($_FILES['favicon']['tmp_name'], $dir_logo . $favicon)) {
+                                $error = "Error al subir el favicon. Verificá permisos de la carpeta ecommerce/uploads.";
+                                $favicon = $empresa['favicon'] ?? null;
+                            }
+                        } else {
+                            $error = "Error al subir el favicon. Verificá permisos de la carpeta ecommerce/uploads.";
                             $favicon = $empresa['favicon'] ?? null;
                         }
                     }
