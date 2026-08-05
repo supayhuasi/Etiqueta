@@ -1,6 +1,11 @@
 <?php
 require '../includes/header.php';
 
+$col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'fichaje_rapido'");
+if ($col->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN fichaje_rapido TINYINT(1) NOT NULL DEFAULT 1 AFTER activo");
+}
+
 session_start();
 if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
     http_response_code(403);
@@ -10,7 +15,7 @@ if (!isset($_SESSION['user']) || ($_SESSION['rol'] ?? '') !== 'admin') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $stmt = $pdo->prepare("INSERT INTO empleados (nombre, email, documento, tipo_documento, telefono, direccion, ciudad, provincia, codigo_postal, puesto, departamento, fecha_ingreso, sueldo_base, activo, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())");
+        $stmt = $pdo->prepare("INSERT INTO empleados (nombre, email, documento, tipo_documento, telefono, direccion, ciudad, provincia, codigo_postal, puesto, departamento, fecha_ingreso, sueldo_base, activo, fichaje_rapido, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())");
         $stmt->execute([
             $_POST['nombre'],
             $_POST['email'],
@@ -24,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['puesto'] ?? null,
             $_POST['departamento'] ?? null,
             $_POST['fecha_ingreso'] ?? null,
-            floatval($_POST['sueldo_base'])
+            floatval($_POST['sueldo_base']),
+            isset($_POST['fichaje_rapido']) ? 1 : 0
         ]);
         header('Location: empleados.php?success=Empleado creado');
         exit;
@@ -121,6 +127,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label class="form-label">Sueldo Base ($) *</label>
                                 <input type="number" class="form-control" name="sueldo_base" step="0.01" required>
                             </div>
+                        </div>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="fichaje_rapido" name="fichaje_rapido" value="1" checked>
+                            <label class="form-check-label" for="fichaje_rapido">Puede usar fichaje rápido</label>
                         </div>
                     </div>
                 </div>

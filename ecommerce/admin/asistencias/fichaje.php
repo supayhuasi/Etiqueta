@@ -1,6 +1,11 @@
 <?php
 require '../includes/header.php';
 
+$col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'fichaje_rapido'");
+if ($col->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN fichaje_rapido TINYINT(1) NOT NULL DEFAULT 1 AFTER activo");
+}
+
 $stmt = $pdo->query("
     SELECT
         e.id,
@@ -11,7 +16,7 @@ $stmt = $pdo->query("
         a.estado
     FROM empleados e
     LEFT JOIN asistencias a ON a.empleado_id = e.id AND a.fecha = CURDATE()
-    WHERE e.activo = 1
+    WHERE e.activo = 1 AND e.fichaje_rapido = 1
     ORDER BY e.nombre ASC
 ");
 $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);

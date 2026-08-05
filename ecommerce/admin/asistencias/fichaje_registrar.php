@@ -11,10 +11,12 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-// Fichaje rápido: cualquier usuario interno logueado puede marcar su entrada/salida
-// (no se restringe por rol, a diferencia del resto del módulo de asistencias).
-
 require dirname(__DIR__, 3) . '/config.php';
+
+$col = $pdo->query("SHOW COLUMNS FROM empleados LIKE 'fichaje_rapido'");
+if ($col->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE empleados ADD COLUMN fichaje_rapido TINYINT(1) NOT NULL DEFAULT 1 AFTER activo");
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -30,7 +32,7 @@ if ($empleado_id <= 0) {
 }
 
 try {
-    $stmt = $pdo->prepare("SELECT id, nombre FROM empleados WHERE id = ? AND activo = 1");
+    $stmt = $pdo->prepare("SELECT id, nombre FROM empleados WHERE id = ? AND activo = 1 AND fichaje_rapido = 1");
     $stmt->execute([$empleado_id]);
     $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$empleado) {

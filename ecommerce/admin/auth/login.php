@@ -28,7 +28,7 @@ if (!empty($empresa['logo'])) {
   $logo_root_path = $base_path . '/uploads/' . $logo_filename;
 
   if (file_exists($logo_local_path)) {
-    $logo_src = '../../uploads/' . $logo_filename;
+    $logo_src = '/ecommerce/uploads/' . $logo_filename;
   } elseif (file_exists($logo_root_path)) {
     $logo_src = '/uploads/' . $logo_filename;
   }
