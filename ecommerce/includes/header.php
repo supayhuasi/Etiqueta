@@ -56,7 +56,7 @@ $usar_marca_alt = $dominio_alt_normalizado !== '' && $host_actual === $dominio_a
 $logo_menu_src = null;
 $logo_filename = $usar_marca_alt ? $empresa_menu['logo_alt'] : ($empresa_menu['logo'] ?? null);
 if (!empty($logo_filename)) {
-  $logo_local_path = __DIR__ . '/uploads/' . $logo_filename;
+  $logo_local_path = __DIR__ . '/../uploads/' . $logo_filename;
   if (file_exists($logo_local_path)) {
     $logo_menu_src = 'uploads/' . $logo_filename;
   }
@@ -65,7 +65,7 @@ if (!empty($logo_filename)) {
 $favicon_src = null;
 if (!empty($empresa_menu['favicon'])) {
   $favicon_filename = $empresa_menu['favicon'];
-  $favicon_local_path = __DIR__ . '/uploads/' . $favicon_filename;
+  $favicon_local_path = __DIR__ . '/../uploads/' . $favicon_filename;
   if (file_exists($favicon_local_path)) {
     $favicon_src = 'uploads/' . $favicon_filename;
   }
