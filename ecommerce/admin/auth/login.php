@@ -27,9 +27,9 @@ if (!empty($empresa['logo'])) {
   $logo_local_path = $base_path . '/ecommerce/uploads/' . $logo_filename;
   $logo_root_path = $base_path . '/uploads/' . $logo_filename;
 
-  if (file_exists($logo_local_path)) {
-    $logo_src = '/ecommerce/uploads/' . $logo_filename;
-  } elseif (file_exists($logo_root_path)) {
+  // El docroot del sitio apunta a la carpeta ecommerce/, por lo que
+  // la URL pública nunca lleva el prefijo /ecommerce.
+  if (file_exists($logo_local_path) || file_exists($logo_root_path)) {
     $logo_src = '/uploads/' . $logo_filename;
   }
 }

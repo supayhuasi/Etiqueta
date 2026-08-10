@@ -2217,9 +2217,10 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     if (!empty($empresa_logo['logo'])):
                         $logo_filename = $empresa_logo['logo'];
                         $logo_src = null;
-                        if (file_exists($base_path . '/ecommerce/uploads/' . $logo_filename)) {
-                            $logo_src = '/ecommerce/uploads/' . $logo_filename;
-                        } elseif (file_exists($base_path . '/uploads/' . $logo_filename)) {
+                        // El docroot del sitio apunta a la carpeta ecommerce/, por lo que
+                        // la URL pública nunca lleva el prefijo /ecommerce.
+                        if (file_exists($base_path . '/ecommerce/uploads/' . $logo_filename)
+                            || file_exists($base_path . '/uploads/' . $logo_filename)) {
                             $logo_src = '/uploads/' . $logo_filename;
                         }
                         if ($logo_src):
