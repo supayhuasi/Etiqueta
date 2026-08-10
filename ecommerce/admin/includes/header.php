@@ -2295,7 +2295,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'fotos_nube', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa" title="Empresa">
                         <span><i class="bi bi-building"></i><span class="menu-label"> Empresa</span></span>
@@ -2317,6 +2317,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('banners')): ?>
                         <a href="<?= $admin_url ?>banners.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['banners.php', 'banners_crear.php', 'banners_eliminar.php'], true) ? 'active' : '' ?>"><i class="bi bi-images"></i> Banners Promocionales</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('fotos_nube')): ?>
+                        <a href="<?= $admin_url ?>fotos_nube.php" class="<?= basename($_SERVER['PHP_SELF']) === 'fotos_nube.php' ? 'active' : '' ?>"><i class="bi bi-cloud-arrow-up"></i> Nube de Fotos</a>
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
