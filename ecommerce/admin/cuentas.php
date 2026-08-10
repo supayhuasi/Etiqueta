@@ -39,9 +39,11 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
             <p class="text-muted">Organizá el flujo de caja en distintas cuentas (caja, inversión, producción, etc.). El saldo de cada cuenta se calcula solo, sumando todos sus movimientos históricos.</p>
         </div>
         <div class="col-md-6 text-end">
-            <a href="flujo_caja.php" class="btn btn-secondary me-2">← Flujo de Caja</a>
-            <a href="cuentas_crear.php" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Nueva Cuenta
+            <a href="flujo_caja.php" class="btn btn-account-secondary me-2">
+                <i class="bi bi-arrow-left-circle me-1"></i> Flujo de Caja
+            </a>
+            <a href="cuentas_crear.php" class="btn btn-account-primary">
+                <i class="bi bi-plus-circle me-1"></i> Nueva Cuenta
             </a>
         </div>
     </div>
@@ -91,11 +93,17 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <a href="cuentas_crear.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-primary">Editar</a>
+                                        <a href="cuentas_crear.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-account-primary">
+                                            <i class="bi bi-pencil-square me-1"></i> Editar
+                                        </a>
                                         <?php if ((int)$c['activo'] === 1): ?>
-                                            <a href="cuentas_eliminar.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-danger">Desactivar</a>
+                                            <a href="cuentas_eliminar.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-account-danger">
+                                                <i class="bi bi-slash-circle me-1"></i> Desactivar
+                                            </a>
                                         <?php else: ?>
-                                            <a href="cuentas_eliminar.php?id=<?= (int)$c['id'] ?>&accion=activar" class="btn btn-sm btn-outline-success">Activar</a>
+                                            <a href="cuentas_eliminar.php?id=<?= (int)$c['id'] ?>&accion=activar" class="btn btn-sm btn-account-secondary">
+                                                <i class="bi bi-check-circle me-1"></i> Activar
+                                            </a>
                                         <?php endif; ?>
                                     </td>
                                 </tr>

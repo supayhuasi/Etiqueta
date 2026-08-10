@@ -1614,6 +1614,39 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             background: linear-gradient(135deg, #2a64dd, #1b4dbd);
             border-color: #1b4dbd;
         }
+        .btn-account-primary {
+            color: #005CA2;
+            border: 1.5px solid #005CA2;
+            background: transparent;
+        }
+        .btn-account-primary:hover,
+        .btn-account-primary:focus-visible {
+            color: #fff;
+            background: #005CA2;
+            border-color: #005CA2;
+        }
+        .btn-account-secondary {
+            color: #FEC800;
+            border: 1.5px solid #FEC800;
+            background: transparent;
+        }
+        .btn-account-secondary:hover,
+        .btn-account-secondary:focus-visible {
+            color: #111;
+            background: #FEC800;
+            border-color: #FEC800;
+        }
+        .btn-account-danger {
+            color: #dc3545;
+            border: 1.5px solid #dc3545;
+            background: transparent;
+        }
+        .btn-account-danger:hover,
+        .btn-account-danger:focus-visible {
+            color: #fff;
+            background: #dc3545;
+            border-color: #dc3545;
+        }
         .table {
             --bs-table-bg: transparent;
             color: var(--admin-table-head);

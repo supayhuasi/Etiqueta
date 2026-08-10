@@ -77,7 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h1><?= $id > 0 ? '✏️ Editar Cuenta' : '➕ Nueva Cuenta' ?></h1>
         </div>
         <div class="col-md-4 text-end">
-            <a href="cuentas.php" class="btn btn-secondary">← Volver</a>
+            <a href="cuentas.php" class="btn btn-account-secondary">
+                <i class="bi bi-arrow-left-circle me-1"></i> Volver
+            </a>
         </div>
     </div>
 
@@ -114,8 +116,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label class="form-check-label" for="activo">Cuenta activa</label>
                 </div>
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg">💾 Guardar</button>
-                    <a href="cuentas.php" class="btn btn-secondary btn-lg">Cancelar</a>
+                    <button type="submit" class="btn btn-account-primary btn-lg">
+                        <i class="bi bi-floppy2 me-1"></i> Guardar
+                    </button>
+                    <a href="cuentas.php" class="btn btn-account-secondary btn-lg">
+                        <i class="bi bi-x-circle me-1"></i> Cancelar
+                    </a>
                 </div>
             </form>
         </div>

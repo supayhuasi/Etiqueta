@@ -98,7 +98,9 @@ $todo_ok = $tabla_cuentas_existe && $columna_flujo_caja_existe && !empty($cuenta
         </div>
     </div>
 
-    <a href="cuentas.php" class="btn btn-primary mt-3">Ir a Cuentas</a>
+    <a href="cuentas.php" class="btn btn-account-secondary mt-3">
+        <i class="bi bi-wallet2 me-1"></i> Ir a Cuentas
+    </a>
 </div>
 
 <?php require 'includes/footer.php'; ?>

@@ -75,10 +75,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" class="d-flex gap-2">
-                <button type="submit" class="btn <?= $accion === 'activar' ? 'btn-success' : 'btn-danger' ?> btn-lg">
+                <button type="submit" class="btn btn-lg <?= $accion === 'activar' ? 'btn-account-secondary' : 'btn-account-danger' ?>">
+                    <i class="bi <?= $accion === 'activar' ? 'bi-check-circle' : 'bi-trash3' ?> me-1"></i>
                     Sí, <?= $accion === 'activar' ? 'activar' : 'desactivar' ?> cuenta
                 </button>
-                <a href="cuentas.php" class="btn btn-secondary btn-lg">Cancelar</a>
+                <a href="cuentas.php" class="btn btn-account-secondary btn-lg">
+                    <i class="bi bi-x-circle me-1"></i> Cancelar
+                </a>
             </form>
         </div>
     </div>
