@@ -16,7 +16,7 @@ $es_revendedor = (($role ?? '') === 'revendedor');
 $es_operario = (($role ?? '') === 'operario');
 $es_admin = (($role ?? '') === 'admin');
 $es_ventas = in_array(($role ?? ''), ['ventas', 'vendedor'], true);
-$puede_ver_costos = $es_admin || $es_ventas;
+$puede_ver_costos = $es_admin;
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {

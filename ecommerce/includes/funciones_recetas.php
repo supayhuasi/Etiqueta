@@ -142,6 +142,22 @@ function obtener_costo_unitario_material(PDO $pdo, int $material_producto_id): f
         return 0.0;
     }
 
+    try {
+        $stmt = $pdo->prepare("SELECT ci.costo_unitario
+            FROM ecommerce_compra_items ci
+            INNER JOIN ecommerce_compras c ON c.id = ci.compra_id
+            WHERE ci.producto_id = ?
+            ORDER BY c.fecha_compra DESC, c.id DESC, ci.id DESC
+            LIMIT 1");
+        $stmt->execute([$material_producto_id]);
+        $valor = (float)($stmt->fetchColumn() ?? 0);
+        if ($valor > 0) {
+            return $valor;
+        }
+    } catch (Throwable $e) {
+        // Si aún no hay compras registradas o la estructura no coincide, seguimos con el fallback.
+    }
+
     $stmt = $pdo->prepare("SELECT precio_base FROM ecommerce_productos WHERE id = ? LIMIT 1");
     $stmt->execute([$material_producto_id]);
     $material = $stmt->fetch(PDO::FETCH_ASSOC);
