@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/../includes/funciones_recetas.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
 require_once __DIR__ . '/includes/cuentas_helper.php';
 
@@ -249,7 +250,7 @@ if (!empty($_GET['afip_error'])) {
 }
 
 // Procesar acciones de producción y pagos ANTES de incluir header.php
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
     $accion = $_POST['accion'] ?? '';
     try {
         if ($accion === 'guardar_comprobante_tipo') {
