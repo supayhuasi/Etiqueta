@@ -130,10 +130,22 @@ try {
     $errores[] = "Estadísticas de cotizaciones: " . $e->getMessage();
 }
 
+$anio_seleccionado = (int)($_GET['anio'] ?? date('Y'));
+if ($anio_seleccionado < 2000 || $anio_seleccionado > 2100) {
+    $anio_seleccionado = (int)date('Y');
+}
+
 $ventas_anio = 0.0;
 $compras_anio = 0.0;
 $gastos_anio = 0.0;
 $sueldos_anio = 0.0;
+$ingresos_periodo = 0.0;
+$egresos_periodo = 0.0;
+$neto_periodo = 0.0;
+$pasivos_totales = 0.0;
+$pasivos_gastos = 0.0;
+$pasivos_sueldos = 0.0;
+$pasivos_compras = 0.0;
 $productos_ventas_ranking = [];
 $productos_compra_ranking = [];
 $proveedores_ranking = [];
@@ -143,10 +155,11 @@ $ventas_mensuales = [];
 $compras_mensuales = [];
 $gastos_mensuales = [];
 $sueldos_mensuales = [];
+$egresos_mensuales = [];
 
 try {
     if (tabla_existe($pdo, 'ecommerce_pedidos')) {
-        $stmt = $pdo->query("SELECT COALESCE(SUM(total),0) as total FROM ecommerce_pedidos WHERE YEAR(fecha_pedido) = YEAR(CURRENT_DATE()) AND estado != 'cancelado'");
+        $stmt = $pdo->query("SELECT COALESCE(SUM(total),0) as total FROM ecommerce_pedidos WHERE YEAR(fecha_pedido) = {$anio_seleccionado} AND estado != 'cancelado'");
         $ventas_anio = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
     }
 } catch (Throwable $e) {
@@ -155,7 +168,7 @@ try {
 
 try {
     if (tabla_existe($pdo, 'ecommerce_compra_items') && tabla_existe($pdo, 'ecommerce_compras')) {
-        $stmt = $pdo->query("SELECT COALESCE(SUM(ci.subtotal),0) as total FROM ecommerce_compra_items ci JOIN ecommerce_compras c ON c.id = ci.compra_id WHERE YEAR(c.fecha_compra) = YEAR(CURRENT_DATE())");
+        $stmt = $pdo->query("SELECT COALESCE(SUM(ci.subtotal),0) as total FROM ecommerce_compra_items ci JOIN ecommerce_compras c ON c.id = ci.compra_id WHERE YEAR(c.fecha_compra) = {$anio_seleccionado}");
         $compras_anio = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
     }
 } catch (Throwable $e) {
@@ -164,7 +177,7 @@ try {
 
 try {
     if (tabla_existe($pdo, 'gastos')) {
-        $stmt = $pdo->query("SELECT COALESCE(SUM(monto),0) as total FROM gastos WHERE YEAR(fecha) = YEAR(CURRENT_DATE())");
+        $stmt = $pdo->query("SELECT COALESCE(SUM(monto),0) as total FROM gastos WHERE YEAR(fecha) = {$anio_seleccionado}");
         $gastos_anio = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
     }
 } catch (Throwable $e) {
@@ -173,16 +186,49 @@ try {
 
 try {
     if (tabla_existe($pdo, 'pagos_sueldos')) {
-        $stmt = $pdo->query("SELECT COALESCE(SUM(monto_pagado),0) as total FROM pagos_sueldos WHERE mes_pago LIKE CONCAT(YEAR(CURRENT_DATE()), '%')");
+        $stmt = $pdo->query("SELECT COALESCE(SUM(monto_pagado),0) as total FROM pagos_sueldos WHERE DATE_FORMAT(fecha_pago, '%Y') = '{$anio_seleccionado}' OR DATE_FORMAT(CAST(mes_pago AS CHAR), '%Y') = '{$anio_seleccionado}' OR mes_pago LIKE '{$anio_seleccionado}-%'");
         $sueldos_anio = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
     }
 } catch (Throwable $e) {
     $errores[] = 'Sueldos anuales: ' . $e->getMessage();
 }
 
+$ingresos_periodo = $ventas_anio;
+$egresos_periodo = $gastos_anio + $compras_anio + $sueldos_anio;
+$neto_periodo = $ingresos_periodo - $egresos_periodo;
+
+try {
+    if (tabla_existe($pdo, 'gastos') && tabla_existe($pdo, 'estados_gastos')) {
+        $stmt = $pdo->query("SELECT COALESCE(SUM(g.monto),0) as total FROM gastos g LEFT JOIN estados_gastos e ON e.id = g.estado_gasto_id WHERE e.nombre IS NULL OR LOWER(e.nombre) <> 'pagado' AND YEAR(g.fecha) = {$anio_seleccionado}");
+        $pasivos_gastos = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+} catch (Throwable $e) {
+    $pasivos_gastos = 0.0;
+}
+
+try {
+    if (tabla_existe($pdo, 'pagos_sueldos')) {
+        $stmt = $pdo->query("SELECT COALESCE(SUM(CASE WHEN sueldo_total > 0 THEN (sueldo_total - monto_pagado) ELSE 0 END),0) as total FROM pagos_sueldos WHERE (DATE_FORMAT(fecha_pago, '%Y') = '{$anio_seleccionado}' OR DATE_FORMAT(CAST(mes_pago AS CHAR), '%Y') = '{$anio_seleccionado}' OR mes_pago LIKE '{$anio_seleccionado}-%')");
+        $pasivos_sueldos = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+} catch (Throwable $e) {
+    $pasivos_sueldos = 0.0;
+}
+
+try {
+    if (tabla_existe($pdo, 'ecommerce_compras')) {
+        $stmt = $pdo->query("SELECT COALESCE(SUM(total),0) as total FROM ecommerce_compras WHERE YEAR(fecha_compra) = {$anio_seleccionado} AND estado NOT IN ('cancelado', 'pagada', 'cerrada')");
+        $pasivos_compras = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+} catch (Throwable $e) {
+    $pasivos_compras = 0.0;
+}
+
+$pasivos_totales = $pasivos_gastos + $pasivos_sueldos + $pasivos_compras;
+
 try {
     if (tabla_existe($pdo, 'ecommerce_pedido_items') && tabla_existe($pdo, 'ecommerce_productos') && tabla_existe($pdo, 'ecommerce_pedidos')) {
-        $stmt = $pdo->query("SELECT p.nombre, SUM(pi.cantidad) as cantidad, SUM(pi.subtotal) as total FROM ecommerce_pedido_items pi JOIN ecommerce_productos p ON p.id = pi.producto_id JOIN ecommerce_pedidos ped ON ped.id = pi.pedido_id WHERE ped.estado != 'cancelado' GROUP BY pi.producto_id, p.nombre ORDER BY cantidad DESC, total DESC LIMIT 5");
+        $stmt = $pdo->query("SELECT p.nombre, SUM(pi.cantidad) as cantidad, SUM(pi.subtotal) as total FROM ecommerce_pedido_items pi JOIN ecommerce_productos p ON p.id = pi.producto_id JOIN ecommerce_pedidos ped ON ped.id = pi.pedido_id WHERE ped.estado != 'cancelado' AND YEAR(ped.fecha_pedido) = {$anio_seleccionado} GROUP BY pi.producto_id, p.nombre ORDER BY cantidad DESC, total DESC LIMIT 5");
         $productos_ventas_ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Throwable $e) {
@@ -191,7 +237,7 @@ try {
 
 try {
     if (tabla_existe($pdo, 'ecommerce_compra_items') && tabla_existe($pdo, 'ecommerce_productos') && tabla_existe($pdo, 'ecommerce_compras')) {
-        $stmt = $pdo->query("SELECT p.nombre, SUM(ci.cantidad) as cantidad, SUM(ci.subtotal) as total FROM ecommerce_compra_items ci JOIN ecommerce_productos p ON p.id = ci.producto_id JOIN ecommerce_compras c ON c.id = ci.compra_id GROUP BY ci.producto_id, p.nombre ORDER BY cantidad DESC, total DESC LIMIT 5");
+        $stmt = $pdo->query("SELECT p.nombre, SUM(ci.cantidad) as cantidad, SUM(ci.subtotal) as total FROM ecommerce_compra_items ci JOIN ecommerce_productos p ON p.id = ci.producto_id JOIN ecommerce_compras c ON c.id = ci.compra_id WHERE YEAR(c.fecha_compra) = {$anio_seleccionado} GROUP BY ci.producto_id, p.nombre ORDER BY cantidad DESC, total DESC LIMIT 5");
         $productos_compra_ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Throwable $e) {
@@ -200,7 +246,7 @@ try {
 
 try {
     if (tabla_existe($pdo, 'ecommerce_compras') && tabla_existe($pdo, 'ecommerce_proveedores')) {
-        $stmt = $pdo->query("SELECT pr.nombre, SUM(c.total) as total, COUNT(c.id) as compras FROM ecommerce_compras c JOIN ecommerce_proveedores pr ON pr.id = c.proveedor_id GROUP BY c.proveedor_id, pr.nombre ORDER BY total DESC LIMIT 5");
+        $stmt = $pdo->query("SELECT pr.nombre, SUM(c.total) as total, COUNT(c.id) as compras FROM ecommerce_compras c JOIN ecommerce_proveedores pr ON pr.id = c.proveedor_id WHERE YEAR(c.fecha_compra) = {$anio_seleccionado} GROUP BY c.proveedor_id, pr.nombre ORDER BY total DESC LIMIT 5");
         $proveedores_ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Throwable $e) {
@@ -209,7 +255,7 @@ try {
 
 try {
     if (tabla_existe($pdo, 'gastos') && tabla_existe($pdo, 'tipos_gastos')) {
-        $stmt = $pdo->query("SELECT tg.nombre, SUM(g.monto) as total, COUNT(g.id) as cantidad FROM gastos g JOIN tipos_gastos tg ON tg.id = g.tipo_gasto_id GROUP BY g.tipo_gasto_id, tg.nombre ORDER BY total DESC LIMIT 5");
+        $stmt = $pdo->query("SELECT tg.nombre, SUM(g.monto) as total, COUNT(g.id) as cantidad FROM gastos g JOIN tipos_gastos tg ON tg.id = g.tipo_gasto_id WHERE YEAR(g.fecha) = {$anio_seleccionado} GROUP BY g.tipo_gasto_id, tg.nombre ORDER BY total DESC LIMIT 5");
         $gastos_ranking = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Throwable $e) {
@@ -220,7 +266,7 @@ $meses_names = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov
 for ($i = 1; $i <= 12; $i++) {
     $labels_meses[] = $meses_names[$i - 1];
 
-    $month_start = sprintf('%04d-%02d-01', date('Y'), $i);
+    $month_start = sprintf('%04d-%02d-01', $anio_seleccionado, $i);
     $next_month = new DateTime($month_start);
     $next_month->modify('first day of next month');
     $month_end = (clone $next_month)->modify('-1 second');
@@ -265,9 +311,9 @@ for ($i = 1; $i <= 12; $i++) {
 
     try {
         if (tabla_existe($pdo, 'pagos_sueldos')) {
-            $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto_pagado),0) as total FROM pagos_sueldos WHERE mes_pago = ?");
-            $mes_key = date('Y', strtotime($inicio)) . '-' . str_pad($i, 2, '0', STR_PAD_LEFT);
-            $stmt->execute([$mes_key]);
+            $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto_pagado),0) as total FROM pagos_sueldos WHERE mes_pago = ? OR DATE_FORMAT(fecha_pago, '%Y-%m') = ?");
+            $mes_key = $anio_seleccionado . '-' . str_pad($i, 2, '0', STR_PAD_LEFT);
+            $stmt->execute([$mes_key, $mes_key]);
             $sueldos_mensuales[] = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
         } else {
             $sueldos_mensuales[] = 0;
@@ -275,13 +321,15 @@ for ($i = 1; $i <= 12; $i++) {
     } catch (Throwable $e) {
         $sueldos_mensuales[] = 0;
     }
+
+    $egresos_mensuales[] = $gastos_mensuales[$i - 1] + $compras_mensuales[$i - 1] + $sueldos_mensuales[$i - 1];
 }
 ?>
 
 <div class="row mb-4">
     <div class="col-md-12">
         <h1>📊 Panel de Control</h1>
-        <p class="text-muted">Métricas operativas, compras, proveedores, gastos, sueldos y ventas para decisiones</p>
+        <p class="text-muted">Métricas operativas, compras, proveedores, gastos, sueldos, pasivos e ingresos para decisiones</p>
         <?php if (!empty($errores)): ?>
             <div class="alert alert-warning mt-3">
                 <strong>Algunas métricas no pudieron cargarse:</strong>
@@ -296,6 +344,24 @@ for ($i = 1; $i <= 12; $i++) {
 </div>
 
 <?php $es_operario_dashboard = (strtolower((string)($role ?? '')) === 'operario'); ?>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Año</label>
+                <select name="anio" class="form-select" onchange="this.form.submit()">
+                    <?php for ($y = date('Y') - 3; $y <= date('Y') + 1; $y++): ?>
+                        <option value="<?= $y ?>" <?= $y == $anio_seleccionado ? 'selected' : '' ?>><?= $y ?></option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="col-md-9 text-end">
+                <div class="small text-muted">Comparativa: ingresos vs egresos totales (gastos + sueldo + compras)</div>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Estadísticas generales -->
 <div class="row mb-4">
@@ -355,7 +421,7 @@ for ($i = 1; $i <= 12; $i++) {
     <div class="col-md-3">
         <div class="card border-primary">
             <div class="card-body text-center">
-                <h6 class="text-primary">Ventas anual</h6>
+                <h6 class="text-primary">Ingresos <?= $anio_seleccionado ?></h6>
                 <h3>$<?= number_format($ventas_anio, 2, ',', '.') ?></h3>
             </div>
         </div>
@@ -381,6 +447,41 @@ for ($i = 1; $i <= 12; $i++) {
             <div class="card-body text-center">
                 <h6 class="text-secondary">Sueldos anual</h6>
                 <h3>$<?= number_format($sueldos_anio, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-dark">
+            <div class="card-body text-center">
+                <h6 class="text-dark">Egresos totales</h6>
+                <h3>$<?= number_format($egresos_periodo, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h6 class="text-warning">Neto acumulado</h6>
+                <h3>$<?= number_format($neto_periodo, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h6 class="text-danger">Pasivos totales</h6>
+                <h3>$<?= number_format($pasivos_totales, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h6 class="text-info">Gastos pendientes</h6>
+                <h3>$<?= number_format($pasivos_gastos, 2, ',', '.') ?></h3>
             </div>
         </div>
     </div>
@@ -530,10 +631,40 @@ for ($i = 1; $i <= 12; $i++) {
     <div class="col-md-12">
         <div class="card">
             <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">📈 Comparativa anual</h5>
+                <h5 class="mb-0">📈 Comparativa anual: ingresos vs egresos</h5>
             </div>
             <div class="card-body">
                 <canvas id="panelComparativoMensual" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">💳 Sector de Finanzas y Pasivos</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <h6 class="text-danger">Pasivos totales</h6>
+                        <h4>$<?= number_format($pasivos_totales, 2, ',', '.') ?></h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-warning">Gastos pendientes</h6>
+                        <h4>$<?= number_format($pasivos_gastos, 2, ',', '.') ?></h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-secondary">Sueldos pendientes</h6>
+                        <h4>$<?= number_format($pasivos_sueldos, 2, ',', '.') ?></h4>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-success">Compras pendientes</h6>
+                        <h4>$<?= number_format($pasivos_compras, 2, ',', '.') ?></h4>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -577,16 +708,18 @@ const panelVentas = <?= json_encode($ventas_mensuales) ?>;
 const panelCompras = <?= json_encode($compras_mensuales) ?>;
 const panelGastos = <?= json_encode($gastos_mensuales) ?>;
 const panelSueldos = <?= json_encode($sueldos_mensuales) ?>;
+const panelEgresos = <?= json_encode($egresos_mensuales) ?>;
 
 new Chart(document.getElementById('panelComparativoMensual'), {
     type: 'line',
     data: {
         labels: panelLabels,
         datasets: [
-            { label: 'Ventas', data: panelVentas, borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.12)', tension: 0.3, fill: false },
-            { label: 'Compras', data: panelCompras, borderColor: '#198754', backgroundColor: 'rgba(25, 135, 84, 0.12)', tension: 0.3, fill: false },
-            { label: 'Gastos', data: panelGastos, borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.12)', tension: 0.3, fill: false },
-            { label: 'Sueldos', data: panelSueldos, borderColor: '#6c757d', backgroundColor: 'rgba(108, 117, 125, 0.12)', tension: 0.3, fill: false }
+            { label: 'Ingresos', data: panelVentas, borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.12)', tension: 0.3, fill: false },
+            { label: 'Egresos (gastos + sueldo + compras)', data: panelEgresos, borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.12)', tension: 0.3, fill: false },
+            { label: 'Compras', data: panelCompras, borderColor: '#198754', backgroundColor: 'rgba(25, 135, 84, 0.12)', tension: 0.3, fill: false, hidden: true },
+            { label: 'Gastos', data: panelGastos, borderColor: '#fd7e14', backgroundColor: 'rgba(253, 126, 20, 0.12)', tension: 0.3, fill: false, hidden: true },
+            { label: 'Sueldos', data: panelSueldos, borderColor: '#6c757d', backgroundColor: 'rgba(108, 117, 125, 0.12)', tension: 0.3, fill: false, hidden: true }
         ]
     },
     options: {
