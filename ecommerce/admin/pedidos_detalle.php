@@ -13,6 +13,7 @@ $cuentas = cuentas_listar($pdo);
 
 $es_revendedor = (($role ?? '') === 'revendedor');
 $es_operario = (($role ?? '') === 'operario');
+$es_admin = (($role ?? '') === 'admin');
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {
@@ -512,6 +513,7 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$pedido_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$costo_material_pedido = calcular_costo_material_pedido($pdo, $items);
 ?>
 
 <div class="row mb-4">
@@ -564,6 +566,11 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <p><strong>Total:</strong> <span class="text-muted fst-italic">Monto oculto para operario</span></p>
                 <?php else: ?>
                     <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                    <?php if ($es_admin): ?>
+                        <p><strong>Costo estimado en materiales:</strong> <span class="text-warning fw-bold">$<?= number_format($costo_material_pedido, 2, ',', '.') ?></span></p>
+                        <?php $utilidad_estimado_pedido = (float)$pedido['total'] - $costo_material_pedido; ?>
+                        <p><strong>Utilidad estimada:</strong> <span class="fw-bold <?= $utilidad_estimado_pedido >= 0 ? 'text-success' : 'text-danger' ?>">$<?= number_format($utilidad_estimado_pedido, 2, ',', '.') ?></span></p>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <p><strong>Comprobante elegido:</strong> <span class="badge <?= $esReciboInternoPedido ? 'bg-secondary' : 'bg-primary' ?>"><?= $esReciboInternoPedido ? 'Recibo interno' : 'Factura fiscal' ?></span></p>
                 <?php if (!$esReciboInternoPedido): ?>

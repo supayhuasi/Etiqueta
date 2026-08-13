@@ -137,6 +137,97 @@ function obtener_receta_con_condiciones($pdo, $producto_id, $ancho, $alto, $atri
     return $materiales_filtrados;
 }
 
+function obtener_costo_unitario_material(PDO $pdo, int $material_producto_id): float {
+    if ($material_producto_id <= 0) {
+        return 0.0;
+    }
+
+    $stmt = $pdo->prepare("SELECT precio_base, costo_unitario, costo, precio FROM ecommerce_productos WHERE id = ? LIMIT 1");
+    $stmt->execute([$material_producto_id]);
+    $material = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$material) {
+        return 0.0;
+    }
+
+    foreach (['precio_base', 'costo_unitario', 'costo', 'precio'] as $campo) {
+        $valor = (float)($material[$campo] ?? 0);
+        if ($valor > 0) {
+            return $valor;
+        }
+    }
+
+    return 0.0;
+}
+
+function calcular_costo_material_pedido(PDO $pdo, array $items): float {
+    $costo_total = 0.0;
+
+    foreach ($items as $item) {
+        $usa_receta = !empty($item['usa_receta']) || !empty($item['usa_receta_producto']);
+        if (!$usa_receta) {
+            continue;
+        }
+
+        $producto_id = (int)($item['producto_id'] ?? 0);
+        $cantidad = (float)($item['cantidad'] ?? 0);
+        $ancho_cm = (float)($item['ancho_cm'] ?? 0);
+        $alto_cm = (float)($item['alto_cm'] ?? 0);
+
+        if ($producto_id <= 0 || $cantidad <= 0) {
+            continue;
+        }
+
+        $atributos = [];
+        if (!empty($item['atributos'])) {
+            $decoded = json_decode((string)$item['atributos'], true);
+            if (is_array($decoded)) {
+                $atributos = $decoded;
+            }
+        }
+
+        $recetas = obtener_receta_con_condiciones($pdo, $producto_id, $ancho_cm, $alto_cm, $atributos);
+        if (empty($recetas)) {
+            continue;
+        }
+
+        $alto_m = $alto_cm / 100;
+        $ancho_m = $ancho_cm / 100;
+        $area_m2 = $alto_m * $ancho_m;
+
+        foreach ($recetas as $receta) {
+            $factor = (float)($receta['factor'] ?? 0);
+            $merma = (float)($receta['merma_pct'] ?? 0);
+            $tipo = $receta['tipo_calculo'] ?? 'fijo';
+            $cantidad_base = 0.0;
+
+            if ($tipo === 'fijo') {
+                $cantidad_base = $factor;
+            } elseif ($tipo === 'por_area') {
+                $cantidad_base = $area_m2 * $factor;
+            } elseif ($tipo === 'por_ancho') {
+                $cantidad_base = $ancho_m * $factor;
+            } elseif ($tipo === 'por_alto') {
+                $cantidad_base = $alto_m * $factor;
+            }
+
+            $cantidad_total = $cantidad_base * (1 + ($merma / 100)) * $cantidad;
+            if ($cantidad_total <= 0) {
+                continue;
+            }
+
+            $material_id = (int)($receta['material_producto_id'] ?? 0);
+            $costo_unitario = obtener_costo_unitario_material($pdo, $material_id);
+            if ($costo_unitario <= 0) {
+                continue;
+            }
+
+            $costo_total += $cantidad_total * $costo_unitario;
+        }
+    }
+
+    return round($costo_total, 2);
+}
+
 /**
  * Obtiene la descripción de una condición en texto legible
  * 

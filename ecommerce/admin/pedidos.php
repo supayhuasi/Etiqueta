@@ -44,6 +44,7 @@ require_once __DIR__ . '/includes/calidad_helper.php';
 
 $es_revendedor = (($role ?? '') === 'revendedor');
 $es_operario = (($role ?? '') === 'operario');
+$es_admin = (($role ?? '') === 'admin');
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {
@@ -410,6 +411,7 @@ foreach ($pedidos as &$pedido) {
     $pid          = $pedido['id'];
     $total_pagado = (float)($pedido['total_pagado'] ?? 0);
     $total_pedido = (float)($pedido['total'] ?? 0);
+    $pedido['costo_material_estimado'] = calcular_costo_material_pedido($pdo, $pedido_items_map[(int)$pid] ?? []);
     if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
         $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?")->execute([$pid]);
         $pedido['estado'] = 'pagado';
@@ -446,7 +448,8 @@ if (!empty($pedidos)) {
         $pedido_ids   = array_values(array_unique(array_map('intval', array_column($pedidos, 'id'))));
         $placeholders = implode(', ', array_fill(0, count($pedido_ids), '?'));
         $sql_items = "
-            SELECT pi.id, pi.pedido_id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos,
+            SELECT pi.id, pi.pedido_id, pi.producto_id, pi.cantidad, pi.ancho_cm, pi.alto_cm, pi.atributos,
+                   pr.usa_receta AS usa_receta_producto,
                    COALESCE(pr.nombre, 'Producto') AS producto_nombre,
                    COALESCE(rem.cantidad_remitida, 0) AS cantidad_remitida
             FROM ecommerce_pedido_items pi
@@ -491,13 +494,18 @@ if (!empty($pedidos)) {
             }
 
             $pedido_items_map[$pedidoId][] = [
-                'id'       => (int)$item['id'],
-                'producto' => (string)$item['producto_nombre'],
-                'cantidad' => $cantidadTotal,
-                'remitida' => $cantidadRemitida,
-                'pendiente'=> $cantidadPendiente,
-                'medidas'  => $medidas,
-                'atributos'=> $atributosTexto,
+                'id'                => (int)$item['id'],
+                'producto_id'       => (int)($item['producto_id'] ?? 0),
+                'producto'          => (string)$item['producto_nombre'],
+                'cantidad'          => $cantidadTotal,
+                'remitida'          => $cantidadRemitida,
+                'pendiente'         => $cantidadPendiente,
+                'medidas'           => $medidas,
+                'atributos'         => $item['atributos'] ?? null,
+                'atributos_texto'   => $atributosTexto,
+                'usa_receta'        => !empty($item['usa_receta_producto']) ? 1 : 0,
+                'ancho_cm'          => (float)($item['ancho_cm'] ?? 0),
+                'alto_cm'           => (float)($item['alto_cm'] ?? 0),
             ];
 
             if (!isset($pedido_remito_resumen[$pedidoId])) {
@@ -609,12 +617,17 @@ if (!empty($pedidos)) {
                     <?php else: ?>
                         <th>Importe</th>
                     <?php endif; ?>
+                    <?php if ($es_admin): ?>
+                        <th>Costo material</th>
+                        <th>Utilidad est.</th>
+                    <?php endif; ?>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($pedidos as $pedido): ?>
+                    <?php $utilidad_estimado = (float)$pedido['total'] - (float)($pedido['costo_material_estimado'] ?? 0); ?>
                     <tr>
                         <td><strong><?= htmlspecialchars($pedido['numero_pedido']) ?></strong></td>
                         <td>
@@ -628,6 +641,10 @@ if (!empty($pedidos)) {
                             <td class="text-center text-muted fst-italic">Oculto</td>
                         <?php else: ?>
                             <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
+                        <?php endif; ?>
+                        <?php if ($es_admin): ?>
+                            <td class="fw-semibold text-warning">$<?= number_format((float)($pedido['costo_material_estimado'] ?? 0), 2, ',', '.') ?></td>
+                            <td class="fw-semibold <?= $utilidad_estimado >= 0 ? 'text-success' : 'text-danger' ?>">$<?= number_format($utilidad_estimado, 2, ',', '.') ?></td>
                         <?php endif; ?>
                         <td>
                             <span class="badge bg-<?= $colores[$pedido['estado']] ?? 'secondary' ?>">
