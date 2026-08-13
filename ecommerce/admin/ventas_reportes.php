@@ -135,6 +135,118 @@ $pendiente_cobro = max(0, $total_vendido - $total_cobrado);
 if ($pendiente_cobro < 0) {
     $pendiente_cobro = 0; // Asegurar que nunca sea negativo
 }
+
+$gastos_total_anio = 0.0;
+$gastos_total_periodo = 0.0;
+$evolucion_ventas = [];
+$evolucion_ventas_anterior = [];
+$evolucion_gastos = [];
+$evolucion_gastos_anterior = [];
+$evolucion_pedidos = [];
+$labels_meses = [];
+
+$gastos_fecha_col = 'fecha';
+try {
+    $gastos_cols = $pdo->query("SHOW COLUMNS FROM gastos")->fetchAll(PDO::FETCH_COLUMN, 0);
+    if (in_array('fecha', $gastos_cols, true)) {
+        $gastos_fecha_col = 'fecha';
+    } elseif (in_array('fecha_gasto', $gastos_cols, true)) {
+        $gastos_fecha_col = 'fecha_gasto';
+    } elseif (in_array('created_at', $gastos_cols, true)) {
+        $gastos_fecha_col = 'created_at';
+    } else {
+        $gastos_fecha_col = 'fecha';
+    }
+} catch (Exception $e) {
+    $gastos_fecha_col = 'fecha';
+}
+
+for ($mes_num = 1; $mes_num <= 12; $mes_num++) {
+    $mes_start = new DateTime(sprintf('%04d-%02d-01', $year, $mes_num));
+    $mes_end = (clone $mes_start)->modify('last day of this month')->setTime(23, 59, 59);
+    $mes_start_str = $mes_start->format('Y-m-d H:i:s');
+    $mes_end_str = $mes_end->format('Y-m-d H:i:s');
+
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as ventas_mes FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado != 'cancelado'");
+    $stmt->execute([$mes_start_str, $mes_end_str]);
+    $ventas_mes = (float)$stmt->fetch(PDO::FETCH_ASSOC)['ventas_mes'];
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) as pedidos_mes FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado != 'cancelado'");
+    $stmt->execute([$mes_start_str, $mes_end_str]);
+    $pedidos_mes = (int)$stmt->fetch(PDO::FETCH_ASSOC)['pedidos_mes'];
+
+    $gastos_mes = 0.0;
+    try {
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto),0) as gastos_mes FROM gastos WHERE $gastos_fecha_col BETWEEN ? AND ?");
+        $stmt->execute([$mes_start_str, $mes_end_str]);
+        $gastos_mes = (float)$stmt->fetch(PDO::FETCH_ASSOC)['gastos_mes'];
+    } catch (Exception $e) {
+        $gastos_mes = 0.0;
+    }
+
+    $labels_meses[] = $mes_start->format('M');
+    $evolucion_ventas[] = $ventas_mes;
+    $evolucion_gastos[] = $gastos_mes;
+    $evolucion_pedidos[] = $pedidos_mes;
+    $gastos_total_anio += $gastos_mes;
+}
+
+$gastos_total_periodo = 0.0;
+try {
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto),0) as gastos_periodo FROM gastos WHERE $gastos_fecha_col BETWEEN ? AND ?");
+    $stmt->execute([$startStr, $endStr]);
+    $gastos_total_periodo = (float)$stmt->fetch(PDO::FETCH_ASSOC)['gastos_periodo'];
+} catch (Exception $e) {
+    $gastos_total_periodo = 0.0;
+}
+
+$total_pedidos_anio = array_sum($evolucion_pedidos);
+$utilidad_neta = $total_vendido - $gastos_total_periodo;
+$margen_pct = $total_vendido > 0 ? (($utilidad_neta / $total_vendido) * 100) : 0;
+
+$prev_year = $year - 1;
+$ventas_prev_anio = 0.0;
+$gastos_prev_anio = 0.0;
+$pedidos_prev_anio = 0;
+try {
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as ventas_prev FROM ecommerce_pedidos WHERE YEAR($fecha_columna) = ? AND estado != 'cancelado'");
+    $stmt->execute([$prev_year]);
+    $ventas_prev_anio = (float)$stmt->fetch(PDO::FETCH_ASSOC)['ventas_prev'];
+} catch (Exception $e) { $ventas_prev_anio = 0.0; }
+
+try {
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto),0) as gastos_prev FROM gastos WHERE YEAR($gastos_fecha_col) = ?");
+    $stmt->execute([$prev_year]);
+    $gastos_prev_anio = (float)$stmt->fetch(PDO::FETCH_ASSOC)['gastos_prev'];
+} catch (Exception $e) { $gastos_prev_anio = 0.0; }
+
+try {
+    $stmt = $pdo->prepare("SELECT COUNT(*) as pedidos_prev FROM ecommerce_pedidos WHERE YEAR($fecha_columna) = ? AND estado != 'cancelado'");
+    $stmt->execute([$prev_year]);
+    $pedidos_prev_anio = (int)$stmt->fetch(PDO::FETCH_ASSOC)['pedidos_prev'];
+} catch (Exception $e) { $pedidos_prev_anio = 0; }
+
+$variacion_ventas = $ventas_prev_anio > 0 ? (($total_vendido - $ventas_prev_anio) / $ventas_prev_anio) * 100 : 0;
+$variacion_gastos = $gastos_prev_anio > 0 ? (($gastos_total_anio - $gastos_prev_anio) / $gastos_prev_anio) * 100 : 0;
+$variacion_pedidos = $pedidos_prev_anio > 0 ? (($total_pedidos_anio - $pedidos_prev_anio) / $pedidos_prev_anio) * 100 : 0;
+$ticket_promedio = $total_pedidos_anio > 0 ? ($total_vendido / $total_pedidos_anio) : 0;
+
+for ($mes_num = 1; $mes_num <= 12; $mes_num++) {
+    $mes_start = new DateTime(sprintf('%04d-%02d-01', $prev_year, $mes_num));
+    $mes_end = (clone $mes_start)->modify('last day of this month')->setTime(23, 59, 59);
+    $mes_start_str = $mes_start->format('Y-m-d H:i:s');
+    $mes_end_str = $mes_end->format('Y-m-d H:i:s');
+
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(total),0) as ventas_mes FROM ecommerce_pedidos WHERE $fecha_columna BETWEEN ? AND ? AND estado != 'cancelado'");
+    $stmt->execute([$mes_start_str, $mes_end_str]);
+    $evolucion_ventas_anterior[] = (float)$stmt->fetch(PDO::FETCH_ASSOC)['ventas_mes'];
+
+    try {
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(monto),0) as gastos_mes FROM gastos WHERE $gastos_fecha_col BETWEEN ? AND ?");
+        $stmt->execute([$mes_start_str, $mes_end_str]);
+        $evolucion_gastos_anterior[] = (float)$stmt->fetch(PDO::FETCH_ASSOC)['gastos_mes'];
+    } catch (Exception $e) { $evolucion_gastos_anterior[] = 0.0; }
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -216,6 +328,76 @@ if ($pendiente_cobro < 0) {
     </div>
 </div>
 
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body text-center">
+                <h6>Pedidos del año</h6>
+                <h3><?= number_format($total_pedidos_anio, 0, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h6>Gastos del año</h6>
+                <h3>$<?= number_format($gastos_total_anio, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-dark text-white">
+            <div class="card-body text-center">
+                <h6>Gastos del período</h6>
+                <h3>$<?= number_format($gastos_total_periodo, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h6>Utilidad neta</h6>
+                <h3>$<?= number_format($utilidad_neta, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h6 class="text-success">Margen %</h6>
+                <h3><?= number_format($margen_pct, 2, ',', '.') ?>%</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h6 class="text-primary">Var. ventas YoY</h6>
+                <h3><?= number_format($variacion_ventas, 2, ',', '.') ?>%</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h6 class="text-danger">Var. gastos YoY</h6>
+                <h3><?= number_format($variacion_gastos, 2, ',', '.') ?>%</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h6 class="text-info">Ticket promedio</h6>
+                <h3>$<?= number_format($ticket_promedio, 2, ',', '.') ?></h3>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-6 mb-4">
         <div class="card">
@@ -236,12 +418,37 @@ if ($pendiente_cobro < 0) {
     </div>
 </div>
 
+<div class="row">
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header">Evolución mensual de ventas y gastos</div>
+            <div class="card-body">
+                <canvas id="chartEvolucionMensual" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">Pedidos por mes</div>
+            <div class="card-body">
+                <canvas id="chartPedidosMensuales" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const ventas = <?= json_encode($total_vendido) ?>;
 const cobros = <?= json_encode($total_cobrado) ?>;
 const pendienteEntrega = <?= json_encode($pendiente_entrega) ?>;
 const pendienteCobro = <?= json_encode($pendiente_cobro) ?>;
+const labelsMeses = <?= json_encode($labels_meses) ?>;
+const ventasMensuales = <?= json_encode($evolucion_ventas) ?>;
+const ventasAnteriores = <?= json_encode($evolucion_ventas_anterior) ?>;
+const gastosMensuales = <?= json_encode($evolucion_gastos) ?>;
+const gastosAnteriores = <?= json_encode($evolucion_gastos_anterior) ?>;
+const pedidosMensuales = <?= json_encode($evolucion_pedidos) ?>;
 
 new Chart(document.getElementById('chartVentasCobros'), {
     type: 'bar',
@@ -272,6 +479,67 @@ new Chart(document.getElementById('chartCobrado'), {
         }]
     },
     options: { responsive: true }
+});
+
+new Chart(document.getElementById('chartEvolucionMensual'), {
+    type: 'line',
+    data: {
+        labels: labelsMeses,
+        datasets: [
+            {
+                label: 'Ventas ' + <?= json_encode($year) ?>,
+                data: ventasMensuales,
+                borderColor: '#0d6efd',
+                backgroundColor: 'rgba(13,110,253,0.15)',
+                tension: 0.35,
+                fill: false
+            },
+            {
+                label: 'Ventas ' + <?= json_encode($prev_year) ?>,
+                data: ventasAnteriores,
+                borderColor: '#6c757d',
+                backgroundColor: 'rgba(108,117,125,0.08)',
+                tension: 0.35,
+                fill: false,
+                borderDash: [6, 6]
+            },
+            {
+                label: 'Gastos ' + <?= json_encode($year) ?>,
+                data: gastosMensuales,
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220,53,69,0.15)',
+                tension: 0.35,
+                fill: false
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: { beginAtZero: false }
+        }
+    }
+});
+
+new Chart(document.getElementById('chartPedidosMensuales'), {
+    type: 'line',
+    data: {
+        labels: labelsMeses,
+        datasets: [{
+            label: 'Pedidos',
+            data: pedidosMensuales,
+            borderColor: '#198754',
+            backgroundColor: 'rgba(25,135,84,0.15)',
+            tension: 0.35,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: { beginAtZero: true, precision: 0 }
+        }
+    }
 });
 </script>
 
