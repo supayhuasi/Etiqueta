@@ -142,18 +142,28 @@ function obtener_costo_unitario_material(PDO $pdo, int $material_producto_id): f
         return 0.0;
     }
 
-    $stmt = $pdo->prepare("SELECT precio_base, costo_unitario, costo, precio FROM ecommerce_productos WHERE id = ? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT precio_base FROM ecommerce_productos WHERE id = ? LIMIT 1");
     $stmt->execute([$material_producto_id]);
     $material = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$material) {
-        return 0.0;
-    }
-
-    foreach (['precio_base', 'costo_unitario', 'costo', 'precio'] as $campo) {
-        $valor = (float)($material[$campo] ?? 0);
+    if ($material) {
+        $valor = (float)($material['precio_base'] ?? 0);
         if ($valor > 0) {
             return $valor;
         }
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT costo FROM ecommerce_materiales WHERE id = ? LIMIT 1");
+        $stmt->execute([$material_producto_id]);
+        $material = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($material) {
+            $valor = (float)($material['costo'] ?? 0);
+            if ($valor > 0) {
+                return $valor;
+            }
+        }
+    } catch (Throwable $e) {
+        // La tabla de materiales no existe o no tiene esa columna; lo dejamos en 0.
     }
 
     return 0.0;
