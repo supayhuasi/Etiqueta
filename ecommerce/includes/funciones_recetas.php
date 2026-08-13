@@ -164,6 +164,13 @@ function calcular_costo_material_pedido(PDO $pdo, array $items): float {
 
     foreach ($items as $item) {
         $usa_receta = !empty($item['usa_receta']) || !empty($item['usa_receta_producto']);
+
+        if (!$usa_receta && !empty($item['producto_id'])) {
+            $stmt_prod = $pdo->prepare("SELECT usa_receta FROM ecommerce_productos WHERE id = ? LIMIT 1");
+            $stmt_prod->execute([(int)($item['producto_id'] ?? 0)]);
+            $usa_receta = !empty($stmt_prod->fetchColumn());
+        }
+
         if (!$usa_receta) {
             continue;
         }

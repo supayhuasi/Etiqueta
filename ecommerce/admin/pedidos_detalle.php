@@ -505,7 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Obtener items del pedido
 $stmt = $pdo->prepare("
-    SELECT pi.*, pr.nombre as producto_nombre, pr.imagen
+    SELECT pi.*, pr.nombre as producto_nombre, pr.imagen, pr.usa_receta AS usa_receta_producto
     FROM ecommerce_pedido_items pi
     LEFT JOIN ecommerce_productos pr ON pi.producto_id = pr.id
     WHERE pi.pedido_id = ?
