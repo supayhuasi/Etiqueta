@@ -66,6 +66,8 @@ if (dashboard_table_exists($pdo, 'ecommerce_pedidos')) {
     }
 }
 
+$es_operario_dashboard = (($role ?? '') === 'operario');
+
 $modulos = [
     ['perm' => 'kpis', 'titulo' => 'KPIs Dinámicos', 'desc' => 'Constructor de indicadores por tabla y filtros', 'url' => 'kpis.php', 'icon' => 'bi-speedometer2'],
     ['perm' => 'blog', 'titulo' => 'Blog', 'desc' => 'Artículos y novedades del sitio', 'url' => 'blog.php', 'icon' => 'bi-journal-text'],
@@ -193,7 +195,11 @@ $modulos = [
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <div class="text-muted small">Ingresos acumulados</div>
-                        <div class="h3 mb-0">$<?= number_format($ingresos_totales, 0, ',', '.') ?></div>
+                        <?php if ($es_operario_dashboard): ?>
+                            <div class="h3 mb-0 text-muted">--</div>
+                        <?php else: ?>
+                            <div class="h3 mb-0">$<?= number_format($ingresos_totales, 0, ',', '.') ?></div>
+                        <?php endif; ?>
                     </div>
                     <span class="kpi-icon bg-info-subtle text-info"><i class="bi bi-currency-dollar"></i></span>
                 </div>
@@ -219,7 +225,11 @@ $modulos = [
                                 <tr>
                                     <th class="ps-3">Pedido</th>
                                     <th>Cliente</th>
-                                    <th>Total</th>
+                                    <?php if ($es_operario_dashboard): ?>
+                                        <th class="text-muted">Monto</th>
+                                    <?php else: ?>
+                                        <th>Total</th>
+                                    <?php endif; ?>
                                     <th>Estado</th>
                                     <th class="pe-3">Fecha</th>
                                 </tr>
@@ -229,7 +239,11 @@ $modulos = [
                                     <tr>
                                         <td class="ps-3 fw-semibold"><?= admin_h($pedido['numero_pedido']) ?></td>
                                         <td><?= admin_h($pedido['nombre'] ?? 'Sin nombre') ?></td>
-                                        <td>$<?= number_format((float)$pedido['total'], 2, ',', '.') ?></td>
+                                        <?php if ($es_operario_dashboard): ?>
+                                            <td class="text-muted fst-italic">Oculto</td>
+                                        <?php else: ?>
+                                            <td>$<?= number_format((float)$pedido['total'], 2, ',', '.') ?></td>
+                                        <?php endif; ?>
                                         <td><span class="badge bg-primary-subtle text-primary"><?= admin_h($pedido['estado']) ?></span></td>
                                         <td class="pe-3 text-muted"><?= date('d/m/Y H:i', strtotime((string)$pedido['fecha_pedido'])) ?></td>
                                     </tr>
