@@ -45,6 +45,8 @@ require_once __DIR__ . '/includes/calidad_helper.php';
 $es_revendedor = (($role ?? '') === 'revendedor');
 $es_operario = (($role ?? '') === 'operario');
 $es_admin = (($role ?? '') === 'admin');
+$es_ventas = in_array(($role ?? ''), ['ventas', 'vendedor'], true);
+$puede_ver_costos = $es_admin || $es_ventas;
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {
@@ -617,7 +619,7 @@ if (!empty($pedidos)) {
                     <?php else: ?>
                         <th>Importe</th>
                     <?php endif; ?>
-                    <?php if ($es_admin): ?>
+                    <?php if ($puede_ver_costos): ?>
                         <th>Costo material</th>
                         <th>Utilidad est.</th>
                     <?php endif; ?>
@@ -642,7 +644,7 @@ if (!empty($pedidos)) {
                         <?php else: ?>
                             <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
                         <?php endif; ?>
-                        <?php if ($es_admin): ?>
+                        <?php if ($puede_ver_costos): ?>
                             <td class="fw-semibold text-warning">$<?= number_format((float)($pedido['costo_material_estimado'] ?? 0), 2, ',', '.') ?></td>
                             <td class="fw-semibold <?= $utilidad_estimado >= 0 ? 'text-success' : 'text-danger' ?>">$<?= number_format($utilidad_estimado, 2, ',', '.') ?></td>
                         <?php endif; ?>
