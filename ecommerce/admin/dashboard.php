@@ -148,6 +148,8 @@ try {
     </div>
 </div>
 
+<?php $es_operario_dashboard = (($role ?? '') === 'operario'); ?>
+
 <!-- Estadísticas generales -->
 <div class="row mb-4">
     <div class="col-md-3">
@@ -155,7 +157,11 @@ try {
             <div class="card-body">
                 <h6 class="mb-2">📦 Total Pedidos</h6>
                 <h3 class="mb-0"><?= number_format($stats_pedidos['total_pedidos']) ?></h3>
-                <small>Monto: $<?= number_format($stats_pedidos['monto_total_pedidos'], 2) ?></small>
+                <?php if ($es_operario_dashboard): ?>
+                    <small class="text-white-50">Monto oculto</small>
+                <?php else: ?>
+                    <small>Monto: $<?= number_format($stats_pedidos['monto_total_pedidos'], 2) ?></small>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -163,8 +169,13 @@ try {
         <div class="card bg-success text-white">
             <div class="card-body">
                 <h6 class="mb-2">💰 Ventas del Mes</h6>
-                <h3 class="mb-0">$<?= number_format($stats_mes['monto_mes'], 2) ?></h3>
-                <small><?= $stats_mes['pedidos_mes'] ?> pedidos</small>
+                <?php if ($es_operario_dashboard): ?>
+                    <h3 class="mb-0">--</h3>
+                    <small>Importe oculto</small>
+                <?php else: ?>
+                    <h3 class="mb-0">$<?= number_format($stats_mes['monto_mes'], 2) ?></h3>
+                    <small><?= $stats_mes['pedidos_mes'] ?> pedidos</small>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -181,8 +192,13 @@ try {
         <div class="card bg-warning text-dark">
             <div class="card-body">
                 <h6 class="mb-2">📊 Ticket Promedio</h6>
-                <h3 class="mb-0">$<?= number_format($stats_pedidos['promedio_pedido'], 2) ?></h3>
-                <small>por pedido</small>
+                <?php if ($es_operario_dashboard): ?>
+                    <h3 class="mb-0">--</h3>
+                    <small>Oculto</small>
+                <?php else: ?>
+                    <h3 class="mb-0">$<?= number_format($stats_pedidos['promedio_pedido'], 2) ?></h3>
+                    <small>por pedido</small>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -212,7 +228,11 @@ try {
                                         <h6 class="mb-0"><?= htmlspecialchars($prod['nombre']) ?></h6>
                                         <small class="text-muted">
                                             <?= number_format($prod['total_vendido']) ?> unidades vendidas<br>
-                                            Monto: $<?= number_format($prod['monto_total'], 2) ?>
+                                            <?php if (($role ?? '') === 'operario'): ?>
+                                                Monto oculto
+                                            <?php else: ?>
+                                                Monto: $<?= number_format($prod['monto_total'], 2) ?>
+                                            <?php endif; ?>
                                         </small>
                                     </div>
                                 </div>

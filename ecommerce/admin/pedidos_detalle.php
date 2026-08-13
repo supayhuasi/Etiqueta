@@ -12,6 +12,7 @@ ensureCuentasSchema($pdo);
 $cuentas = cuentas_listar($pdo);
 
 $es_revendedor = (($role ?? '') === 'revendedor');
+$es_operario = (($role ?? '') === 'operario');
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {
@@ -559,7 +560,11 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <p><strong>Número:</strong> <?= htmlspecialchars($pedido['numero_pedido']) ?></p>
                 <p><strong>Fecha:</strong> <?= date('d/m/Y H:i:s', strtotime($pedido['fecha_creacion'])) ?></p>
                 <p><strong>Método de Pago:</strong> <span class="badge bg-info"><?= htmlspecialchars($pedido['metodo_pago']) ?></span></p>
-                <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                <?php if ($es_operario): ?>
+                    <p><strong>Total:</strong> <span class="text-muted fst-italic">Monto oculto para operario</span></p>
+                <?php else: ?>
+                    <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
+                <?php endif; ?>
                 <p><strong>Comprobante elegido:</strong> <span class="badge <?= $esReciboInternoPedido ? 'bg-secondary' : 'bg-primary' ?>"><?= $esReciboInternoPedido ? 'Recibo interno' : 'Factura fiscal' ?></span></p>
                 <?php if (!$esReciboInternoPedido): ?>
                     <p><strong>Factura estimada:</strong> <span class="badge bg-warning text-dark">Factura <?= htmlspecialchars($tipoFacturaPedidoActual) ?></span></p>
@@ -660,9 +665,13 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
     <div class="card-body">
         <div class="row mb-3">
-            <div class="col-md-4"><strong>Total:</strong> $<?= number_format($pedido['total'], 2, ',', '.') ?></div>
-            <div class="col-md-4"><strong>Pagado:</strong> $<?= number_format($total_pagado, 2, ',', '.') ?></div>
-            <div class="col-md-4"><strong>Saldo:</strong> $<?= number_format($saldo, 2, ',', '.') ?></div>
+            <?php if ($es_operario): ?>
+                <div class="col-md-12"><strong>Montos:</strong> <span class="text-muted fst-italic">Ocultos para operario</span></div>
+            <?php else: ?>
+                <div class="col-md-4"><strong>Total:</strong> $<?= number_format($pedido['total'], 2, ',', '.') ?></div>
+                <div class="col-md-4"><strong>Pagado:</strong> $<?= number_format($total_pagado, 2, ',', '.') ?></div>
+                <div class="col-md-4"><strong>Saldo:</strong> $<?= number_format($saldo, 2, ',', '.') ?></div>
+            <?php endif; ?>
         </div>
 
         <form method="POST" class="row g-3">

@@ -1937,7 +1937,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($pedidoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pedidoNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($pedidoNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-success">
-                                        Total: $<?= number_format((float)($pedidoNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php if (($role ?? '') === 'operario'): ?>
+                                            Total oculto
+                                        <?php else: ?>
+                                            Total: $<?= number_format((float)($pedidoNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php endif; ?>
                                         · <?= !empty($pedidoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pedidoNotif['fecha_evento']))) : '-' ?>
                                     </div>
                                 </a>
@@ -1952,7 +1956,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($entregaNotif['numero_pedido'] ?? ('Pedido #' . (int)($entregaNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($entregaNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-success">
-                                        Total: $<?= number_format((float)($entregaNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php if (($role ?? '') === 'operario'): ?>
+                                            Total oculto
+                                        <?php else: ?>
+                                            Total: $<?= number_format((float)($entregaNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php endif; ?>
                                         · Entregado <?= !empty($entregaNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$entregaNotif['fecha_evento']))) : '-' ?>
                                     </div>
                                 </a>
@@ -1967,7 +1975,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($pagoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pagoNotif['pedido_id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($pagoNotif['cliente_nombre'] ?? ($pagoNotif['descripcion'] ?? 'Pago registrado')) ?></div>
                                     <div class="small text-success">
-                                        Pago: $<?= number_format((float)($pagoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        <?php if (($role ?? '') === 'operario'): ?>
+                                            Pago oculto
+                                        <?php else: ?>
+                                            Pago: $<?= number_format((float)($pagoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        <?php endif; ?>
                                         · <?= htmlspecialchars($pagoNotif['metodo'] ?? 'Método no informado') ?>
                                         · <?= !empty($pagoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pagoNotif['fecha_evento']))) : '-' ?>
                                     </div>
@@ -2038,7 +2050,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($cotNotif['numero_cotizacion'] ?? ('Cotización #' . (int)($cotNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($cotNotif['nombre_cliente'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-warning fw-semibold">
-                                        Monto: $<?= number_format((float)($cotNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php if (($role ?? '') === 'operario'): ?>
+                                            Monto oculto
+                                        <?php else: ?>
+                                            Monto: $<?= number_format((float)($cotNotif['total'] ?? 0), 0, ',', '.') ?>
+                                        <?php endif; ?>
                                         · Vendedor: <?= htmlspecialchars($cotNotif['vendedor_nombre'] ?? 'Sin vendedor') ?>
                                     </div>
                                 </a>
@@ -2054,7 +2070,11 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($gastoNotif['numero_gasto'] ?? ('Gasto #' . (int)($gastoNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($gastoNotif['descripcion'] ?? '') ?></div>
                                     <div class="small <?= $dias_para_vencer < 0 ? 'text-danger fw-bold' : 'text-warning' ?>">
-                                        Monto: $<?= number_format((float)($gastoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        <?php if (($role ?? '') === 'operario'): ?>
+                                            Monto oculto
+                                        <?php else: ?>
+                                            Monto: $<?= number_format((float)($gastoNotif['monto'] ?? 0), 0, ',', '.') ?>
+                                        <?php endif; ?>
                                         · <?php if ($dias_para_vencer < 0): ?>
                                             Vencido el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$gastoNotif['fecha_vencimiento']))) ?>
                                         <?php elseif ($dias_para_vencer === 0): ?>

@@ -43,6 +43,7 @@ require '../includes/funciones_recetas.php';
 require_once __DIR__ . '/includes/calidad_helper.php';
 
 $es_revendedor = (($role ?? '') === 'revendedor');
+$es_operario = (($role ?? '') === 'operario');
 $usuario_id_actual = (int)($_SESSION['user']['id'] ?? 0);
 $pedido_owner_col = '';
 try {
@@ -603,7 +604,11 @@ if (!empty($pedidos)) {
                     <th>Número</th>
                     <th>Cliente</th>
                     <th>Fecha</th>
-                    <th>Importe</th>
+                    <?php if ($es_operario): ?>
+                        <th class="text-center text-muted">Pedido</th>
+                    <?php else: ?>
+                        <th>Importe</th>
+                    <?php endif; ?>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -619,7 +624,11 @@ if (!empty($pedidos)) {
                             <?php endif; ?>
                         </td>
                         <td><?= date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) ?></td>
-                        <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
+                        <?php if ($es_operario): ?>
+                            <td class="text-center text-muted fst-italic">Oculto</td>
+                        <?php else: ?>
+                            <td class="fw-semibold">$<?= number_format($pedido['total'], 2, ',', '.') ?></td>
+                        <?php endif; ?>
                         <td>
                             <span class="badge bg-<?= $colores[$pedido['estado']] ?? 'secondary' ?>">
                                 <?= ucfirst($pedido['estado']) ?>
