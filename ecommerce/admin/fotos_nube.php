@@ -291,8 +291,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $zip->close();
+                if (ob_get_level()) {
+                    ob_end_clean();
+                }
                 header('Content-Type: application/zip');
                 header('Content-Disposition: attachment; filename="' . $zip_name . '"');
+                header('Content-Length: ' . filesize($zip_path));
                 readfile($zip_path);
                 unlink($zip_path);
                 exit;
@@ -313,6 +317,9 @@ if (isset($_GET['download'])) {
     if ($download_rel !== '') {
         $download_file = $root_dir . '/' . $download_rel;
         if (is_file($download_file) && fotos_nube_is_within_root($download_file, $root_dir)) {
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename="' . basename($download_file) . '"');
             header('Content-Length: ' . filesize($download_file));
