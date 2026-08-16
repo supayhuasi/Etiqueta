@@ -419,6 +419,7 @@ $all_folders = fotos_nube_list_folders($root_dir);
     .cloud-file-card img {
         height: 170px;
         object-fit: cover;
+        cursor: zoom-in;
     }
     .cloud-stat {
         border-radius: 12px;
@@ -560,7 +561,13 @@ $all_folders = fotos_nube_list_folders($root_dir);
                                 <?php foreach ($files as $file): ?>
                                     <div class="col-6 col-md-4 col-lg-3">
                                         <div class="cloud-file-card">
-                                            <img src="../uploads/fotos_nube/<?= admin_h(str_replace('\\', '/', $file['rel'])) ?>" alt="<?= admin_h($file['name']) ?>">
+                                            <img src="../uploads/fotos_nube/<?= admin_h(str_replace('\\', '/', $file['rel'])) ?>"
+                                                 alt="<?= admin_h($file['name']) ?>"
+                                                 class="cloud-file-thumb"
+                                                 role="button"
+                                                 data-name="<?= admin_h($file['name']) ?>"
+                                                 data-download="fotos_nube.php?download=<?= urlencode($file['rel']) ?>"
+                                                 onclick="fotosNubePreview(this)">
                                             <div class="card-body p-2">
                                                 <div class="form-check mb-2">
                                                     <input class="form-check-input" type="checkbox" name="seleccion[]" value="<?= admin_h($file['rel']) ?>" id="check_<?= md5($file['rel']) ?>">
@@ -582,5 +589,34 @@ $all_folders = fotos_nube_list_folders($root_dir);
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="fotosNubePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-truncate" id="fotosNubePreviewNombre">Foto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="fotosNubePreviewImg" src="" alt="" class="img-fluid rounded">
+            </div>
+            <div class="modal-footer">
+                <a id="fotosNubePreviewDescargar" href="#" class="btn btn-primary">Descargar</a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function fotosNubePreview(img) {
+    var modalEl = document.getElementById('fotosNubePreviewModal');
+    document.getElementById('fotosNubePreviewImg').src = img.src;
+    document.getElementById('fotosNubePreviewNombre').textContent = img.dataset.name || 'Foto';
+    document.getElementById('fotosNubePreviewDescargar').href = img.dataset.download || '#';
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+</script>
 
 <?php require 'includes/footer.php'; ?>

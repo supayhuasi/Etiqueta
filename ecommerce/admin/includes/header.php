@@ -1285,10 +1285,15 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?= htmlspecialchars(admin_csrf_token()) ?>">
     <title>Admin - STUL</title>
+    <link rel="manifest" href="<?= $admin_url ?>manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= $admin_url ?>assets/pwa/icon-192.png">
+    <link rel="apple-touch-icon" href="<?= $admin_url ?>assets/pwa/apple-touch-icon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script>
         // @ts-nocheck
+        window.ADMIN_URL = <?= json_encode($admin_url) ?>;
         (function () {
             const storedTheme = localStorage.getItem('admin-theme');
             const theme = storedTheme === 'dark' ? 'dark' : 'light';
