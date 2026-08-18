@@ -279,10 +279,9 @@ if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
             $stmt = $pdo->prepare("INSERT INTO ecommerce_ordenes_produccion (pedido_id, estado, notas, fecha_entrega, materiales_descontados) VALUES (?, 'pendiente', ?, ?, 0)");
             $stmt->execute([$pedido_id, $_POST['notas'] ?? null, $fecha_entrega]);
             $orden_id = $pdo->lastInsertId();
-            
-            // Descontar materiales inmediatamente
-            require '../includes/funciones_recetas.php';
-            
+
+            // Descontar materiales inmediatamente (funciones_recetas.php ya se carga arriba con require_once)
+
             $stmt_items = $pdo->prepare("
                 SELECT pi.*, p.usa_receta
                 FROM ecommerce_pedido_items pi
