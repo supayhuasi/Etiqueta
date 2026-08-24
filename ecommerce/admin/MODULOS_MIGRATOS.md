@@ -70,6 +70,15 @@ Registra y controla gastos operativos:
 
 **Archivos:** `gastos/gastos.php`, `gastos/gastos_crear.php`, `gastos/tipos_gastos.php`
 
+### 🚗 [Seguros y Permisos](seguros/seguros.php)
+Controla la vigencia de seguros y permisos por vehículo:
+- Crear/editar registros (patente, tipo, número, entidad, fechas)
+- Renovar (crea un registro nuevo a partir de uno existente, conserva historial)
+- Alertas de vencimiento en el dashboard
+- Gestionar tipos (Seguro, VTV/RTO, Permiso de circulación, etc.)
+
+**Archivos:** `seguros/seguros.php`, `seguros/seguros_crear.php`, `seguros/tipos_seguros.php`
+
 ---
 
 ## 🔧 Setup / Instalación
@@ -80,6 +89,7 @@ Cada módulo tiene un archivo `setup_*.php` para inicializar las tablas de base 
 - `sueldos/setup_sueldos.php` - Crear tabla de sueldos
 - `cheques/setup_cheques.php` - Crear tabla de cheques
 - `gastos/setup_gastos.php` - Crear tabla de gastos
+- `seguros/setup_seguros.php` - Crear tablas de seguros y permisos
 
 Si necesitas (re)inicializar un módulo, accede al archivo de setup correspondiente.
 
@@ -93,6 +103,7 @@ Desde el menú lateral del admin, puedes acceder directamente a:
 - **Asistencias** → `asistencias/asistencias.php`
 - **Cheques** → `cheques/cheques.php`
 - **Gastos** → `gastos/gastos.php`
+- **Seguros y Permisos** → `seguros/seguros.php`
 
 ---
 

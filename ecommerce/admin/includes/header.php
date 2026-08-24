@@ -188,6 +188,7 @@ $role_permissions = [
         'flujo_caja',
         'cheques',
         'gastos',
+        'seguros',
         'encuestas',
         'calidad',
         'fotos_nube',
@@ -208,6 +209,7 @@ $role_permissions = [
         'flujo_caja',
         'cheques',
         'gastos',
+        'seguros',
         'encuestas',
         'calidad',
         'fotos_nube',
@@ -397,6 +399,10 @@ $page_permissions = [
     'gastos_crear.php' => 'gastos',
     'gastos_editar.php' => 'gastos',
     'gastos_cambiar_estado.php' => 'gastos',
+    'seguros.php' => 'seguros',
+    'seguros_crear.php' => 'seguros',
+    'seguros_editar.php' => 'seguros',
+    'tipos_seguros.php' => 'seguros',
     'usuarios_lista.php' => 'usuarios',
     'roles_usuarios.php' => 'roles'
 ];
@@ -506,6 +512,9 @@ $notificaciones_cotizaciones_altas_total = 0;
 $notificaciones_gastos_por_vencer = [];
 $notificaciones_gastos_por_vencer_total = 0;
 $notificaciones_gasto_vencimiento_dias = 5;
+$notificaciones_seguros_por_vencer = [];
+$notificaciones_seguros_por_vencer_total = 0;
+$notificaciones_seguro_vencimiento_dias = 30;
 $notificacion_prueba_manual = [];
 $notificacion_prueba_manual_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
@@ -1205,6 +1214,51 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- Sección 9b: Seguros y permisos por vencer ---
+    if (
+        $notificaciones_permiso_admin
+        && admin_table_exists($pdo, 'seguros_permisos')
+    ) {
+        try {
+            $notif_leido_excl_seguros = $notif_usuario_id > 0
+                ? "AND NOT EXISTS (SELECT 1 FROM ecommerce_notif_leidas nl WHERE nl.usuario_id = {$notif_usuario_id} AND nl.categoria = 'seguros_vencer' AND nl.item_id = sp.id)"
+                : '';
+            $sqlSegurosVencerCount = "
+                SELECT COUNT(*)
+                FROM seguros_permisos sp
+                WHERE sp.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+                  {$notif_leido_excl_seguros}
+            ";
+            $stmtSegurosVencerCount = $pdo->prepare($sqlSegurosVencerCount);
+            $stmtSegurosVencerCount->execute([$notificaciones_seguro_vencimiento_dias]);
+            $notificaciones_seguros_por_vencer_total = (int)$stmtSegurosVencerCount->fetchColumn();
+
+            if ($notificaciones_seguros_por_vencer_total > 0) {
+                $sqlSegurosVencerLista = "
+                    SELECT
+                        sp.id,
+                        sp.vehiculo_patente,
+                        sp.vehiculo_descripcion,
+                        t.nombre AS tipo_nombre,
+                        sp.fecha_vencimiento,
+                        DATEDIFF(sp.fecha_vencimiento, CURDATE()) AS dias_para_vencer
+                    FROM seguros_permisos sp
+                    LEFT JOIN tipos_seguros_permisos t ON t.id = sp.tipo_id
+                    WHERE sp.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+                      {$notif_leido_excl_seguros}
+                    ORDER BY sp.fecha_vencimiento ASC
+                    LIMIT 8
+                ";
+                $stmtSegurosVencerLista = $pdo->prepare($sqlSegurosVencerLista);
+                $stmtSegurosVencerLista->execute([$notificaciones_seguro_vencimiento_dias]);
+                $notificaciones_seguros_por_vencer = $stmtSegurosVencerLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            }
+        } catch (Throwable $e) {
+            error_log('Notif seguros por vencer error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[seguros_vencer] ' . $e->getMessage();
+        }
+    }
+
     // --- Sección: Tareas personales pendientes del usuario actual ---
     if (
         admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
@@ -1271,6 +1325,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_pagos_recientes_total
             + (int)$notificaciones_cotizaciones_altas_total
             + (int)$notificaciones_gastos_por_vencer_total
+            + (int)$notificaciones_seguros_por_vencer_total
             + (int)$notificacion_prueba_manual_total;
     }
     
@@ -2093,6 +2148,27 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>gastos/gastos.php">Ver gastos</a>
                         <?php endif; ?>
 
+                        <?php if ($notificaciones_permiso_admin && $notificaciones_seguros_por_vencer_total > 0): ?>
+                            <div class="notif-section-title">Seguros/permisos por vencer (<?= (int)$notificaciones_seguros_por_vencer_total ?>)</div>
+                            <?php foreach ($notificaciones_seguros_por_vencer as $seguroNotif): ?>
+                                <?php $dias_para_vencer_seguro = (int)($seguroNotif['dias_para_vencer'] ?? 0); ?>
+                                <a class="notif-item" href="<?= $admin_url ?>seguros/seguros_editar.php?id=<?= (int)($seguroNotif['id'] ?? 0) ?>">
+                                    <div class="fw-semibold"><?= htmlspecialchars($seguroNotif['tipo_nombre'] ?? 'Seguro/Permiso') ?> · <?= htmlspecialchars($seguroNotif['vehiculo_patente'] ?? '') ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($seguroNotif['vehiculo_descripcion'] ?? '') ?></div>
+                                    <div class="small <?= $dias_para_vencer_seguro < 0 ? 'text-danger fw-bold' : 'text-warning' ?>">
+                                        <?php if ($dias_para_vencer_seguro < 0): ?>
+                                            Vencido el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$seguroNotif['fecha_vencimiento']))) ?>
+                                        <?php elseif ($dias_para_vencer_seguro === 0): ?>
+                                            Vence hoy
+                                        <?php else: ?>
+                                            Vence el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$seguroNotif['fecha_vencimiento']))) ?> (<?= $dias_para_vencer_seguro ?> día(s))
+                                        <?php endif; ?>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>seguros/seguros.php">Ver seguros y permisos</a>
+                        <?php endif; ?>
+
                         <?php if ($notificaciones_atrasos_total > 0): ?>
                             <div class="notif-section-title">Órdenes de producción atrasadas (<?= (int)$notificaciones_atrasos_total ?>)</div>
                             <?php foreach ($notificaciones_atrasos as $notif): ?>
@@ -2203,6 +2279,9 @@ if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 
 }
 if ($notificaciones_permiso_admin && $notificaciones_gastos_por_vencer_total > 0) {
     $notif_strip_parts[] = (int)$notificaciones_gastos_por_vencer_total . ' gasto(s) por vencer';
+}
+if ($notificaciones_permiso_admin && $notificaciones_seguros_por_vencer_total > 0) {
+    $notif_strip_parts[] = (int)$notificaciones_seguros_por_vencer_total . ' seguro(s)/permiso(s) por vencer';
 }
 if ($notificaciones_atrasos_total > 0) {
     $notif_strip_atrasos = (int)$notificaciones_atrasos_total . ' orden(es) de producción atrasada(s)';
@@ -2486,7 +2565,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php endif; ?>
 
                 <!-- Finanzas -->
-                <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos'])): ?>
+                <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos', 'seguros'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas" title="Finanzas">
                         <span><i class="bi bi-cash-stack"></i><span class="menu-label"> Finanzas</span></span>
@@ -2506,6 +2585,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('gastos')): ?>
                         <a href="<?= $admin_url ?>gastos/gastos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'gastos.php' ? 'active' : '' ?>"><i class="bi bi-wallet2"></i> Gastos</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('seguros')): ?>
+                        <a href="<?= $admin_url ?>seguros/seguros.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['seguros.php', 'seguros_crear.php', 'seguros_editar.php', 'tipos_seguros.php']) ? 'active' : '' ?>"><i class="bi bi-shield-check"></i> Seguros y Permisos</a>
                         <?php endif; ?>
                     </div>
                 </div>
