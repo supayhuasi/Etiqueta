@@ -20,43 +20,29 @@ if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
 }
 
 $usuario_id = (int)($_SESSION['user']['id'] ?? 0);
+$destino_id = (int)($_POST['usuario_id'] ?? 0);
+
 if ($usuario_id <= 0) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'msg' => 'No autenticado']);
     exit;
 }
-
-$conversacion_id = (int)($_POST['conversacion_id'] ?? 0);
-$mensaje = trim((string)($_POST['mensaje'] ?? ''));
-
-if ($conversacion_id <= 0) {
+if ($destino_id <= 0) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']);
-    exit;
-}
-if ($mensaje === '') {
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'msg' => 'El mensaje no puede estar vacío']);
+    echo json_encode(['ok' => false, 'msg' => 'Usuario destino inválido']);
     exit;
 }
 
 try {
     chat_asegurar_tablas($pdo);
     chat_actualizar_actividad($pdo, $usuario_id);
-
-    if (!chat_usuario_tiene_acceso($pdo, $conversacion_id, $usuario_id)) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'msg' => 'No tenés acceso a esta conversación']);
-        exit;
-    }
-
-    $mensaje_creado = chat_enviar_mensaje($pdo, $conversacion_id, $usuario_id, $mensaje);
-    echo json_encode(['ok' => true, 'mensaje' => $mensaje_creado]);
+    $conversacion_id = chat_obtener_o_crear_directo($pdo, $usuario_id, $destino_id);
+    echo json_encode(['ok' => true, 'conversacion_id' => $conversacion_id]);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'msg' => $e->getMessage()]);
 } catch (Throwable $e) {
-    error_log('chat_enviar error: ' . $e->getMessage());
+    error_log('chat_iniciar_directo error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['ok' => false, 'msg' => 'Error al enviar el mensaje']);
+    echo json_encode(['ok' => false, 'msg' => 'Error al iniciar la conversación']);
 }

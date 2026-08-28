@@ -20,15 +20,35 @@ try {
     chat_asegurar_tablas($pdo);
     chat_actualizar_actividad($pdo, $usuario_id);
 
+    $conversacion_id = (int)($_GET['conversacion_id'] ?? 0);
     $desde = (int)($_GET['desde'] ?? 0);
-    $mensajes = chat_obtener_mensajes($pdo, $desde, 50);
-    $conectados = chat_usuarios_conectados($pdo, $usuario_id, 3);
 
-    echo json_encode([
+    $respuesta = [
         'ok' => true,
-        'mensajes' => $mensajes,
-        'conectados' => $conectados,
-    ]);
+        'conectados' => chat_usuarios_conectados($pdo, $usuario_id, 3),
+        'usuarios' => chat_usuarios_activos($pdo, $usuario_id),
+        'conversaciones' => chat_listar_conversaciones($pdo, $usuario_id),
+    ];
+
+    if ($conversacion_id > 0) {
+        if (!chat_usuario_tiene_acceso($pdo, $conversacion_id, $usuario_id)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'msg' => 'No tenés acceso a esta conversación']);
+            exit;
+        }
+
+        $mensajes = chat_obtener_mensajes($pdo, $conversacion_id, $desde, 50);
+        $respuesta['mensajes'] = $mensajes;
+        $respuesta['conversacion_id'] = $conversacion_id;
+
+        $ultimo_id = $desde;
+        foreach ($mensajes as $m) {
+            $ultimo_id = max($ultimo_id, (int)$m['id']);
+        }
+        chat_marcar_leido($pdo, $conversacion_id, $usuario_id, $ultimo_id);
+    }
+
+    echo json_encode($respuesta);
 } catch (Throwable $e) {
     error_log('chat_polling error: ' . $e->getMessage());
     http_response_code(500);

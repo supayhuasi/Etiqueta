@@ -26,37 +26,22 @@ if ($usuario_id <= 0) {
     exit;
 }
 
-$conversacion_id = (int)($_POST['conversacion_id'] ?? 0);
-$mensaje = trim((string)($_POST['mensaje'] ?? ''));
-
-if ($conversacion_id <= 0) {
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']);
-    exit;
-}
-if ($mensaje === '') {
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'msg' => 'El mensaje no puede estar vacío']);
-    exit;
+$nombre = trim((string)($_POST['nombre'] ?? ''));
+$miembros = $_POST['miembros'] ?? [];
+if (!is_array($miembros)) {
+    $miembros = [];
 }
 
 try {
     chat_asegurar_tablas($pdo);
     chat_actualizar_actividad($pdo, $usuario_id);
-
-    if (!chat_usuario_tiene_acceso($pdo, $conversacion_id, $usuario_id)) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'msg' => 'No tenés acceso a esta conversación']);
-        exit;
-    }
-
-    $mensaje_creado = chat_enviar_mensaje($pdo, $conversacion_id, $usuario_id, $mensaje);
-    echo json_encode(['ok' => true, 'mensaje' => $mensaje_creado]);
+    $conversacion_id = chat_crear_grupo($pdo, $usuario_id, $nombre, $miembros);
+    echo json_encode(['ok' => true, 'conversacion_id' => $conversacion_id]);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'msg' => $e->getMessage()]);
 } catch (Throwable $e) {
-    error_log('chat_enviar error: ' . $e->getMessage());
+    error_log('chat_crear_grupo error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['ok' => false, 'msg' => 'Error al enviar el mensaje']);
+    echo json_encode(['ok' => false, 'msg' => 'Error al crear el grupo']);
 }
