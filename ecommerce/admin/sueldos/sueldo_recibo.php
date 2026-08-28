@@ -1,5 +1,6 @@
 <?php
 require '../includes/header.php';
+require_once '../includes/sueldos_helper.php';
 
 function calcularMinutosExtrasMesEmpleadoRecibo(PDO $pdo, int $empleado_id, string $mes): int
 {
@@ -94,7 +95,7 @@ function evaluarFormula($formula, $sueldo_base) {
 }
 
 // Calcular totales
-$sueldo_base = $empleado['sueldo_base'];
+$sueldo_base = sueldosObtenerSueldoBaseMes($pdo, (int)$id, $mes);
 $descuentos = 0;
 $bonificaciones = 0;
 $minutos_extras_mes = calcularMinutosExtrasMesEmpleadoRecibo($pdo, (int)$id, $mes);
@@ -143,7 +144,11 @@ $sueldo_neto = $sueldo_base + $bonificaciones - $descuentos;
                     <!-- Detalles -->
                     <table class="table">
                         <tr>
-                            <td>Sueldo Base</td>
+                            <td>Sueldo Base
+                                <?php if (abs($sueldo_base - (float)$empleado['sueldo_base']) > 0.009): ?>
+                                    <br><small class="text-info">Sueldo especial de <?= date('F Y', strtotime($mes . '-01')) ?></small>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end">$<?= number_format($sueldo_base, 2, ',', '.') ?></td>
                         </tr>
                         <tr>

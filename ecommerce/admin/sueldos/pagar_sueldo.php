@@ -1,78 +1,11 @@
 <?php
 require '../includes/header.php';
+require_once '../includes/sueldos_helper.php';
 
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: auth/login.php");
     exit;
-}
-
-function calcularSueldoDetalle(PDO $pdo, int $empleado_id, string $mes): array
-{
-    $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
-    $stmt->execute([$empleado_id]);
-    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$empleado) {
-        return [
-            'sueldo_base' => 0.0,
-            'bonificaciones' => 0.0,
-            'descuentos' => 0.0,
-            'sueldo_total' => 0.0
-        ];
-    }
-
-    $sueldo_base = (float)$empleado['sueldo_base'];
-    $bonificaciones = 0.0;
-    $descuentos = 0.0;
-
-    $evaluarFormula = function (?string $formula, float $sueldo_base): ?float {
-        if (!$formula) {
-            return null;
-        }
-        $formula = str_replace('sueldo_base', (string)$sueldo_base, $formula);
-        try {
-            $resultado = @eval("return " . $formula . ";");
-            return $resultado !== false ? (float)$resultado : null;
-        } catch (Exception $e) {
-            return null;
-        }
-    };
-
-    $stmt_conceptos = $pdo->prepare("
-        SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
-        FROM sueldo_conceptos sc
-        JOIN conceptos c ON sc.concepto_id = c.id
-        WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
-    ");
-    $stmt_conceptos->execute([$empleado_id, $mes]);
-    $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($conceptos as $c) {
-        $monto_concepto = (float)$c['monto'];
-        if (!empty($c['formula'])) {
-            $calc = $evaluarFormula($c['formula'], $sueldo_base);
-            if ($calc !== null) {
-                $monto_concepto = $calc;
-            }
-        } elseif (!empty($c['es_porcentaje'])) {
-            $monto_concepto = ($sueldo_base * $monto_concepto) / 100;
-        }
-
-        if ($c['tipo'] === 'descuento') {
-            $descuentos += $monto_concepto;
-        } else {
-            $bonificaciones += $monto_concepto;
-        }
-    }
-
-    $sueldo_total = max(0, $sueldo_base + $bonificaciones - $descuentos);
-
-    return [
-        'sueldo_base' => $sueldo_base,
-        'bonificaciones' => $bonificaciones,
-        'descuentos' => $descuentos,
-        'sueldo_total' => $sueldo_total
-    ];
 }
 
 function calcularMinutosExtrasMesEmpleado(PDO $pdo, int $empleado_id, string $mes): int
@@ -145,7 +78,7 @@ if (!$empleado) {
 }
 
 // Obtener el sueldo total del mes (base + conceptos)
-$sueldo_info = calcularSueldoDetalle($pdo, (int)$empleado_id, $mes);
+$sueldo_info = sueldosCalcularDetalleMes($pdo, (int)$empleado_id, $mes);
 $sueldo_total = $sueldo_info['sueldo_total'];
 $minutos_extras_mes = calcularMinutosExtrasMesEmpleado($pdo, (int)$empleado_id, $mes);
 
@@ -241,7 +174,11 @@ $saldo_pendiente = $sueldo_total - $total_pagado;
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Sueldo Base:</strong> $<?= number_format($sueldo_info['sueldo_base'], 2) ?></p>
+                            <p><strong>Sueldo Base:</strong> $<?= number_format($sueldo_info['sueldo_base'], 2) ?>
+                                <?php if (abs($sueldo_info['sueldo_base'] - (float)$empleado['sueldo_base']) > 0.009): ?>
+                                    <span class="badge bg-info" title="Sueldo especial cargado para este mes, distinto del sueldo base global ($<?= number_format((float)$empleado['sueldo_base'], 2) ?>)">✎ especial del mes</span>
+                                <?php endif; ?>
+                            </p>
                             <p><strong>Bonificaciones:</strong> $<?= number_format($sueldo_info['bonificaciones'], 2) ?></p>
                             <p><strong>Descuentos:</strong> $<?= number_format($sueldo_info['descuentos'], 2) ?></p>
                         </div>
@@ -252,6 +189,7 @@ $saldo_pendiente = $sueldo_total - $total_pagado;
                             <?php if ($total_parciales > 0): ?>
                                 <small class="text-info d-block">Pagos parciales: $<?= number_format($total_parciales, 2) ?></small>
                             <?php endif; ?>
+                            <a href="sueldos.php?mes=<?= urlencode($mes) ?>&editar_sueldo_mes=<?= (int)$empleado_id ?>" class="small">✎ Cambiar sueldo base de este mes</a>
                         </div>
                     </div>
                 </div>

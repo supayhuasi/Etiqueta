@@ -1,6 +1,7 @@
 <?php
 require '../../../config.php';
 require '../../../fpdf.php';
+require_once __DIR__ . '/../includes/sueldos_helper.php';
 
 function calcularMinutosExtrasMesEmpleadoRecibo(PDO $pdo, int $empleado_id, string $mes): int
 {
@@ -96,7 +97,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$id, $mes]);
 $conceptos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$sueldo_base = (float)($empleado['sueldo_base'] ?? 0);
+$sueldo_base = sueldosObtenerSueldoBaseMes($pdo, $id, $mes);
 $bonificaciones = 0;
 $descuentos = 0;
 $minutos_extras_mes = calcularMinutosExtrasMesEmpleadoRecibo($pdo, $id, $mes);

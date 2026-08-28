@@ -1,11 +1,49 @@
 <?php
 require '../includes/header.php';
+require_once '../includes/sueldos_helper.php';
 
 // Verificar si existe sesión
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: auth/login.php");
     exit;
+}
+
+// Acción: fijar/actualizar el sueldo base de un empleado para un mes específico
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_sueldo_mes') {
+    $empleado_id = intval($_POST['empleado_id'] ?? 0);
+    $mes_sueldo = trim($_POST['mes'] ?? '');
+    $nuevo_sueldo_base = floatval($_POST['sueldo_base'] ?? 0);
+
+    if ($empleado_id > 0 && preg_match('/^\d{4}-\d{2}$/', $mes_sueldo) && $nuevo_sueldo_base > 0) {
+        try {
+            sueldosGuardarSueldoBaseMes($pdo, $empleado_id, $mes_sueldo, $nuevo_sueldo_base);
+            header('Location: sueldos.php?success=' . urlencode('Sueldo del mes actualizado') . '&mes=' . urlencode($mes_sueldo));
+            exit;
+        } catch (Exception $ex) {
+            $error_msg = $ex->getMessage();
+        }
+    } else {
+        $error_msg = 'Datos inválidos para actualizar el sueldo del mes';
+    }
+}
+
+// Acción: quitar el sueldo especial de un mes (vuelve a usar el sueldo base global)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'quitar_sueldo_mes') {
+    $empleado_id = intval($_POST['empleado_id'] ?? 0);
+    $mes_sueldo = trim($_POST['mes'] ?? '');
+
+    if ($empleado_id > 0 && preg_match('/^\d{4}-\d{2}$/', $mes_sueldo)) {
+        try {
+            sueldosEliminarSueldoBaseMes($pdo, $empleado_id, $mes_sueldo);
+            header('Location: sueldos.php?success=' . urlencode('Sueldo especial del mes eliminado, se usará el sueldo base global') . '&mes=' . urlencode($mes_sueldo));
+            exit;
+        } catch (Exception $ex) {
+            $error_msg = $ex->getMessage();
+        }
+    } else {
+        $error_msg = 'Datos inválidos';
+    }
 }
 
 // Acción: eliminar un pago parcial
@@ -83,67 +121,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'aplic
     } else {
         $error_msg = 'Porcentaje inválido';
     }
-}
-
-function calcularSueldoTotal(PDO $pdo, int $empleado_id, string $mes): float
-{
-    // Priorizar sueldo base mensual si existe para el mes indicado
-    $stmt_month = $pdo->prepare("SELECT sueldo_base FROM sueldo_base_mensual WHERE empleado_id = ? AND mes = ? LIMIT 1");
-    $stmt_month->execute([$empleado_id, $mes]);
-    $row_month = $stmt_month->fetch(PDO::FETCH_ASSOC);
-    if ($row_month) {
-        $sueldo_base = (float)$row_month['sueldo_base'];
-    } else {
-        $stmt = $pdo->prepare("SELECT sueldo_base FROM empleados WHERE id = ?");
-        $stmt->execute([$empleado_id]);
-        $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$empleado) return 0.0;
-        $sueldo_base = (float)$empleado['sueldo_base'];
-    }
-    $bonificaciones = 0.0;
-    $descuentos = 0.0;
-
-    $evaluarFormula = function (?string $formula, float $sueldo_base): ?float {
-        if (!$formula) {
-            return null;
-        }
-        $formula = str_replace('sueldo_base', (string)$sueldo_base, $formula);
-        try {
-            $resultado = @eval("return " . $formula . ";");
-            return $resultado !== false ? (float)$resultado : null;
-        } catch (Exception $e) {
-            return null;
-        }
-    };
-
-    $stmt_conceptos = $pdo->prepare("
-        SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
-        FROM sueldo_conceptos sc
-        JOIN conceptos c ON sc.concepto_id = c.id
-        WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
-    ");
-    $stmt_conceptos->execute([$empleado_id, $mes]);
-    $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($conceptos as $c) {
-        $monto_concepto = (float)$c['monto'];
-        if (!empty($c['formula'])) {
-            $calc = $evaluarFormula($c['formula'], $sueldo_base);
-            if ($calc !== null) {
-                $monto_concepto = $calc;
-            }
-        } elseif (!empty($c['es_porcentaje'])) {
-            $monto_concepto = ($sueldo_base * $monto_concepto) / 100;
-        }
-
-        if ($c['tipo'] === 'descuento') {
-            $descuentos += $monto_concepto;
-        } else {
-            $bonificaciones += $monto_concepto;
-        }
-    }
-
-    return max(0, $sueldo_base + $bonificaciones - $descuentos);
 }
 
 function calcularMinutosExtrasMesPorEmpleado(PDO $pdo, string $mes): array
@@ -260,26 +237,36 @@ foreach ($minutos_extras_por_empleado as $mins) {
     $total_minutos_extras_mes += (int)$mins;
 }
 
+// Sueldos base especiales cargados para el mes filtrado (distintos del sueldo base global)
+$stmt_overrides = $pdo->prepare("SELECT empleado_id, sueldo_base FROM sueldo_base_mensual WHERE mes = ?");
+$stmt_overrides->execute([$mes_filtro]);
+$sueldo_base_mes_por_empleado = [];
+foreach ($stmt_overrides->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $sueldo_base_mes_por_empleado[(int)$row['empleado_id']] = (float)$row['sueldo_base'];
+}
+
 // Calcular totales del mes
 $total_sueldo = 0;
 $total_pagado = 0;
 $total_pendiente = 0;
 
 $sueldos_calculados = [];
+$sueldos_base_calculados = [];
 
 foreach ($empleados as $emp) {
     // Calcular sueldo total si no existe pago registrado
     if ($emp['pago_id'] == 0 || (float)$emp['sueldo_total'] <= 0) {
-        $sueldo_total_emp = calcularSueldoTotal($pdo, (int)$emp['id'], $mes_filtro);
+        $sueldo_total_emp = sueldosCalcularTotalMes($pdo, (int)$emp['id'], $mes_filtro);
     } else {
         $sueldo_total_emp = (float)$emp['sueldo_total'];
     }
 
     $sueldos_calculados[$emp['id']] = $sueldo_total_emp;
-    
+    $sueldos_base_calculados[$emp['id']] = $sueldo_base_mes_por_empleado[(int)$emp['id']] ?? (float)$emp['sueldo_base'];
+
     // Sumar pagos completos + pagos parciales
     $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
-    
+
     $total_sueldo += $sueldo_total_emp;
     $total_pagado += $monto_total_pagado;
     $total_pendiente += ($sueldo_total_emp - $monto_total_pagado);
@@ -412,7 +399,7 @@ foreach ($empleados as $emp) {
                         <tr>
                             <th><input type="checkbox" id="sel_todos" class="form-check-input" title="Seleccionar todos"></th>
                             <th>Empleado</th>
-                            <th>Sueldo Base</th>
+                            <th>Sueldo Base del Mes</th>
                             <th>Plantilla Actual</th>
                             <th>Sueldo Total</th>
                             <th>Min. Extras</th>
@@ -447,7 +434,13 @@ foreach ($empleados as $emp) {
                                 <strong><?= htmlspecialchars($emp['nombre']) ?></strong>
                                 <br><small class="text-muted"><?= htmlspecialchars($emp['email']) ?></small>
                             </td>
-                            <td>$<?= number_format($emp['sueldo_base'], 2, ',', '.') ?></td>
+                            <td>
+                                <?php $sueldo_base_mes_emp = $sueldos_base_calculados[$emp['id']] ?? (float)$emp['sueldo_base']; ?>
+                                $<?= number_format($sueldo_base_mes_emp, 2, ',', '.') ?>
+                                <?php if (isset($sueldo_base_mes_por_empleado[$emp['id']])): ?>
+                                    <br><span class="badge bg-info" title="Sueldo base global: $<?= number_format((float)$emp['sueldo_base'], 2, ',', '.') ?>">✎ especial <?= htmlspecialchars($mes_filtro) ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php if ($emp['plantilla_nombre']): ?>
                                     <span class="badge bg-info"><?= htmlspecialchars($emp['plantilla_nombre']) ?></span>
@@ -500,6 +493,13 @@ foreach ($empleados as $emp) {
                             <td>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <a href="pagar_sueldo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-success" title="Registrar/Actualizar pago">💵</a>
+                                    <button type="button" class="btn btn-outline-info btn-editar-sueldo-mes"
+                                            data-id="<?= $emp['id'] ?>"
+                                            data-nombre="<?= htmlspecialchars($emp['nombre']) ?>"
+                                            data-sueldo-mes="<?= $sueldo_base_mes_emp ?>"
+                                            data-sueldo-global="<?= (float)$emp['sueldo_base'] ?>"
+                                            data-override="<?= isset($sueldo_base_mes_por_empleado[$emp['id']]) ? '1' : '0' ?>"
+                                            title="Cambiar el sueldo base solo para <?= htmlspecialchars($mes_filtro) ?>">💲</button>
                                     <a href="../empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
                                     <a href="sueldo_conceptos.php?id=<?= $emp['id'] ?>" class="btn btn-info" title="Conceptos y plantilla">💰</a>
                                     <a href="sueldo_recibo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-primary" title="Ver recibo">🧾</a>
@@ -592,6 +592,44 @@ foreach ($empleados as $emp) {
     </div>
 </div>
 
+<!-- Modal: Sueldo base del mes -->
+<div class="modal fade" id="modalSueldoMes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Sueldo base del mes — <span id="modal_sueldo_mes_nombre"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="set_sueldo_mes">
+                    <input type="hidden" name="empleado_id" id="modal_sueldo_mes_empleado_id" value="">
+                    <input type="hidden" name="mes" value="<?= htmlspecialchars($mes_filtro) ?>">
+                    <p class="text-muted small">
+                        Define el sueldo base que se usará solo para <strong><?= htmlspecialchars($mes_filtro) ?></strong>.
+                        No modifica el sueldo base global del empleado ni el de otros meses — ideal para ajustes por inflación mes a mes.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Sueldo base para <?= htmlspecialchars($mes_filtro) ?> ($)</label>
+                        <input type="number" class="form-control" name="sueldo_base" id="modal_sueldo_mes_valor" step="0.01" min="0.01" required>
+                    </div>
+                    <small class="text-muted d-block">Sueldo base global actual: $<span id="modal_sueldo_mes_global"></span></small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger me-auto" id="modal_sueldo_mes_quitar" style="display:none;">Quitar sueldo especial de este mes</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<form method="POST" id="form_quitar_sueldo_mes" style="display:none;">
+    <input type="hidden" name="action" value="quitar_sueldo_mes">
+    <input type="hidden" name="empleado_id" id="quitar_sueldo_mes_empleado_id" value="">
+    <input type="hidden" name="mes" value="<?= htmlspecialchars($mes_filtro) ?>">
+</form>
+
 <script>
 function formatMonto(n) {
     var parts = n.toFixed(2).split('.');
@@ -641,6 +679,43 @@ document.addEventListener('DOMContentLoaded', function() {
             if (selTodos) selTodos.checked = false;
             actualizarResumen();
         });
+    }
+
+    var modalSueldoMesEl = document.getElementById('modalSueldoMes');
+    var modalSueldoMes = modalSueldoMesEl ? new bootstrap.Modal(modalSueldoMesEl) : null;
+
+    function abrirModalSueldoMes(btn) {
+        document.getElementById('modal_sueldo_mes_nombre').textContent = btn.dataset.nombre;
+        document.getElementById('modal_sueldo_mes_empleado_id').value = btn.dataset.id;
+        document.getElementById('modal_sueldo_mes_valor').value = btn.dataset.sueldoMes;
+        document.getElementById('modal_sueldo_mes_global').textContent = formatMonto(parseFloat(btn.dataset.sueldoGlobal) || 0).replace('$', '');
+        document.getElementById('quitar_sueldo_mes_empleado_id').value = btn.dataset.id;
+
+        var btnQuitar = document.getElementById('modal_sueldo_mes_quitar');
+        btnQuitar.style.display = btn.dataset.override === '1' ? '' : 'none';
+
+        if (modalSueldoMes) modalSueldoMes.show();
+    }
+
+    document.querySelectorAll('.btn-editar-sueldo-mes').forEach(function(btn) {
+        btn.addEventListener('click', function() { abrirModalSueldoMes(btn); });
+    });
+
+    var btnQuitarSueldoMes = document.getElementById('modal_sueldo_mes_quitar');
+    if (btnQuitarSueldoMes) {
+        btnQuitarSueldoMes.addEventListener('click', function() {
+            if (confirm('¿Quitar el sueldo especial de este mes? Se volverá a usar el sueldo base global del empleado.')) {
+                document.getElementById('form_quitar_sueldo_mes').submit();
+            }
+        });
+    }
+
+    // Si se llega desde "Cambiar sueldo base de este mes" en pagar_sueldo.php, abrir el modal automáticamente
+    var params = new URLSearchParams(window.location.search);
+    var editarId = params.get('editar_sueldo_mes');
+    if (editarId) {
+        var btnAuto = document.querySelector('.btn-editar-sueldo-mes[data-id="' + editarId + '"]');
+        if (btnAuto) abrirModalSueldoMes(btnAuto);
     }
 });
 </script>

@@ -38,7 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="row">
         <div class="col-md-6 offset-md-3">
             <h2>Editar Empleado</h2>
-            
+
+            <div class="alert alert-info small">
+                Este es el sueldo base <strong>global</strong> del empleado (se usa cuando no hay un sueldo especial cargado para un mes puntual).
+                Para cambiar el sueldo de un mes específico sin afectar los demás, usá "💲 Sueldo del mes" desde el listado de sueldos.
+            </div>
+
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><?= $error ?></div>
             <?php endif; ?>
