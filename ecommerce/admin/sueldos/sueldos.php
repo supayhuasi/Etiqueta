@@ -501,7 +501,7 @@ foreach ($empleados as $emp) {
                                             data-override="<?= isset($sueldo_base_mes_por_empleado[$emp['id']]) ? '1' : '0' ?>"
                                             title="Cambiar el sueldo base solo para <?= htmlspecialchars($mes_filtro) ?>">💲</button>
                                     <a href="../empleados_editar.php?id=<?= $emp['id'] ?>" class="btn btn-warning" title="Editar datos">✎</a>
-                                    <a href="sueldo_conceptos.php?id=<?= $emp['id'] ?>" class="btn btn-info" title="Conceptos y plantilla">💰</a>
+                                    <a href="sueldo_conceptos.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-info" title="Conceptos y plantilla">💰</a>
                                     <a href="sueldo_recibo.php?id=<?= $emp['id'] ?>&mes=<?= $mes_filtro ?>" class="btn btn-primary" title="Ver recibo">🧾</a>
                                 </div>
                             </td>
