@@ -28,13 +28,14 @@ if ($usuario_id <= 0) {
 
 $conversacion_id = (int)($_POST['conversacion_id'] ?? 0);
 $mensaje = trim((string)($_POST['mensaje'] ?? ''));
+$tiene_adjunto = isset($_FILES['adjunto']) && ($_FILES['adjunto']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
 
 if ($conversacion_id <= 0) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'msg' => 'Conversación inválida']);
     exit;
 }
-if ($mensaje === '') {
+if ($mensaje === '' && !$tiene_adjunto) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'msg' => 'El mensaje no puede estar vacío']);
     exit;
@@ -50,7 +51,12 @@ try {
         exit;
     }
 
-    $mensaje_creado = chat_enviar_mensaje($pdo, $conversacion_id, $usuario_id, $mensaje);
+    $adjunto = $tiene_adjunto ? chat_guardar_adjunto($_FILES['adjunto']) : null;
+
+    $mensaje_creado = chat_enviar_mensaje($pdo, $conversacion_id, $usuario_id, $mensaje, $adjunto);
+    $mensaje_creado = chat_agregar_url_adjuntos([$mensaje_creado], $admin_url)[0];
+    $mensaje_creado['leido'] = false;
+
     echo json_encode(['ok' => true, 'mensaje' => $mensaje_creado]);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);

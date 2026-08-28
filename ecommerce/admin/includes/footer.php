@@ -181,10 +181,57 @@
     .chat-widget-msg-hora { font-size: 0.65rem; color: #94a3b8; margin-top: 2px; }
     .chat-widget-msg-mio { margin-left: auto; text-align: right; }
     .chat-widget-msg-mio .chat-widget-msg-burbuja { background: #2563eb; color: #fff; margin-left: auto; display: inline-block; }
+    .chat-widget-msg-estado { font-size: 0.7rem; margin-left: 3px; letter-spacing: -2px; }
+    .chat-widget-msg-estado.leido { color: #38bdf8; }
+    .chat-widget-msg-estado.enviado { color: rgba(255,255,255,0.75); }
+    .chat-widget-msg-mio .chat-widget-msg-hora { display: flex; justify-content: flex-end; align-items: center; }
+
+    .chat-widget-adjunto-img {
+        display: block;
+        max-width: 100%;
+        max-height: 160px;
+        border-radius: 10px;
+        margin-top: 4px;
+        cursor: pointer;
+    }
+    .chat-widget-adjunto-archivo {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(0,0,0,0.05);
+        border-radius: 8px;
+        padding: 6px 8px;
+        margin-top: 4px;
+        text-decoration: none;
+        color: inherit;
+        font-size: 0.78rem;
+    }
+    .chat-widget-msg-mio .chat-widget-adjunto-archivo { background: rgba(255,255,255,0.18); }
+    .chat-widget-adjunto-archivo .chat-widget-adjunto-icono { font-size: 1.1rem; }
+    .chat-widget-adjunto-archivo .chat-widget-adjunto-info { min-width: 0; display: flex; flex-direction: column; text-align: left; }
+    .chat-widget-adjunto-archivo .chat-widget-adjunto-nombre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+    .chat-widget-adjunto-archivo .chat-widget-adjunto-tamano { font-size: 0.68rem; opacity: 0.75; }
+
+    #chatWidgetAdjuntoPreview {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        margin: 0 8px;
+        background: #eef2f7;
+        border-radius: 8px;
+        font-size: 0.78rem;
+        color: #334155;
+    }
+    #chatWidgetAdjuntoPreview .chat-widget-adjunto-nombre { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #chatWidgetAdjuntoQuitar { background: none; border: none; color: #dc3545; font-size: 1rem; cursor: pointer; line-height: 1; }
+
     #chatWidgetForm {
+        position: relative;
         flex: 0 0 auto;
         display: flex;
-        gap: 6px;
+        align-items: flex-end;
+        gap: 4px;
         padding: 8px;
         border-top: 1px solid #eef1f6;
         background: #fff;
@@ -207,6 +254,44 @@
         cursor: pointer;
     }
     #chatWidgetForm button:disabled, #chatWidgetGrupoCrear:disabled { opacity: 0.6; }
+    #chatWidgetEmojiBtn, #chatWidgetAdjuntoBtn {
+        background: none;
+        border: none;
+        color: #64748b;
+        font-size: 1.15rem;
+        padding: 0 4px;
+        cursor: pointer;
+        flex: 0 0 auto;
+        height: 34px;
+    }
+    #chatWidgetEmojiBtn:hover, #chatWidgetAdjuntoBtn:hover { color: #2563eb; }
+    #chatWidgetEmojiPanel {
+        display: none;
+        position: absolute;
+        bottom: 46px;
+        left: 8px;
+        width: 236px;
+        max-height: 160px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #e5eaf2;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+        padding: 6px;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 2px;
+        z-index: 5;
+    }
+    .chat-widget-emoji-item {
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        padding: 3px;
+        cursor: pointer;
+        border-radius: 6px;
+        line-height: 1;
+    }
+    .chat-widget-emoji-item:hover { background: #eef2f7; }
 
     #chatWidgetVistaGrupo { padding: 10px; overflow-y: auto; gap: 8px; }
     #chatWidgetVistaGrupo label.chat-widget-field-label { font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: -2px; }
@@ -260,7 +345,16 @@
 
     <div id="chatWidgetVistaConversacion" style="display:none;">
         <div id="chatWidgetMensajes"></div>
+        <div id="chatWidgetAdjuntoPreview">
+            <span>📎</span>
+            <span class="chat-widget-adjunto-nombre" id="chatWidgetAdjuntoNombre"></span>
+            <button type="button" id="chatWidgetAdjuntoQuitar" aria-label="Quitar adjunto">&times;</button>
+        </div>
         <form id="chatWidgetForm">
+            <button type="button" id="chatWidgetEmojiBtn" title="Emojis">🙂</button>
+            <div id="chatWidgetEmojiPanel"></div>
+            <button type="button" id="chatWidgetAdjuntoBtn" title="Adjuntar archivo"><i class="bi bi-paperclip"></i></button>
+            <input type="file" id="chatWidgetAdjuntoInput" style="display:none;">
             <textarea id="chatWidgetInput" rows="1" maxlength="1000" placeholder="Escribí un mensaje..." autocomplete="off"></textarea>
             <button type="submit"><i class="bi bi-send-fill"></i></button>
         </form>
@@ -279,6 +373,11 @@
 (function () {
     var ADMIN_URL = <?= json_encode($admin_url) ?>;
     var MI_USUARIO_ID = <?= (int)$chat_mi_id ?>;
+
+    var EMOJIS = ['😀','😁','😂','🤣','😊','😉','😍','😘','😎','🤔','😅','😢','😭','😡','😱','🥳',
+                  '👍','👎','👏','🙏','💪','🤝','✌️','👌','🙌','👋','🤙','✋',
+                  '❤️','💙','💚','💛','🧡','💜','🔥','⭐','✨','🎉','🎊','✅','❌','⚠️','❓','❗',
+                  '📌','📎','📷','📅','⏰','☕','🍕','🚀','💡','👀','😴','🤝'];
 
     var btn = document.getElementById('chatWidgetBtn');
     var panel = document.getElementById('chatWidgetPanel');
@@ -299,6 +398,13 @@
     var mensajesEl = document.getElementById('chatWidgetMensajes');
     var form = document.getElementById('chatWidgetForm');
     var input = document.getElementById('chatWidgetInput');
+    var emojiBtn = document.getElementById('chatWidgetEmojiBtn');
+    var emojiPanel = document.getElementById('chatWidgetEmojiPanel');
+    var adjuntoBtn = document.getElementById('chatWidgetAdjuntoBtn');
+    var adjuntoInput = document.getElementById('chatWidgetAdjuntoInput');
+    var adjuntoPreview = document.getElementById('chatWidgetAdjuntoPreview');
+    var adjuntoNombreEl = document.getElementById('chatWidgetAdjuntoNombre');
+    var adjuntoQuitarBtn = document.getElementById('chatWidgetAdjuntoQuitar');
 
     var grupoNombreEl = document.getElementById('chatWidgetGrupoNombre');
     var grupoMiembrosEl = document.getElementById('chatWidgetGrupoMiembros');
@@ -315,6 +421,11 @@
     var conversacionesCache = [];
     var usuariosCache = [];
     var conectadosCache = [];
+    var noLeidosPrevios = {};
+    var primerPollHecho = false;
+    var archivoSeleccionado = null;
+    var tituloOriginal = document.title;
+    var audioCtx = null;
 
     function csrfToken() {
         var meta = document.querySelector('meta[name="csrf-token"]');
@@ -336,6 +447,35 @@
         return h + ':' + m;
     }
 
+    function formatTamano(bytes) {
+        bytes = parseInt(bytes, 10) || 0;
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function reproducirSonido() {
+        try {
+            if (!audioCtx) {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                audioCtx = new AC();
+            }
+            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.32);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.33);
+        } catch (e) { /* audio no disponible en este navegador */ }
+    }
+
     function totalNoLeidos() {
         return conversacionesCache.reduce(function (acc, c) {
             return acc + (parseInt(c.no_leidos, 10) || 0);
@@ -350,6 +490,7 @@
         } else {
             badge.style.display = 'none';
         }
+        document.title = total > 0 ? '(' + (total > 99 ? '99+' : total) + ') ' + tituloOriginal : tituloOriginal;
     }
 
     function renderConectados() {
@@ -384,7 +525,14 @@
             row.type = 'button';
             row.className = 'chat-widget-conv-row';
             var noLeidos = parseInt(c.no_leidos, 10) || 0;
-            var preview = c.ultimo_mensaje ? escapeHtml(String(c.ultimo_mensaje).slice(0, 40)) : 'Sin mensajes todavía';
+            var preview;
+            if (c.ultimo_mensaje) {
+                preview = escapeHtml(String(c.ultimo_mensaje).slice(0, 40));
+            } else if (c.ultimo_mensaje_adjunto) {
+                preview = '📎 ' + escapeHtml(String(c.ultimo_mensaje_adjunto).slice(0, 36));
+            } else {
+                preview = 'Sin mensajes todavía';
+            }
             row.innerHTML =
                 '<span class="chat-widget-conv-icono">' + iconoConversacion(c.tipo) + '</span>' +
                 '<span class="chat-widget-conv-info">' +
@@ -397,14 +545,43 @@
         });
     }
 
+    function renderAdjunto(m) {
+        if (!m.adjunto_url) return '';
+        var esImagen = (m.adjunto_tipo || '').indexOf('image/') === 0;
+        if (esImagen) {
+            return '<a href="' + escapeHtml(m.adjunto_url) + '" target="_blank" rel="noopener">' +
+                   '<img class="chat-widget-adjunto-img" src="' + escapeHtml(m.adjunto_url) + '" alt="' + escapeHtml(m.adjunto_nombre || 'imagen') + '"></a>';
+        }
+        return '<a class="chat-widget-adjunto-archivo" href="' + escapeHtml(m.adjunto_url) + '" target="_blank" rel="noopener" download>' +
+               '<span class="chat-widget-adjunto-icono">📄</span>' +
+               '<span class="chat-widget-adjunto-info">' +
+                   '<span class="chat-widget-adjunto-nombre">' + escapeHtml(m.adjunto_nombre || 'Archivo') + '</span>' +
+                   '<span class="chat-widget-adjunto-tamano">' + formatTamano(m.adjunto_tamano) + '</span>' +
+               '</span></a>';
+    }
+
     function renderMensaje(m) {
         var mio = parseInt(m.usuario_id, 10) === MI_USUARIO_ID;
         var wrap = document.createElement('div');
         wrap.className = 'chat-widget-msg' + (mio ? ' chat-widget-msg-mio' : '');
+
+        var burbuja = '';
+        if (m.mensaje) {
+            burbuja += '<div class="chat-widget-msg-burbuja">' + escapeHtml(m.mensaje) + '</div>';
+        }
+        var adjuntoHtml = renderAdjunto(m);
+
+        var estadoHtml = '';
+        if (mio) {
+            estadoHtml = m.leido
+                ? '<span class="chat-widget-msg-estado leido" title="Leído">✓✓</span>'
+                : '<span class="chat-widget-msg-estado enviado" title="Enviado">✓</span>';
+        }
+
         wrap.innerHTML =
             (mio ? '' : '<div class="chat-widget-msg-autor">' + escapeHtml(m.autor_nombre) + '</div>') +
-            '<div class="chat-widget-msg-burbuja">' + escapeHtml(m.mensaje) + '</div>' +
-            '<div class="chat-widget-msg-hora">' + formatHora(m.fecha_creacion) + '</div>';
+            burbuja + adjuntoHtml +
+            '<div class="chat-widget-msg-hora">' + formatHora(m.fecha_creacion) + estadoHtml + '</div>';
         return wrap;
     }
 
@@ -424,12 +601,77 @@
         });
     }
 
+    function renderEmojiPanel() {
+        if (!emojiPanel) return;
+        emojiPanel.innerHTML = '';
+        EMOJIS.forEach(function (e) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chat-widget-emoji-item';
+            b.textContent = e;
+            b.addEventListener('click', function () { insertarEmoji(e); });
+            emojiPanel.appendChild(b);
+        });
+    }
+
+    function insertarEmoji(emoji) {
+        var inicio = input.selectionStart || input.value.length;
+        var fin = input.selectionEnd || input.value.length;
+        input.value = input.value.slice(0, inicio) + emoji + input.value.slice(fin);
+        var nuevaPos = inicio + emoji.length;
+        input.focus();
+        input.setSelectionRange(nuevaPos, nuevaPos);
+    }
+
+    function cerrarEmojiPanel() {
+        if (emojiPanel) emojiPanel.style.display = 'none';
+    }
+
+    if (emojiBtn && emojiPanel) {
+        renderEmojiPanel();
+        emojiBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            emojiPanel.style.display = emojiPanel.style.display === 'grid' ? 'none' : 'grid';
+        });
+        document.addEventListener('click', function (e) {
+            if (emojiPanel.style.display === 'grid' && !emojiPanel.contains(e.target) && e.target !== emojiBtn) {
+                cerrarEmojiPanel();
+            }
+        });
+    }
+
+    function limpiarAdjuntoSeleccionado() {
+        archivoSeleccionado = null;
+        if (adjuntoInput) adjuntoInput.value = '';
+        if (adjuntoPreview) adjuntoPreview.style.display = 'none';
+    }
+
+    if (adjuntoBtn && adjuntoInput) {
+        adjuntoBtn.addEventListener('click', function () { adjuntoInput.click(); });
+        adjuntoInput.addEventListener('change', function () {
+            var archivo = adjuntoInput.files && adjuntoInput.files[0];
+            if (!archivo) return;
+            if (archivo.size > 10 * 1024 * 1024) {
+                alert('El archivo supera el máximo de 10MB');
+                adjuntoInput.value = '';
+                return;
+            }
+            archivoSeleccionado = archivo;
+            if (adjuntoNombreEl) adjuntoNombreEl.textContent = archivo.name;
+            if (adjuntoPreview) adjuntoPreview.style.display = 'flex';
+        });
+    }
+    if (adjuntoQuitarBtn) {
+        adjuntoQuitarBtn.addEventListener('click', limpiarAdjuntoSeleccionado);
+    }
+
     function mostrarVista(nueva) {
         vista = nueva;
         vistaLista.style.display = nueva === 'lista' ? 'flex' : 'none';
         vistaConversacion.style.display = nueva === 'conversacion' ? 'flex' : 'none';
         vistaGrupo.style.display = nueva === 'grupo' ? 'flex' : 'none';
         backBtn.style.display = nueva === 'lista' ? 'none' : '';
+        cerrarEmojiPanel();
 
         if (nueva === 'lista') {
             activeConvId = 0;
@@ -449,6 +691,7 @@
     function abrirConversacion(id, nombre) {
         activeConvId = id;
         activeConvNombre = nombre;
+        limpiarAdjuntoSeleccionado();
         mensajesEl.innerHTML = '';
         if (mensajesCache[id]) {
             mensajesCache[id].forEach(function (m) { mensajesEl.appendChild(renderMensaje(m)); });
@@ -529,8 +772,9 @@
 
     function poll() {
         var url = ADMIN_URL + 'chat_polling.php';
+        var desdeEnviado = lastIdMap[activeConvId] || 0;
         if (activeConvId > 0) {
-            url += '?conversacion_id=' + activeConvId + '&desde=' + (lastIdMap[activeConvId] || 0);
+            url += '?conversacion_id=' + activeConvId + '&desde=' + desdeEnviado;
         }
 
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -544,6 +788,17 @@
                 }
                 if (data.usuarios) usuariosCache = data.usuarios;
                 if (data.conversaciones) {
+                    var huboNuevoEnSegundoPlano = false;
+                    data.conversaciones.forEach(function (c) {
+                        var anterior = noLeidosPrevios.hasOwnProperty(c.id) ? noLeidosPrevios[c.id] : (parseInt(c.no_leidos, 10) || 0);
+                        var actual = parseInt(c.no_leidos, 10) || 0;
+                        if (primerPollHecho && actual > anterior && c.id !== activeConvId) {
+                            huboNuevoEnSegundoPlano = true;
+                        }
+                        noLeidosPrevios[c.id] = actual;
+                    });
+                    if (huboNuevoEnSegundoPlano) reproducirSonido();
+
                     conversacionesCache = data.conversaciones;
                     if (vista === 'lista') {
                         renderConversaciones();
@@ -555,16 +810,23 @@
                 if (data.mensajes && data.mensajes.length && activeConvId > 0 && data.conversacion_id === activeConvId) {
                     var eraVacio = mensajesEl.children.length === 0;
                     var estabaAbajo = mensajesEl.scrollTop + mensajesEl.clientHeight >= mensajesEl.scrollHeight - 20;
+                    var hayMensajeDeOtros = false;
                     if (!mensajesCache[activeConvId]) mensajesCache[activeConvId] = [];
                     data.mensajes.forEach(function (m) {
                         mensajesEl.appendChild(renderMensaje(m));
                         mensajesCache[activeConvId].push(m);
                         lastIdMap[activeConvId] = Math.max(lastIdMap[activeConvId] || 0, parseInt(m.id, 10));
+                        if (parseInt(m.usuario_id, 10) !== MI_USUARIO_ID) hayMensajeDeOtros = true;
                     });
+                    // Solo notificar si ya había historial cargado (desde > 0): evita sonar
+                    // al abrir por primera vez una conversación con mensajes viejos.
+                    if (desdeEnviado > 0 && hayMensajeDeOtros) reproducirSonido();
                     if (vista === 'conversacion' && (eraVacio || estabaAbajo)) {
                         mensajesEl.scrollTop = mensajesEl.scrollHeight;
                     }
                 }
+
+                primerPollHecho = true;
             })
             .catch(function () { /* reintenta en el próximo ciclo */ });
     }
@@ -594,27 +856,39 @@
         e.preventDefault();
         if (activeConvId <= 0) return;
         var texto = input.value.trim();
-        if (!texto) return;
+        if (!texto && !archivoSeleccionado) return;
+
         input.disabled = true;
-        var body = new URLSearchParams();
-        body.set('conversacion_id', activeConvId);
+        if (adjuntoBtn) adjuntoBtn.disabled = true;
+        var conversacionEnvio = activeConvId;
+
+        var body = new FormData();
+        body.set('conversacion_id', conversacionEnvio);
         body.set('mensaje', texto);
         body.set('csrf_token', csrfToken());
+        if (archivoSeleccionado) {
+            body.set('adjunto', archivoSeleccionado);
+        }
+
         fetch(ADMIN_URL + 'chat_enviar.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-            body: body.toString()
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: body
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 input.disabled = false;
+                if (adjuntoBtn) adjuntoBtn.disabled = false;
                 if (data && data.ok && data.mensaje) {
                     input.value = '';
-                    mensajesEl.appendChild(renderMensaje(data.mensaje));
-                    if (!mensajesCache[activeConvId]) mensajesCache[activeConvId] = [];
-                    mensajesCache[activeConvId].push(data.mensaje);
-                    lastIdMap[activeConvId] = Math.max(lastIdMap[activeConvId] || 0, parseInt(data.mensaje.id, 10));
-                    mensajesEl.scrollTop = mensajesEl.scrollHeight;
+                    limpiarAdjuntoSeleccionado();
+                    if (activeConvId === conversacionEnvio) {
+                        mensajesEl.appendChild(renderMensaje(data.mensaje));
+                        mensajesEl.scrollTop = mensajesEl.scrollHeight;
+                    }
+                    if (!mensajesCache[conversacionEnvio]) mensajesCache[conversacionEnvio] = [];
+                    mensajesCache[conversacionEnvio].push(data.mensaje);
+                    lastIdMap[conversacionEnvio] = Math.max(lastIdMap[conversacionEnvio] || 0, parseInt(data.mensaje.id, 10));
                 } else {
                     alert((data && data.msg) ? data.msg : 'No se pudo enviar el mensaje');
                 }
@@ -622,6 +896,7 @@
             })
             .catch(function () {
                 input.disabled = false;
+                if (adjuntoBtn) adjuntoBtn.disabled = false;
                 alert('No se pudo enviar el mensaje. Revisá tu conexión.');
             });
     });

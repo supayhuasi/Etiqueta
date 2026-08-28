@@ -1,0 +1,7 @@
+# Los adjuntos del chat son archivos subidos por usuarios: nunca deben poder ejecutarse como script.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|asp|aspx|sh|exe)$">
+    Require all denied
+</FilesMatch>

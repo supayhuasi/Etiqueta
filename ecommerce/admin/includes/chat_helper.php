@@ -35,6 +35,10 @@ function chat_asegurar_tablas(PDO $pdo): void
             conversacion_id INT NOT NULL,
             usuario_id INT NOT NULL,
             mensaje VARCHAR(1000) NOT NULL,
+            adjunto_archivo VARCHAR(255) NULL,
+            adjunto_nombre VARCHAR(255) NULL,
+            adjunto_tipo VARCHAR(100) NULL,
+            adjunto_tamano INT NULL,
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_chat_mensajes_conversacion (conversacion_id, id),
             INDEX idx_chat_mensajes_usuario (usuario_id)
@@ -48,6 +52,19 @@ function chat_asegurar_tablas(PDO $pdo): void
         $pdo->exec("UPDATE chat_mensajes SET conversacion_id = $general_id WHERE conversacion_id IS NULL");
         $pdo->exec("ALTER TABLE chat_mensajes MODIFY COLUMN conversacion_id INT NOT NULL");
         $pdo->exec("CREATE INDEX idx_chat_mensajes_conversacion ON chat_mensajes (conversacion_id, id)");
+    }
+
+    // Migración: soporte de archivos adjuntos en mensajes existentes
+    $columnas_adjunto = [
+        'adjunto_archivo' => 'VARCHAR(255) NULL',
+        'adjunto_nombre' => 'VARCHAR(255) NULL',
+        'adjunto_tipo' => 'VARCHAR(100) NULL',
+        'adjunto_tamano' => 'INT NULL',
+    ];
+    foreach ($columnas_adjunto as $columna => $definicion) {
+        if (function_exists('admin_column_exists') && !admin_column_exists($pdo, 'chat_mensajes', $columna)) {
+            $pdo->exec("ALTER TABLE chat_mensajes ADD COLUMN $columna $definicion");
+        }
     }
 
     if (function_exists('admin_column_exists') && !admin_column_exists($pdo, 'usuarios', 'ultima_actividad')) {
@@ -164,6 +181,7 @@ function chat_listar_conversaciones(PDO $pdo, int $usuario_id): array
             c.nombre,
             cp.ultima_lectura_mensaje_id,
             (SELECT mensaje FROM chat_mensajes WHERE conversacion_id = c.id ORDER BY id DESC LIMIT 1) AS ultimo_mensaje,
+            (SELECT adjunto_nombre FROM chat_mensajes WHERE conversacion_id = c.id ORDER BY id DESC LIMIT 1) AS ultimo_mensaje_adjunto,
             (SELECT fecha_creacion FROM chat_mensajes WHERE conversacion_id = c.id ORDER BY id DESC LIMIT 1) AS ultimo_mensaje_fecha,
             (SELECT MAX(id) FROM chat_mensajes WHERE conversacion_id = c.id) AS ultimo_mensaje_id,
             (SELECT COUNT(*) FROM chat_mensajes WHERE conversacion_id = c.id AND id > cp.ultima_lectura_mensaje_id AND usuario_id != ?) AS no_leidos
@@ -258,6 +276,7 @@ function chat_obtener_mensajes(PDO $pdo, int $conversacion_id, int $desde_id = 0
     if ($desde_id > 0) {
         $stmt = $pdo->prepare("
             SELECT cm.id, cm.usuario_id, cm.mensaje, cm.fecha_creacion,
+                   cm.adjunto_archivo, cm.adjunto_nombre, cm.adjunto_tipo, cm.adjunto_tamano,
                    COALESCE(NULLIF(u.nombre, ''), u.usuario, 'Usuario') AS autor_nombre
             FROM chat_mensajes cm
             LEFT JOIN usuarios u ON u.id = cm.usuario_id
@@ -272,6 +291,7 @@ function chat_obtener_mensajes(PDO $pdo, int $conversacion_id, int $desde_id = 0
     // Primera carga: traer los últimos $limite mensajes, en orden cronológico
     $stmt = $pdo->prepare("
         SELECT cm.id, cm.usuario_id, cm.mensaje, cm.fecha_creacion,
+               cm.adjunto_archivo, cm.adjunto_nombre, cm.adjunto_tipo, cm.adjunto_tamano,
                COALESCE(NULLIF(u.nombre, ''), u.usuario, 'Usuario') AS autor_nombre
         FROM chat_mensajes cm
         LEFT JOIN usuarios u ON u.id = cm.usuario_id
@@ -283,22 +303,11 @@ function chat_obtener_mensajes(PDO $pdo, int $conversacion_id, int $desde_id = 0
     return array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
 }
 
-function chat_enviar_mensaje(PDO $pdo, int $conversacion_id, int $usuario_id, string $mensaje): array
+function chat_obtener_mensaje_por_id(PDO $pdo, int $id): array
 {
-    $mensaje = trim($mensaje);
-    if ($mensaje === '') {
-        throw new InvalidArgumentException('El mensaje no puede estar vacío');
-    }
-    $mensaje = function_exists('mb_substr') ? mb_substr($mensaje, 0, 1000) : substr($mensaje, 0, 1000);
-
-    $stmt = $pdo->prepare("INSERT INTO chat_mensajes (conversacion_id, usuario_id, mensaje) VALUES (?, ?, ?)");
-    $stmt->execute([$conversacion_id, $usuario_id, $mensaje]);
-    $id = (int)$pdo->lastInsertId();
-
-    chat_marcar_leido($pdo, $conversacion_id, $usuario_id, $id);
-
     $stmt = $pdo->prepare("
         SELECT cm.id, cm.usuario_id, cm.mensaje, cm.fecha_creacion,
+               cm.adjunto_archivo, cm.adjunto_nombre, cm.adjunto_tipo, cm.adjunto_tamano,
                COALESCE(NULLIF(u.nombre, ''), u.usuario, 'Usuario') AS autor_nombre
         FROM chat_mensajes cm
         LEFT JOIN usuarios u ON u.id = cm.usuario_id
@@ -306,4 +315,143 @@ function chat_enviar_mensaje(PDO $pdo, int $conversacion_id, int $usuario_id, st
     ");
     $stmt->execute([$id]);
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+}
+
+function chat_enviar_mensaje(PDO $pdo, int $conversacion_id, int $usuario_id, string $mensaje, ?array $adjunto = null): array
+{
+    $mensaje = trim($mensaje);
+    if ($mensaje === '' && $adjunto === null) {
+        throw new InvalidArgumentException('El mensaje no puede estar vacío');
+    }
+    $mensaje = function_exists('mb_substr') ? mb_substr($mensaje, 0, 1000) : substr($mensaje, 0, 1000);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO chat_mensajes (conversacion_id, usuario_id, mensaje, adjunto_archivo, adjunto_nombre, adjunto_tipo, adjunto_tamano)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->execute([
+        $conversacion_id,
+        $usuario_id,
+        $mensaje,
+        $adjunto['archivo'] ?? null,
+        $adjunto['nombre'] ?? null,
+        $adjunto['tipo'] ?? null,
+        $adjunto['tamano'] ?? null,
+    ]);
+    $id = (int)$pdo->lastInsertId();
+
+    chat_marcar_leido($pdo, $conversacion_id, $usuario_id, $id);
+
+    return chat_obtener_mensaje_por_id($pdo, $id);
+}
+
+function chat_obtener_lecturas(PDO $pdo, int $conversacion_id): array
+{
+    $stmt = $pdo->prepare("SELECT usuario_id, ultima_lectura_mensaje_id FROM chat_participantes WHERE conversacion_id = ?");
+    $stmt->execute([$conversacion_id]);
+    $lecturas = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $lecturas[(int)$row['usuario_id']] = (int)$row['ultima_lectura_mensaje_id'];
+    }
+    return $lecturas;
+}
+
+/**
+ * Marca cada mensaje como "leído" cuando TODOS los demás participantes de la
+ * conversación (todos menos el remitente) ya alcanzaron ese id en su puntero
+ * de lectura. En una conversación directa equivale a "leído por el otro"; en
+ * un grupo, a "leído por todos".
+ */
+function chat_marcar_estado_lectura(array $mensajes, array $lecturas): array
+{
+    foreach ($mensajes as &$m) {
+        $remitente = (int)$m['usuario_id'];
+        $min_otros = null;
+        foreach ($lecturas as $uid => $ultima) {
+            if ($uid === $remitente) {
+                continue;
+            }
+            if ($min_otros === null || $ultima < $min_otros) {
+                $min_otros = $ultima;
+            }
+        }
+        $m['leido'] = ($min_otros !== null) && ($min_otros >= (int)$m['id']);
+    }
+    unset($m);
+    return $mensajes;
+}
+
+function chat_agregar_url_adjuntos(array $mensajes, string $admin_url): array
+{
+    foreach ($mensajes as &$m) {
+        if (!empty($m['adjunto_archivo'])) {
+            $m['adjunto_url'] = $admin_url . 'uploads/chat/' . rawurlencode($m['adjunto_archivo']);
+        } else {
+            $m['adjunto_url'] = null;
+        }
+    }
+    unset($m);
+    return $mensajes;
+}
+
+function chat_validar_adjunto(array $file): void
+{
+    $tipos_permitidos = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', 'txt', 'csv'];
+    $max_bytes = 10 * 1024 * 1024;
+
+    $error = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($error === UPLOAD_ERR_NO_FILE) {
+        throw new InvalidArgumentException('No se seleccionó ningún archivo');
+    }
+    if ($error !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException('Error al subir el archivo (código ' . $error . ')');
+    }
+    if (!is_uploaded_file($file['tmp_name'])) {
+        throw new InvalidArgumentException('Archivo temporal inválido');
+    }
+    if ((int)$file['size'] > $max_bytes) {
+        throw new InvalidArgumentException('El archivo supera el máximo de 10MB');
+    }
+
+    $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $tipos_permitidos, true)) {
+        throw new InvalidArgumentException('Tipo de archivo no permitido');
+    }
+}
+
+function chat_guardar_adjunto(array $file): array
+{
+    chat_validar_adjunto($file);
+
+    $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+    $nombre_archivo = 'chat_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+
+    $upload_dir = dirname(__DIR__) . '/uploads/chat/';
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0775, true);
+    }
+    if (!is_writable($upload_dir)) {
+        throw new RuntimeException('La carpeta de adjuntos no tiene permisos de escritura');
+    }
+    if (!move_uploaded_file($file['tmp_name'], $upload_dir . $nombre_archivo)) {
+        throw new RuntimeException('No se pudo guardar el archivo adjunto');
+    }
+
+    $mime = 'application/octet-stream';
+    if (function_exists('mime_content_type')) {
+        $detectado = @mime_content_type($upload_dir . $nombre_archivo);
+        if ($detectado) {
+            $mime = $detectado;
+        }
+    }
+
+    $nombre_original = (string)$file['name'];
+    $nombre_original = function_exists('mb_substr') ? mb_substr($nombre_original, 0, 255) : substr($nombre_original, 0, 255);
+
+    return [
+        'archivo' => $nombre_archivo,
+        'nombre' => $nombre_original,
+        'tipo' => $mime,
+        'tamano' => (int)$file['size'],
+    ];
 }

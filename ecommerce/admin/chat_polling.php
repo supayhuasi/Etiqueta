@@ -23,13 +23,7 @@ try {
     $conversacion_id = (int)($_GET['conversacion_id'] ?? 0);
     $desde = (int)($_GET['desde'] ?? 0);
 
-    $respuesta = [
-        'ok' => true,
-        'conectados' => chat_usuarios_conectados($pdo, $usuario_id, 3),
-        'usuarios' => chat_usuarios_activos($pdo, $usuario_id),
-        'conversaciones' => chat_listar_conversaciones($pdo, $usuario_id),
-    ];
-
+    $mensajes = null;
     if ($conversacion_id > 0) {
         if (!chat_usuario_tiene_acceso($pdo, $conversacion_id, $usuario_id)) {
             http_response_code(403);
@@ -37,15 +31,31 @@ try {
             exit;
         }
 
-        $mensajes = chat_obtener_mensajes($pdo, $conversacion_id, $desde, 50);
-        $respuesta['mensajes'] = $mensajes;
-        $respuesta['conversacion_id'] = $conversacion_id;
+        $mensajes_raw = chat_obtener_mensajes($pdo, $conversacion_id, $desde, 50);
 
         $ultimo_id = $desde;
-        foreach ($mensajes as $m) {
+        foreach ($mensajes_raw as $m) {
             $ultimo_id = max($ultimo_id, (int)$m['id']);
         }
+        // Marcar como leído ANTES de listar conversaciones, para que el contador de
+        // no leídos de esta conversación ya refleje que se acaba de ver.
         chat_marcar_leido($pdo, $conversacion_id, $usuario_id, $ultimo_id);
+
+        $lecturas = chat_obtener_lecturas($pdo, $conversacion_id);
+        $mensajes = chat_marcar_estado_lectura($mensajes_raw, $lecturas);
+        $mensajes = chat_agregar_url_adjuntos($mensajes, $admin_url);
+    }
+
+    $respuesta = [
+        'ok' => true,
+        'conectados' => chat_usuarios_conectados($pdo, $usuario_id, 3),
+        'usuarios' => chat_usuarios_activos($pdo, $usuario_id),
+        'conversaciones' => chat_listar_conversaciones($pdo, $usuario_id),
+    ];
+
+    if ($mensajes !== null) {
+        $respuesta['mensajes'] = $mensajes;
+        $respuesta['conversacion_id'] = $conversacion_id;
     }
 
     echo json_encode($respuesta);
