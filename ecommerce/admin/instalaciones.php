@@ -107,6 +107,7 @@ function asegurar_estructura_minima_instalaciones($pdo) {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 titulo VARCHAR(180) NOT NULL,
                 cliente VARCHAR(150) NULL,
+                cliente_id INT NULL,
                 telefono VARCHAR(50) NULL,
                 direccion VARCHAR(255) NULL,
                 localidad VARCHAR(120) NULL,
@@ -118,7 +119,8 @@ function asegurar_estructura_minima_instalaciones($pdo) {
                 fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
                 fecha_actualizacion DATETIME NULL,
                 INDEX idx_fecha_instalacion (fecha_instalacion),
-                INDEX idx_estado (estado)
+                INDEX idx_estado (estado),
+                INDEX idx_cliente_id (cliente_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $mensajes[] = 'Se creó tabla ecommerce_instalaciones_manuales.';
         }
@@ -128,12 +130,18 @@ function asegurar_estructura_minima_instalaciones($pdo) {
             $mensajes[] = 'Se agregó columna orden_visual en instalaciones manuales.';
         }
 
+        if (tabla_existe($pdo, 'ecommerce_instalaciones_manuales') && !columna_existe($pdo, 'ecommerce_instalaciones_manuales', 'cliente_id')) {
+            $pdo->exec("ALTER TABLE ecommerce_instalaciones_manuales ADD COLUMN cliente_id INT NULL AFTER cliente, ADD INDEX idx_cliente_id (cliente_id)");
+            $mensajes[] = 'Se agregó columna cliente_id en instalaciones manuales.';
+        }
+
         if (!tabla_existe($pdo, 'ecommerce_visitas')) {
             $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_visitas (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 titulo VARCHAR(180) NOT NULL,
                 descripcion TEXT NULL,
                 cliente_nombre VARCHAR(150) NULL,
+                cliente_id INT NULL,
                 telefono VARCHAR(60) NULL,
                 direccion VARCHAR(255) NULL,
                 fecha_visita DATE NOT NULL,
@@ -144,7 +152,8 @@ function asegurar_estructura_minima_instalaciones($pdo) {
                 fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 fecha_actualizacion DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_fecha_visita (fecha_visita),
-                INDEX idx_estado (estado)
+                INDEX idx_estado (estado),
+                INDEX idx_cliente_id (cliente_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $mensajes[] = 'Se creó tabla ecommerce_visitas.';
         }
@@ -157,6 +166,11 @@ function asegurar_estructura_minima_instalaciones($pdo) {
         if (tabla_existe($pdo, 'ecommerce_visitas') && !columna_existe($pdo, 'ecommerce_visitas', 'orden_visual')) {
             $pdo->exec("ALTER TABLE ecommerce_visitas ADD COLUMN orden_visual INT NOT NULL DEFAULT 0 AFTER estado");
             $mensajes[] = 'Se agregó columna orden_visual en visitas.';
+        }
+
+        if (tabla_existe($pdo, 'ecommerce_visitas') && !columna_existe($pdo, 'ecommerce_visitas', 'cliente_id')) {
+            $pdo->exec("ALTER TABLE ecommerce_visitas ADD COLUMN cliente_id INT NULL AFTER cliente_nombre, ADD INDEX idx_cliente_id (cliente_id)");
+            $mensajes[] = 'Se agregó columna cliente_id en visitas.';
         }
     } catch (Exception $e) {
         error_log('asegurar_estructura_minima_instalaciones: ' . $e->getMessage());
@@ -256,6 +270,16 @@ $tiene_instalaciones_manuales = tabla_existe($pdo, 'ecommerce_instalaciones_manu
 $tiene_visitas = tabla_existe($pdo, 'ecommerce_visitas');
 $estados_visita_validos = ['pendiente', 'en_proceso', 'completada', 'cancelada'];
 
+$clientes_para_select = [];
+if ($tiene_clientes) {
+    try {
+        $stmt_clientes = $pdo->query("SELECT id, nombre, telefono FROM ecommerce_clientes WHERE activo = 1 ORDER BY nombre LIMIT 2000");
+        $clientes_para_select = $stmt_clientes->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $clientes_para_select = [];
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ob_start(); // Capturar cualquier output no deseado
     $action = trim((string)($_POST['action'] ?? ''));
@@ -323,6 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $titulo = trim($_POST['titulo'] ?? '');
         $cliente = trim($_POST['cliente'] ?? '');
+        $cliente_id = (int)($_POST['cliente_id'] ?? 0);
         $telefono = trim($_POST['telefono'] ?? '');
         $direccion = trim($_POST['direccion'] ?? '');
         $localidad = trim($_POST['localidad'] ?? '');
@@ -340,12 +365,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_instalaciones_manuales
-                    (titulo, cliente, telefono, direccion, localidad, provincia, codigo_postal, fecha_instalacion, orden_visual, notas)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    (titulo, cliente, cliente_id, telefono, direccion, localidad, provincia, codigo_postal, fecha_instalacion, orden_visual, notas)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $orden_visual = proximo_orden_visual($pdo, 'manual', $fecha_instalacion !== '' ? $fecha_instalacion : null);
                 $stmt->execute([
                     $titulo,
                     $cliente !== '' ? $cliente : null,
+                    $cliente_id > 0 ? $cliente_id : null,
                     $telefono !== '' ? $telefono : null,
                     $direccion !== '' ? $direccion : null,
                     $localidad !== '' ? $localidad : null,
@@ -379,6 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titulo = trim($_POST['titulo'] ?? '');
         $descripcion = trim($_POST['descripcion'] ?? '');
         $cliente_nombre = trim($_POST['cliente_nombre'] ?? '');
+        $cliente_id = (int)($_POST['cliente_id'] ?? 0);
         $telefono = trim($_POST['telefono'] ?? '');
         $direccion = trim($_POST['direccion'] ?? '');
         $fecha_visita = trim($_POST['fecha_visita'] ?? '');
@@ -400,12 +427,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $creado_por = isset($_SESSION['user']['id']) && is_numeric($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null;
 
                 $stmt = $pdo->prepare("INSERT INTO ecommerce_visitas
-                    (titulo, descripcion, cliente_nombre, telefono, direccion, fecha_visita, hora_visita, estado, orden_visual, creado_por)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    (titulo, descripcion, cliente_nombre, cliente_id, telefono, direccion, fecha_visita, hora_visita, estado, orden_visual, creado_por)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     $titulo,
                     $descripcion !== '' ? $descripcion : null,
                     $cliente_nombre !== '' ? $cliente_nombre : null,
+                    $cliente_id > 0 ? $cliente_id : null,
                     $telefono !== '' ? $telefono : null,
                     $direccion !== '' ? $direccion : null,
                     $fecha_visita,
@@ -493,6 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $item_id = (int)($_POST['item_id'] ?? 0);
         $titulo = trim($_POST['titulo'] ?? '');
         $cliente = trim($_POST['cliente'] ?? '');
+        $cliente_id = (int)($_POST['cliente_id'] ?? 0);
         $telefono = trim($_POST['telefono'] ?? '');
         $direccion = trim($_POST['direccion'] ?? '');
         $localidad = trim($_POST['localidad'] ?? '');
@@ -509,12 +538,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             $stmt = $pdo->prepare("UPDATE ecommerce_instalaciones_manuales
-                SET titulo = ?, cliente = ?, telefono = ?, direccion = ?, localidad = ?, provincia = ?, codigo_postal = ?,
+                SET titulo = ?, cliente = ?, cliente_id = ?, telefono = ?, direccion = ?, localidad = ?, provincia = ?, codigo_postal = ?,
                     fecha_instalacion = ?, notas = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_instalaciones_manuales') . "
                 WHERE id = ?");
             $stmt->execute([
                 $titulo,
                 $cliente !== '' ? $cliente : null,
+                $cliente_id > 0 ? $cliente_id : null,
                 $telefono !== '' ? $telefono : null,
                 $direccion !== '' ? $direccion : null,
                 $localidad !== '' ? $localidad : null,
@@ -531,6 +561,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'item_id' => $item_id,
                     'titulo' => $titulo,
                     'cliente' => $cliente,
+                    'cliente_id' => $cliente_id > 0 ? $cliente_id : null,
                     'telefono' => $telefono,
                     'direccion' => $direccion,
                     'localidad' => $localidad,
@@ -590,6 +621,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titulo          = trim($_POST['titulo'] ?? '');
         $descripcion     = trim($_POST['descripcion'] ?? '');
         $cliente_nombre  = trim($_POST['cliente_nombre'] ?? '');
+        $cliente_id      = (int)($_POST['cliente_id'] ?? 0);
         $telefono        = trim($_POST['telefono'] ?? '');
         $direccion       = trim($_POST['direccion'] ?? '');
         $fecha_visita    = trim($_POST['fecha_visita'] ?? '');
@@ -616,7 +648,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hora_visita_sql = $hora_visita !== '' ? ($hora_visita . ':00') : null;
             $stmt = $pdo->prepare(
                 "UPDATE ecommerce_visitas
-                SET titulo = ?, descripcion = ?, cliente_nombre = ?, telefono = ?, direccion = ?,
+                SET titulo = ?, descripcion = ?, cliente_nombre = ?, cliente_id = ?, telefono = ?, direccion = ?,
                     fecha_visita = ?, hora_visita = ?, estado = ?" .
                 fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') .
                 " WHERE id = ?"
@@ -625,6 +657,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $titulo,
                 $descripcion !== '' ? $descripcion : null,
                 $cliente_nombre !== '' ? $cliente_nombre : null,
+                $cliente_id > 0 ? $cliente_id : null,
                 $telefono !== '' ? $telefono : null,
                 $direccion !== '' ? $direccion : null,
                 $fecha_visita,
@@ -639,6 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'titulo'        => $titulo,
                     'descripcion'   => $descripcion,
                     'cliente_nombre'=> $cliente_nombre,
+                    'cliente_id'    => $cliente_id > 0 ? $cliente_id : null,
                     'telefono'      => $telefono,
                     'direccion'     => $direccion,
                     'fecha_visita'  => $fecha_visita,
@@ -823,14 +857,19 @@ if ($instalacion_desde > $instalacion_hasta) {
     $instalacion_hasta = $temp;
 }
 
-$tablero_desde = $hoy;
-$tablero_hasta = $en_7_dias;
+// El tablero muestra exactamente el rango pedido (pasado, futuro o el que sea),
+// sin forzar de vuelta la ventana hoy..+6 días: eso es lo que impedía navegar
+// libremente a cualquier fecha.
+$tablero_desde = $instalacion_desde;
+$tablero_hasta = $instalacion_hasta;
 
-if ($instalacion_desde < $tablero_desde) {
-    $tablero_desde = $instalacion_desde;
-}
-if ($instalacion_hasta > $tablero_hasta) {
-    $tablero_hasta = $instalacion_hasta;
+// Límite de columnas para no renderizar meses enteros de una sola vez.
+$MAX_DIAS_TABLERO = 45;
+$span_dias = (int)round((strtotime($tablero_hasta) - strtotime($tablero_desde)) / 86400) + 1;
+$tablero_truncado = false;
+if ($span_dias > $MAX_DIAS_TABLERO) {
+    $tablero_hasta = date('Y-m-d', strtotime($tablero_desde . ' +' . ($MAX_DIAS_TABLERO - 1) . ' days'));
+    $tablero_truncado = true;
 }
 
 $filtro_instalacion_desde = $tablero_desde;
@@ -842,6 +881,13 @@ while ($cursor <= $hasta_dt) {
     $dias_tablero[] = $cursor->format('Y-m-d');
     $cursor->modify('+1 day');
 }
+
+// Navegación rápida: ventana anterior / siguiente del mismo ancho que la actual.
+$ancho_ventana = max(count($dias_tablero), 1);
+$ventana_anterior_desde = date('Y-m-d', strtotime($tablero_desde . " -{$ancho_ventana} days"));
+$ventana_anterior_hasta = date('Y-m-d', strtotime($tablero_desde . ' -1 day'));
+$ventana_siguiente_desde = date('Y-m-d', strtotime($tablero_hasta . ' +1 day'));
+$ventana_siguiente_hasta = date('Y-m-d', strtotime($tablero_hasta . " +{$ancho_ventana} days"));
 
 $items_por_columna = ['sin_fecha' => []];
 foreach ($dias_tablero as $d) {
@@ -875,6 +921,7 @@ try {
             p.envio_localidad,
             p.envio_provincia,
             p.fecha_pedido AS fecha_creacion,
+            p.cliente_id,
             {$select_cliente}
         FROM ecommerce_ordenes_produccion op
         JOIN ecommerce_pedidos p ON op.pedido_id = p.id
@@ -928,6 +975,7 @@ try {
             'detalle_url' => 'orden_produccion_detalle.php?pedido_id=' . (int)$row['pedido_id'],
             'texto_tarjeta' => trim($row['notas_instalacion'] ?? ''),
             'orden_visual' => (int)($row['orden_visual'] ?? 0),
+            'cliente_id' => !empty($row['cliente_id']) ? (int)$row['cliente_id'] : null,
         ];
 
         $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -945,6 +993,7 @@ try {
                 im.id,
                 im.titulo,
                 im.cliente,
+                im.cliente_id,
                 im.telefono,
                 im.direccion,
                 im.localidad,
@@ -998,6 +1047,7 @@ try {
                 'notas' => trim($row['notas'] ?? ''),
                 'texto_tarjeta' => trim($row['notas'] ?? ''),
                 'orden_visual' => (int)($row['orden_visual'] ?? 0),
+                'cliente_id' => !empty($row['cliente_id']) ? (int)$row['cliente_id'] : null,
             ];
 
             $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -1017,6 +1067,7 @@ try {
                 v.titulo,
                 v.descripcion,
                 v.cliente_nombre,
+                v.cliente_id,
                 v.telefono,
                 v.direccion,
                 v.fecha_visita,
@@ -1065,6 +1116,7 @@ try {
                 'orden_visual' => (int)($row['orden_visual'] ?? 0),
                 'estado_visita' => trim($row['estado'] ?? 'pendiente'),
                 'hora_visita' => trim($row['hora_visita'] ?? ''),
+                'cliente_id' => !empty($row['cliente_id']) ? (int)$row['cliente_id'] : null,
             ];
 
             $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -1100,6 +1152,22 @@ $qs = http_build_query(array_filter([
     'incluir_entregados' => $incluir_entregados ? '1' : null,
 ]));
 
+$qs_ventana_anterior = http_build_query(array_filter([
+    'fecha_desde' => $fecha_desde,
+    'fecha_hasta' => $fecha_hasta,
+    'instalacion_desde' => $ventana_anterior_desde,
+    'instalacion_hasta' => $ventana_anterior_hasta,
+    'incluir_entregados' => $incluir_entregados ? '1' : null,
+]));
+
+$qs_ventana_siguiente = http_build_query(array_filter([
+    'fecha_desde' => $fecha_desde,
+    'fecha_hasta' => $fecha_hasta,
+    'instalacion_desde' => $ventana_siguiente_desde,
+    'instalacion_hasta' => $ventana_siguiente_hasta,
+    'incluir_entregados' => $incluir_entregados ? '1' : null,
+]));
+
 function render_tarjeta_instalacion($item) {
     $tipo = (string)($item['tipo'] ?? '');
     $itemId = (int)($item['item_id'] ?? 0);
@@ -1130,6 +1198,7 @@ function render_tarjeta_instalacion($item) {
         <?php if ($tipo === 'manual'): ?>
             data-manual-titulo="<?= htmlspecialchars($item['titulo']) ?>"
             data-manual-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
+            data-manual-cliente-id="<?= (int)($item['cliente_id'] ?? 0) ?>"
             data-manual-telefono="<?= htmlspecialchars($item['telefono']) ?>"
             data-manual-direccion="<?= htmlspecialchars($item['direccion']) ?>"
             data-manual-localidad="<?= htmlspecialchars($item['localidad']) ?>"
@@ -1142,6 +1211,7 @@ function render_tarjeta_instalacion($item) {
             data-visita-titulo="<?= htmlspecialchars($item['titulo']) ?>"
             data-visita-descripcion="<?= htmlspecialchars($item['notas'] ?? '') ?>"
             data-visita-cliente="<?= htmlspecialchars($item['subtitulo']) ?>"
+            data-visita-cliente-id="<?= (int)($item['cliente_id'] ?? 0) ?>"
             data-visita-telefono="<?= htmlspecialchars($item['telefono']) ?>"
             data-visita-direccion="<?= htmlspecialchars($item['direccion']) ?>"
             data-visita-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
@@ -1317,6 +1387,13 @@ function render_tarjeta_instalacion($item) {
     <div class="alert alert-info"><?= htmlspecialchars($auto_setup_msg) ?></div>
 <?php endif; ?>
 
+<?php if (!empty($tablero_truncado)): ?>
+    <div class="alert alert-warning">
+        El rango pedido (<?= htmlspecialchars(date('d/m/Y', strtotime($instalacion_desde))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($instalacion_hasta))) ?>) es muy amplio para mostrar de una sola vez.
+        Se muestran los primeros <?= (int)$MAX_DIAS_TABLERO ?> días; usá «Siguiente ▸» para seguir avanzando.
+    </div>
+<?php endif; ?>
+
 <?php if ($ok_msg !== ''): ?>
     <div class="alert alert-success"><?= htmlspecialchars($ok_msg) ?></div>
 <?php endif; ?>
@@ -1332,17 +1409,25 @@ function render_tarjeta_instalacion($item) {
             <div class="card-body">
                 <form method="POST" class="row g-2" id="form-crear-instalacion-manual">
                     <input type="hidden" name="action" value="crear_instalacion_manual">
+                    <input type="hidden" name="cliente_id" id="manual-cliente-id" class="inst-cliente-id-input">
                     <div class="col-12">
                         <label class="form-label mb-1">Título *</label>
                         <input type="text" name="titulo" class="form-control" required placeholder="Ej: Cambio de cortinas oficina">
                     </div>
+                    <div class="col-12">
+                        <label class="form-label mb-1">Vincular cliente registrado <span class="text-muted small">(para previsión de saldo)</span></label>
+                        <input type="text" class="form-control form-control-sm mb-1 inst-cliente-buscar" data-target-select="manual-cliente-select" placeholder="Buscar por nombre o teléfono...">
+                        <select class="form-select form-select-sm inst-cliente-select" id="manual-cliente-select" data-target-id="manual-cliente-id" data-target-nombre="manual-cliente-nombre" data-target-telefono="manual-cliente-telefono">
+                            <option value="">-- Sin vincular --</option>
+                        </select>
+                    </div>
                     <div class="col-md-6">
                         <label class="form-label mb-1">Cliente</label>
-                        <input type="text" name="cliente" class="form-control">
+                        <input type="text" name="cliente" id="manual-cliente-nombre" class="form-control">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label mb-1">Teléfono</label>
-                        <input type="text" name="telefono" class="form-control">
+                        <input type="text" name="telefono" id="manual-cliente-telefono" class="form-control">
                     </div>
                     <div class="col-12">
                         <label class="form-label mb-1">Dirección</label>
@@ -1382,6 +1467,7 @@ function render_tarjeta_instalacion($item) {
             <div class="card-body">
                 <form method="POST" class="row g-2" id="form-crear-visita">
                     <input type="hidden" name="action" value="crear_visita">
+                    <input type="hidden" name="cliente_id" id="visita-nueva-cliente-id" class="inst-cliente-id-input">
                     <div class="col-12">
                         <label class="form-label mb-1">Título *</label>
                         <input type="text" name="titulo" class="form-control" required maxlength="180" placeholder="Ej: Relevamiento en cliente">
@@ -1394,13 +1480,20 @@ function render_tarjeta_instalacion($item) {
                         <label class="form-label mb-1">Hora</label>
                         <input type="time" name="hora_visita" class="form-control">
                     </div>
+                    <div class="col-12">
+                        <label class="form-label mb-1">Vincular cliente registrado <span class="text-muted small">(para previsión de saldo)</span></label>
+                        <input type="text" class="form-control form-control-sm mb-1 inst-cliente-buscar" data-target-select="visita-nueva-cliente-select" placeholder="Buscar por nombre o teléfono...">
+                        <select class="form-select form-select-sm inst-cliente-select" id="visita-nueva-cliente-select" data-target-id="visita-nueva-cliente-id" data-target-nombre="visita-nueva-cliente-nombre" data-target-telefono="visita-nueva-cliente-telefono">
+                            <option value="">-- Sin vincular --</option>
+                        </select>
+                    </div>
                     <div class="col-md-7">
                         <label class="form-label mb-1">Cliente</label>
-                        <input type="text" name="cliente_nombre" class="form-control" maxlength="150">
+                        <input type="text" name="cliente_nombre" id="visita-nueva-cliente-nombre" class="form-control" maxlength="150">
                     </div>
                     <div class="col-md-5">
                         <label class="form-label mb-1">Teléfono</label>
-                        <input type="text" name="telefono" class="form-control" maxlength="60">
+                        <input type="text" name="telefono" id="visita-nueva-cliente-telefono" class="form-control" maxlength="60">
                     </div>
                     <div class="col-12">
                         <label class="form-label mb-1">Dirección</label>
@@ -1436,6 +1529,16 @@ function render_tarjeta_instalacion($item) {
                 </h5>
             </div>
             <div class="card-body">
+                <!-- Navegación libre por fecha: mover la ventana completa hacia atrás/adelante -->
+                <div class="d-flex gap-2 mb-3">
+                    <a href="instalaciones.php?<?= $qs_ventana_anterior ?>" class="btn btn-sm btn-outline-primary flex-fill">◂ Anterior</a>
+                    <a href="instalaciones.php?<?= $qs_ventana_siguiente ?>" class="btn btn-sm btn-outline-primary flex-fill">Siguiente ▸</a>
+                </div>
+                <div class="input-group input-group-sm mb-3">
+                    <input type="date" id="ir-a-fecha" class="form-control" value="<?= htmlspecialchars($hoy) ?>">
+                    <button type="button" class="btn btn-outline-dark" onclick="irAFecha()">Ir a fecha</button>
+                </div>
+
                 <!-- Botones rápidos para cambiar período -->
                 <div class="btn-group w-100 mb-3" role="group" aria-label="Rango rápido">
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setFechaRapida(7)">Últimos 7</button>
@@ -1508,10 +1611,12 @@ function render_tarjeta_instalacion($item) {
                 <div class="d-flex flex-column gap-2 mt-3 d-md-none">
                     <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">📍 Reporte direcciones</a>
                     <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">📦 Reporte productos</a>
+                    <a href="instalaciones_prevision.php?instalacion_desde=<?= urlencode($instalacion_desde) ?>&instalacion_hasta=<?= urlencode($instalacion_hasta) ?>" class="btn btn-sm btn-outline-success" target="_blank">💰 Previsión de ingresos/egresos</a>
                 </div>
                 <div class="d-flex gap-2 mt-3 d-none d-md-flex">
                     <a href="instalaciones_reporte_direcciones.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">Reporte direcciones</a>
                     <a href="instalaciones_reporte_productos.php?<?= $qs ?>" class="btn btn-sm btn-outline-dark" target="_blank">Reporte productos</a>
+                    <a href="instalaciones_prevision.php?instalacion_desde=<?= urlencode($instalacion_desde) ?>&instalacion_hasta=<?= urlencode($instalacion_hasta) ?>" class="btn btn-sm btn-outline-success" target="_blank">Previsión de ingresos/egresos</a>
                 </div>
 
                 <div class="small text-muted mt-3 text-center">
@@ -1620,10 +1725,18 @@ function render_tarjeta_instalacion($item) {
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="item_id" id="edit-item-id">
+                    <input type="hidden" name="cliente_id" id="edit-cliente-id" class="inst-cliente-id-input">
                     <div class="row g-2">
                         <div class="col-12">
                             <label class="form-label mb-1">Título *</label>
                             <input type="text" name="titulo" id="edit-titulo" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Vincular cliente registrado <span class="text-muted small">(para previsión de saldo)</span></label>
+                            <input type="text" class="form-control form-control-sm mb-1 inst-cliente-buscar" data-target-select="edit-cliente-select" placeholder="Buscar por nombre o teléfono...">
+                            <select class="form-select form-select-sm inst-cliente-select" id="edit-cliente-select" data-target-id="edit-cliente-id" data-target-nombre="edit-cliente" data-target-telefono="edit-telefono">
+                                <option value="">-- Sin vincular --</option>
+                            </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label mb-1">Cliente</label>
@@ -1679,6 +1792,7 @@ function render_tarjeta_instalacion($item) {
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="item_id" id="visita-item-id">
+                    <input type="hidden" name="cliente_id" id="visita-cliente-id" class="inst-cliente-id-input">
                     <div class="row g-2">
                         <div class="col-12">
                             <label class="form-label mb-1">Título *</label>
@@ -1691,6 +1805,13 @@ function render_tarjeta_instalacion($item) {
                         <div class="col-md-6">
                             <label class="form-label mb-1">Hora</label>
                             <input type="time" name="hora_visita" id="visita-hora" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">Vincular cliente registrado <span class="text-muted small">(para previsión de saldo)</span></label>
+                            <input type="text" class="form-control form-control-sm mb-1 inst-cliente-buscar" data-target-select="visita-cliente-select" placeholder="Buscar por nombre o teléfono...">
+                            <select class="form-select form-select-sm inst-cliente-select" id="visita-cliente-select" data-target-id="visita-cliente-id" data-target-nombre="visita-cliente" data-target-telefono="visita-telefono">
+                                <option value="">-- Sin vincular --</option>
+                            </select>
                         </div>
                         <div class="col-md-7">
                             <label class="form-label mb-1">Cliente</label>
@@ -1759,7 +1880,76 @@ function render_tarjeta_instalacion($item) {
 </div>
 
 <script>
+var clientesInst = <?= json_encode($clientes_para_select, JSON_UNESCAPED_UNICODE) ?>;
+
+function normalizarClienteInstTexto(txt) {
+    return String(txt || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function renderClienteInstOptions(select, filtro) {
+    if (!select) return;
+    var termino = normalizarClienteInstTexto(filtro);
+    var seleccionado = select.value;
+    var filtrados = !termino ? clientesInst : clientesInst.filter(function (c) {
+        var texto = normalizarClienteInstTexto((c.nombre || '') + ' ' + (c.telefono || ''));
+        return texto.indexOf(termino) > -1;
+    });
+
+    select.innerHTML = '';
+    var optVacia = document.createElement('option');
+    optVacia.value = '';
+    optVacia.textContent = '-- Sin vincular --';
+    select.appendChild(optVacia);
+
+    filtrados.slice(0, 200).forEach(function (c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.nombre + (c.telefono ? ' · ' + c.telefono : '');
+        if (String(c.id) === String(seleccionado)) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function inicializarSelectoresClienteInst(root) {
+    var scope = root || document;
+    Array.prototype.slice.call(scope.querySelectorAll('.inst-cliente-select')).forEach(function (select) {
+        renderClienteInstOptions(select, '');
+
+        select.addEventListener('change', function () {
+            var idInput = document.getElementById(select.getAttribute('data-target-id'));
+            var nombreInput = document.getElementById(select.getAttribute('data-target-nombre'));
+            var telefonoInput = document.getElementById(select.getAttribute('data-target-telefono'));
+            if (idInput) idInput.value = select.value || '';
+            if (!select.value) return;
+            var cliente = clientesInst.find(function (c) { return String(c.id) === String(select.value); });
+            if (!cliente) return;
+            if (nombreInput) nombreInput.value = cliente.nombre || '';
+            if (telefonoInput && cliente.telefono) telefonoInput.value = cliente.telefono;
+        });
+    });
+
+    Array.prototype.slice.call(scope.querySelectorAll('.inst-cliente-buscar')).forEach(function (input) {
+        var select = document.getElementById(input.getAttribute('data-target-select'));
+        input.addEventListener('input', function () {
+            renderClienteInstOptions(select, input.value || '');
+        });
+    });
+}
+
+function limpiarSelectorClienteInst(selectId, idInputId, buscarSelector) {
+    var select = document.getElementById(selectId);
+    var idInput = document.getElementById(idInputId);
+    if (select) select.value = '';
+    if (idInput) idInput.value = '';
+    if (buscarSelector) {
+        var buscar = document.querySelector(buscarSelector);
+        if (buscar) buscar.value = '';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+    inicializarSelectoresClienteInst(document);
+
     var draggedCard = null;
     var dropZones = Array.prototype.slice.call(document.querySelectorAll('.inst-dropzone'));
     var editModalEl = document.getElementById('modal-editar-manual');
@@ -2039,6 +2229,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('edit-codigo-postal').value = card.getAttribute('data-manual-codigo-postal') || '';
         document.getElementById('edit-fecha').value = card.getAttribute('data-manual-fecha') || '';
         document.getElementById('edit-notas').value = card.getAttribute('data-manual-notas') || '';
+        document.getElementById('edit-cliente-id').value = card.getAttribute('data-manual-cliente-id') || '';
+        var editClienteSelect = document.getElementById('edit-cliente-select');
+        renderClienteInstOptions(editClienteSelect, '');
+        editClienteSelect.value = card.getAttribute('data-manual-cliente-id') || '';
 
         editModal.show();
     }
@@ -2055,6 +2249,7 @@ document.addEventListener('DOMContentLoaded', function () {
             card.setAttribute('data-manual-codigo-postal', data.codigo_postal || '');
             card.setAttribute('data-manual-fecha', data.fecha_instalacion || '');
             card.setAttribute('data-manual-notas', data.notas || '');
+            card.setAttribute('data-manual-cliente-id', data.cliente_id || '');
 
             var localCompuesta = ((data.localidad || '') + ((data.provincia || '') ? ((data.localidad || '') ? ', ' : '') + data.provincia : ''));
             var titleEl = card.querySelector('.inst-card-title');
@@ -2135,6 +2330,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('visita-fecha').value    = card.getAttribute('data-visita-fecha') || '';
         document.getElementById('visita-hora').value     = card.getAttribute('data-visita-hora') || '';
         document.getElementById('visita-estado').value   = card.getAttribute('data-visita-estado') || 'pendiente';
+        document.getElementById('visita-cliente-id').value = card.getAttribute('data-visita-cliente-id') || '';
+        var visitaClienteSelect = document.getElementById('visita-cliente-select');
+        renderClienteInstOptions(visitaClienteSelect, '');
+        visitaClienteSelect.value = card.getAttribute('data-visita-cliente-id') || '';
         visitaModal.show();
     }
 
@@ -2149,6 +2348,7 @@ document.addEventListener('DOMContentLoaded', function () {
             card.setAttribute('data-visita-fecha',       data.fecha_visita || '');
             card.setAttribute('data-visita-hora',        data.hora_visita || '');
             card.setAttribute('data-visita-estado',      data.estado || 'pendiente');
+            card.setAttribute('data-visita-cliente-id',  data.cliente_id || '');
             var titleEl = card.querySelector('.inst-card-title');
             if (titleEl) titleEl.textContent = data.titulo || '';
             setOrCreateText(card, '.inst-card-subtitle', data.cliente_nombre || '', false);
@@ -2409,6 +2609,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('edit-codigo-postal').value = '';
             document.getElementById('edit-fecha').value = '';
             document.getElementById('edit-notas').value = '';
+            limpiarSelectorClienteInst('edit-cliente-select', 'edit-cliente-id');
             editModal.show();
         });
     });
@@ -2600,8 +2801,31 @@ window.setFechaRapida = function(dias) {
     if (f && t) {
         f.value = fmt(desde);
         t.value = fmt(hasta);
-        var form = document.querySelector('form');
-        if (form) form.submit();
+        // Ojo: usar f.form (no document.querySelector('form')), que agarraría
+        // el primer <form> del documento -el de alta de instalación manual-
+        // y lo enviaría vacío en vez de aplicar el filtro de fechas.
+        if (f.form) f.form.submit();
+    }
+};
+
+window.irAFecha = function () {
+    var input = document.getElementById('ir-a-fecha');
+    if (!input || !input.value) return;
+    var d = new Date(input.value + 'T00:00:00');
+    var hasta = new Date(d);
+    hasta.setDate(d.getDate() + 6);
+    var fmt = function (dt) {
+        var y = dt.getFullYear();
+        var m = String(dt.getMonth() + 1).padStart(2, '0');
+        var day = String(dt.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    };
+    var f = document.querySelector('input[name="instalacion_desde"]');
+    var t = document.querySelector('input[name="instalacion_hasta"]');
+    if (f && t && f.form) {
+        f.value = fmt(d);
+        t.value = fmt(hasta);
+        f.form.submit();
     }
 };
 </script>
