@@ -19,10 +19,14 @@ REGLAS:
 1) Antes de afirmar datos de una persona, buscala por nombre/apellido usando la herramienta buscar_persona.
 2) Si hay más de una coincidencia, pedí desambiguación mostrando opciones cortas (id, nombre, origen).
 3) Una vez elegida la persona, consultá detalle_persona y respondé con resumen útil para chat.
-4) Si el usuario pide crear o actualizar datos, usá guardar_sistema con accion crear/actualizar.
-5) Nunca expongas claves, tokens ni campos sensibles.
-6) Si no hay resultados, informalo y proponé una búsqueda alternativa (nombre más completo o email).
-7) Siempre indicá qué datos son del sistema y de qué fecha/mes si aplica.
+4) Para cualquier otro dato del sistema (ventas, compras, producción, stock, cotizaciones, CRM,
+   finanzas, calidad, instalaciones, sueldos, etc.) usá consultar_sistema con el módulo correspondiente.
+   Si no sabés qué módulo usar, consultá primero /sistema.php?modulos=1 para ver la lista completa.
+5) Si el usuario pide crear o actualizar datos, usá guardar_sistema con accion crear/actualizar
+   (sólo funciona en los módulos habilitados para escritura).
+6) Nunca expongas claves, tokens ni campos sensibles.
+7) Si no hay resultados, informalo y proponé una búsqueda alternativa (nombre más completo, email o filtro distinto).
+8) Siempre indicá qué datos son del sistema y de qué fecha/mes si aplica.
 
 FORMATO DE RESPUESTA:
 - Respuesta breve (2 a 6 líneas)
@@ -100,7 +104,7 @@ Si tu panel de OpenClaw permite crear tools por JSON, podés usar estas plantill
 ```json
 {
   "name": "consultar_sistema",
-  "description": "Consulta módulos del sistema con filtros y paginación",
+  "description": "Consulta cualquiera de los ~58 módulos del sistema (ventas, producción, compras, CRM, cotizaciones, inventario, finanzas, calidad, RRHH, catálogo, etc.) con filtros y paginación. Si no sabés el nombre exacto del módulo, usá primero listar_modulos.",
   "type": "http",
   "method": "GET",
   "url": "${API_BASE_URL}/sistema.php",
@@ -115,26 +119,50 @@ Si tu panel de OpenClaw permite crear tools por JSON, podés usar estas plantill
     "desde": "{{desde}}",
     "hasta": "{{hasta}}",
     "page": "{{page}}",
-    "per_page": "{{per_page}}"
+    "per_page": "{{per_page}}",
+    "campos": "{{campos}}"
   },
   "input_schema": {
     "type": "object",
     "properties": {
-      "modulo": { "type": "string" },
+      "modulo": { "type": "string", "description": "Nombre del módulo, ver listar_modulos" },
       "id": { "type": "integer" },
       "q": { "type": "string" },
       "mes": { "type": "string", "description": "YYYY-MM" },
       "desde": { "type": "string", "description": "YYYY-MM-DD" },
       "hasta": { "type": "string", "description": "YYYY-MM-DD" },
       "page": { "type": "integer", "default": 1 },
-      "per_page": { "type": "integer", "default": 50 }
+      "per_page": { "type": "integer", "default": 50 },
+      "campos": { "type": "string", "description": "Columnas a devolver separadas por coma (opcional)" }
     },
     "required": ["modulo"]
   }
 }
 ```
 
-### Tool 4 — `guardar_sistema`
+### Tool 4 — `listar_modulos`
+
+```json
+{
+  "name": "listar_modulos",
+  "description": "Devuelve la lista completa y actualizada de módulos disponibles en consultar_sistema, con su tabla y filtros soportados. Usala cuando no estés seguro de qué módulo pedir.",
+  "type": "http",
+  "method": "GET",
+  "url": "${API_BASE_URL}/sistema.php",
+  "headers": {
+    "X-API-KEY": "${API_KEY}"
+  },
+  "query": {
+    "modulos": "1"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {}
+  }
+}
+```
+
+### Tool 5 — `guardar_sistema`
 
 ```json
 {
@@ -204,11 +232,24 @@ Respuesta esperada: `modo=persona_detalle` con `perfil` y `relaciones`.
 - URL: `${API_BASE_URL}/sistema.php`
 - Query params dinámicos:
   - `modulo={{modulo}}`
-  - filtros (`id`, `q`, `mes`, `desde`, `hasta`, `page`, `per_page`, etc.)
+  - filtros (`id`, `q`, `mes`, `desde`, `hasta`, `page`, `per_page`, `campos`, etc.)
 - Headers:
   - `X-API-KEY: ${API_KEY}`
 
-### D) guardar_sistema
+Cubre ~58 módulos (ventas, producción, compras, CRM, cotizaciones, inventario, finanzas, calidad, RRHH, catálogo/precios y más). Ver el listado completo en [manual_robot.md](manual_robot.md).
+
+### D) listar_modulos
+
+- Método: `GET`
+- URL: `${API_BASE_URL}/sistema.php`
+- Query params:
+  - `modulos=1`
+- Headers:
+  - `X-API-KEY: ${API_KEY}`
+
+Devuelve todos los módulos disponibles con su tabla y filtros — usalo cuando el usuario pida algo y no esté claro qué módulo corresponde.
+
+### E) guardar_sistema
 
 - Método: `POST`
 - URL: `${API_BASE_URL}/sistema.php`
@@ -251,6 +292,13 @@ Para actualizar:
 5. Si `total > 1`: mostrar opciones y pedir cuál
 6. Con opción elegida, llamar `detalle_persona`
 7. Responder resumen: perfil + últimas relaciones relevantes
+
+## 4.1) Flujo conversacional sugerido (consulta general de datos)
+
+1. Usuario: “¿cuánto debemos cobrar de pedidos este mes?” / “dame las compras pendientes de recepción” / “qué cotizaciones están en estado ganado”
+2. Bot identifica el módulo adecuado (`pedidos`, `compras`, `cotizaciones`, etc.). Si tiene dudas, llama `listar_modulos`.
+3. Bot llama `consultar_sistema(modulo=..., filtros...)` con los filtros que correspondan (`estado`, `mes`, `desde`/`hasta`, `q`, etc.)
+4. Responde con un resumen breve (máx. 5 ítems si es lista) citando el total real devuelto en `paginacion.total`.
 
 ## 5) Ejemplos de respuestas del bot
 

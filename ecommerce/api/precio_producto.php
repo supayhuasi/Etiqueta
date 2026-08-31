@@ -4,6 +4,17 @@ require '../config.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
+session_start();
+$apiKey = $robot_api_key ?? (getenv('GASTOS_API_KEY') ?: 'cambia_esta_clave');
+$provided = $_SERVER['HTTP_X_API_KEY'] ?? '';
+$hasSession = !empty($_SESSION['user']['id']) || !empty($_SESSION['user_id']);
+
+if (!$hasSession && $provided !== $apiKey) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Acceso denegado']);
+    exit;
+}
+
 $producto_id = isset($_GET['producto_id']) ? intval($_GET['producto_id']) : 0;
 $alto = isset($_GET['alto']) ? intval($_GET['alto']) : 0;
 $ancho = isset($_GET['ancho']) ? intval($_GET['ancho']) : 0;
