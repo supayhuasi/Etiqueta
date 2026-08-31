@@ -268,6 +268,12 @@ $stmt = $pdo->prepare("SELECT * FROM ecommerce_ordenes_produccion WHERE pedido_i
 $stmt->execute([$pedido_id]);
 $orden = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// Migración: la descripción por ítem (cargada en la cotización) no existía en pedidos
+$colDescripcionItem = $pdo->query("SHOW COLUMNS FROM ecommerce_pedido_items LIKE 'descripcion'");
+if ($colDescripcionItem->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE ecommerce_pedido_items ADD COLUMN descripcion TEXT NULL AFTER atributos");
+}
+
 // Items del pedido
 $stmt = $pdo->prepare("
     SELECT pi.*, pr.nombre as producto_nombre
@@ -405,6 +411,21 @@ if (!empty($items)) {
     </div>
 </div>
 
+<?php if (!empty(trim((string)($pedido['observaciones'] ?? '')))): ?>
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">📝 Observaciones del pedido</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0"><?= nl2br(htmlspecialchars(trim((string)$pedido['observaciones']))) ?></p>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-header bg-light">
         <h5>🧵 Productos a fabricar</h5>
@@ -416,11 +437,12 @@ if (!empty($items)) {
                     <th>Producto</th>
                     <th>Medidas</th>
                     <th>Atributos</th>
+                    <th>Descripción / Observaciones</th>
                     <th>Cantidad</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($items as $item): 
+                <?php foreach ($items as $item):
                     $atributos = !empty($item['atributos']) ? json_decode($item['atributos'], true) : [];
                     $alto_m = !empty($item['alto_cm']) ? ((float)$item['alto_cm'] / 100) : 0;
                     $ancho_m = !empty($item['ancho_cm']) ? ((float)$item['ancho_cm'] / 100) : 0;
@@ -439,13 +461,13 @@ if (!empty($items)) {
                         <td>
                             <?php if (is_array($atributos) && count($atributos) > 0): ?>
                                 <small>
-                                    <?php foreach ($atributos as $attr): 
+                                    <?php foreach ($atributos as $attr):
                                         $nombre = strtolower($attr['nombre'] ?? 'attr');
                                         $valor = $attr['valor'] ?? '';
                                         // Destacar el color de forma especial
                                         if (strpos($nombre, 'color') !== false): ?>
                                             <div>
-                                                <strong><?= htmlspecialchars($attr['nombre']) ?>:</strong> 
+                                                <strong><?= htmlspecialchars($attr['nombre']) ?>:</strong>
                                                 <span class="badge" style="background-color: <?= htmlspecialchars($valor) ?>; color: #fff; padding: 5px 10px;">
                                                     <?= htmlspecialchars($valor) ?>
                                                 </span>
@@ -459,11 +481,18 @@ if (!empty($items)) {
                                 <small class="text-muted">-</small>
                             <?php endif; ?>
                         </td>
+                        <td>
+                            <?php if (!empty(trim((string)($item['descripcion'] ?? '')))): ?>
+                                <small><?= nl2br(htmlspecialchars(trim((string)$item['descripcion']))) ?></small>
+                            <?php else: ?>
+                                <small class="text-muted">-</small>
+                            <?php endif; ?>
+                        </td>
                         <td><?= $item['cantidad'] ?></td>
                     </tr>
                     <?php if (!empty($recetas)): ?>
                         <tr class="table-light">
-                            <td colspan="4">
+                            <td colspan="5">
                                 <small class="text-muted"><strong>Receta:</strong></small>
                                 <div class="table-responsive mt-2">
                                     <table class="table table-sm">

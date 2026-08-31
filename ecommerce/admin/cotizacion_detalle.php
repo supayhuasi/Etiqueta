@@ -430,7 +430,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $totalPedido = max(0, (float)($resumenPedidoFiscal['total_con_impuestos'] ?? $basePedidoFiscal));
 
                 $public_token = bin2hex(random_bytes(16));
-                $pedidoObservaciones = 'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ($documento_numero ? ' | ' . $documento_tipo . ': ' . $documento_numero : '');
+                $origenPedidoTexto = 'Creado desde cotización ' . ($cotizacion['numero_cotizacion'] ?? '') . ($documento_numero ? ' | ' . $documento_tipo . ': ' . $documento_numero : '');
+                $observacionesCotizacion = trim((string)($cotizacion['observaciones'] ?? ''));
+                $pedidoObservaciones = $observacionesCotizacion !== ''
+                    ? ($observacionesCotizacion . "\n\n[" . $origenPedidoTexto . ']')
+                    : $origenPedidoTexto;
                 $pedidoCols = ['numero_pedido', 'cliente_id', 'total', 'metodo_pago', 'estado', 'public_token'];
                 $pedidoVals = [$numero_pedido, $cliente_id, $totalPedido, $metodo_pago, $estado_pedido, $public_token];
 
@@ -502,9 +506,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute($pedidoVals);
                 $pedido_id = (int)$pdo->lastInsertId();
 
+                // Migración: la descripción por ítem (cargada en la cotización) no existía en pedidos
+                $colDescripcionItem = $pdo->query("SHOW COLUMNS FROM ecommerce_pedido_items LIKE 'descripcion'");
+                if ($colDescripcionItem->rowCount() === 0) {
+                    $pdo->exec("ALTER TABLE ecommerce_pedido_items ADD COLUMN descripcion TEXT NULL AFTER atributos");
+                }
+
                 $stmtItem = $pdo->prepare("
-                    INSERT INTO ecommerce_pedido_items (pedido_id, producto_id, cantidad, precio_unitario, alto_cm, ancho_cm, subtotal, atributos)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_pedido_items (pedido_id, producto_id, cantidad, precio_unitario, alto_cm, ancho_cm, subtotal, atributos, descripcion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
 
                 foreach ($items as $it) {
@@ -513,6 +523,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $alto = !empty($it['alto']) ? (int)$it['alto'] : null;
                     $ancho = !empty($it['ancho']) ? (int)$it['ancho'] : null;
                     $atributos_json = !empty($it['atributos']) ? json_encode($it['atributos']) : null;
+                    $descripcion_item = trim((string)($it['descripcion'] ?? ''));
                     $subtotal_item = $precio_unitario * $cantidad;
 
                     $stmtItem->execute([
@@ -523,7 +534,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $alto,
                         $ancho,
                         $subtotal_item,
-                        $atributos_json
+                        $atributos_json,
+                        $descripcion_item !== '' ? $descripcion_item : null
                     ]);
                 }
 

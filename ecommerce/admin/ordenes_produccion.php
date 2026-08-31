@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'scan_
 }
 
 $sql = "
-    SELECT op.*, p.numero_pedido, c.nombre AS cliente_nombre
+    SELECT op.*, p.numero_pedido, p.observaciones AS pedido_observaciones, c.nombre AS cliente_nombre
     FROM ecommerce_ordenes_produccion op
     JOIN ecommerce_pedidos p ON op.pedido_id = p.id
     JOIN ecommerce_clientes c ON p.cliente_id = c.id
@@ -219,7 +219,12 @@ foreach ($ordenes as $op) {
                         <?php foreach ($ordenes as $op): ?>
                             <?php $vencida = orden_esta_vencida($op); ?>
                             <tr class="<?= $vencida ? 'table-danger' : '' ?>">
-                                <td><strong><?= htmlspecialchars($op['numero_pedido']) ?></strong></td>
+                                <td>
+                                    <strong><?= htmlspecialchars($op['numero_pedido']) ?></strong>
+                                    <?php if (!empty(trim((string)($op['pedido_observaciones'] ?? '')))): ?>
+                                        <span class="badge bg-info ms-1" title="<?= htmlspecialchars(trim((string)$op['pedido_observaciones'])) ?>">📝 obs.</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= htmlspecialchars($op['cliente_nombre']) ?></td>
                                 <td>
                                     <?= htmlspecialchars(str_replace('_',' ', $op['estado'])) ?>

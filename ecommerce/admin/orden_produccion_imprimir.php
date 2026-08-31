@@ -27,6 +27,12 @@ if (!$pedido) {
     die('Pedido no encontrado');
 }
 
+// Migración: la descripción por ítem (cargada en la cotización) no existía en pedidos
+$colDescripcionItem = $pdo->query("SHOW COLUMNS FROM ecommerce_pedido_items LIKE 'descripcion'");
+if ($colDescripcionItem->rowCount() === 0) {
+    $pdo->exec("ALTER TABLE ecommerce_pedido_items ADD COLUMN descripcion TEXT NULL AFTER atributos");
+}
+
 // Items
 $stmt = $pdo->prepare("
     SELECT pi.*, pr.nombre as producto_nombre
@@ -54,6 +60,16 @@ $pdf->SetFont('Arial','',10);
 $pdf->Cell(0,6,utf8_decode('Pedido: ' . $pedido['numero_pedido']),0,1,'L');
 $pdf->Cell(0,6,utf8_decode('Cliente: ' . ($pedido['nombre'] ?? 'N/A')),0,1,'L');
 $pdf->Cell(0,6,utf8_decode('Dirección: ' . ($pedido['direccion'] ?? 'N/A')),0,1,'L');
+
+$observacionesPedido = trim((string)($pedido['observaciones'] ?? ''));
+if ($observacionesPedido !== '') {
+    $pdf->Ln(1);
+    $pdf->SetFont('Arial','B',10);
+    $pdf->Cell(0,6,utf8_decode('Observaciones del pedido:'),0,1,'L');
+    $pdf->SetFont('Arial','',10);
+    $pdf->MultiCell(0,5,utf8_decode($observacionesPedido),0,'L');
+}
+
 $pdf->Ln(2);
 
 $codigo = $pedido['numero_pedido'];
@@ -82,6 +98,13 @@ foreach ($items as $it) {
             $line = ($attr['nombre'] ?? 'Attr') . ': ' . ($attr['valor'] ?? '');
             $pdf->Cell(135,5,utf8_decode('  - ' . $line),1,1);
         }
+        $pdf->SetFont('Arial','',10);
+    }
+
+    $descripcionItem = trim((string)($it['descripcion'] ?? ''));
+    if ($descripcionItem !== '') {
+        $pdf->SetFont('Arial','I',9);
+        $pdf->MultiCell(135,5,utf8_decode('  Obs: ' . $descripcionItem),1,'L');
         $pdf->SetFont('Arial','',10);
     }
 }
