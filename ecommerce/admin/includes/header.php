@@ -348,6 +348,7 @@ $page_permissions = [
     'instalaciones.php' => 'instalaciones',
     'instalaciones_reporte_direcciones.php' => 'instalaciones',
     'instalaciones_reporte_productos.php' => 'instalaciones',
+    'instalaciones_prevision.php' => 'instalaciones',
     'visitas.php' => 'instalaciones',
     'visitas_editar.php' => 'instalaciones',
     'facturacion_clientes.php' => 'facturacion_clientes',
@@ -2476,7 +2477,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <a href="<?= $admin_url ?>produccion_tareas_usuarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'produccion_tareas_usuarios.php' ? 'active' : '' ?>"><i class="bi bi-person-workspace"></i> Tareas por Usuario</a>
                         <?php endif; ?>
                         <?php if ($can_access('instalaciones')): ?>
-                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php', 'visitas.php', 'visitas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones y visitas</a>
+                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php', 'instalaciones_prevision.php', 'visitas.php', 'visitas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones y visitas</a>
                         <?php endif; ?>
                         <?php if ($can_access('recordatorios')): ?>
                         <a href="<?= $admin_url ?>recordatorios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'recordatorios.php' ? 'active' : '' ?>"><i class="bi bi-journal-check"></i> Recordatorios</a>
