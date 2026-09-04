@@ -13,18 +13,23 @@ X-API-KEY: <tu_clave_robot>
 
 La clave se toma de `config.php` (`$robot_api_key`) o de la variable de entorno `GASTOS_API_KEY`.
 
+Todos los endpoints listados abajo exigen sesión activa o `X-API-KEY` válida (sin excepciones).
+
 ---
 
 ## Endpoints disponibles
 
 | Endpoint | Descripción |
 |---|---|
-| `/sistema.php` | API unificada para consultar módulos, buscar personas y escribir datos |
+| `/sistema.php` | API unificada: **58 módulos** para consultar casi cualquier tabla del sistema, buscar personas y escribir datos en los módulos habilitados |
 | `/ordenes_produccion.php` | Órdenes de producción con filtros por estado/pedido |
 | `/stock_faltante.php` | Alertas de stock en materiales/productos |
 | `/ventas_mes.php` | Totales de ventas y falta de cobro por mes |
 | `/sueldos_faltantes.php` | Saldo pendiente por empleado y mes |
-| `/consultar_precios.php` | Consulta de precios de productos (incluye matriz y descuentos) |
+| `/consultar_precios.php` | Consulta de precios de productos (incluye matriz y descuentos), por ID, código o catálogo completo |
+| `/precio_producto.php` | Precio puntual de un producto por `producto_id` (+ `alto`/`ancho` si es de precio variable) |
+
+> `/sistema.php` cubre prácticamente todo el resto de casos de consulta (compras, CRM, cotizaciones, inventario, finanzas, calidad, RRHH, etc.) — para nuevas necesidades, preferí agregar un módulo ahí antes de crear un endpoint dedicado.
 
 ---
 
@@ -34,18 +39,82 @@ Endpoint: `/ecommerce/api/sistema.php`
 
 ### Módulos soportados
 
+La lista completa y actualizada siempre se puede pedir con `?modulos=1` (ver más abajo). Referencia rápida:
+
+**Personas / RRHH**
 - `usuarios`
 - `empleados`
 - `asistencias`
-- `gastos`
-- `cheques`
+- `empleados_horarios`
+- `roles`
 - `sueldos` (tabla `pagos_sueldos`)
+- `pagos_sueldos_parciales`
+- `sueldo_conceptos`
+- `sueldo_base_mensual`
+- `conceptos`
+- `seguros_permisos` (seguros y permisos de vehículos)
+
+**Finanzas**
+- `gastos`
+- `tipos_gastos`
+- `estados_gastos`
+- `historial_gastos`
+- `cheques`
+- `flujo_caja`
+- `cuentas`
+
+**Ventas / clientes**
 - `pedidos`
+- `pedido_items`
+- `pedido_pagos`
+- `remitos`
+- `remito_items`
+- `clientes`
+- `metodos_pago`
+- `descuentos`
+
+**Cotizaciones / CRM**
+- `cotizaciones`
+- `cotizacion_items`
+- `cotizacion_clientes`
+- `crm_visitas`
+- `crm_seguimientos`
+- `visitas`
+
+**Producción**
 - `ordenes_produccion`
 - `produccion_items`
+- `calidad_inspecciones`
+- `calidad_eventos`
+- `instalaciones`
+
+**Catálogo / precios / inventario**
 - `productos`
+- `categorias`
 - `materiales`
-- `clientes`
+- `producto_atributos`
+- `atributo_opciones`
+- `producto_recetas`
+- `listas_precios`
+- `lista_precio_items`
+- `matriz_precios`
+- `inventario_movimientos`
+- `inventario_alertas`
+- `telas`
+- `colores`
+
+**Compras**
+- `proveedores`
+- `compras`
+- `compra_items`
+
+**Otros**
+- `tareas_usuarios`
+- `recordatorios`
+- `notificaciones_diarias`
+- `suscriptores`
+- `encuestas`
+- `empresa`
 
 ### Parámetros comunes
 
@@ -229,7 +298,8 @@ Parámetros:
 Ejemplo:
 
 ```bash
-curl 'https://tucuroller.com.ar/ecommerce/api/ordenes_produccion.php?estado=en_produccion'
+curl -H 'X-API-KEY: TU_API_KEY' \
+  'https://tucuroller.com.ar/ecommerce/api/ordenes_produccion.php?estado=en_produccion'
 ```
 
 ---
@@ -246,7 +316,8 @@ Parámetros:
 Ejemplo:
 
 ```bash
-curl 'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?tipo=materiales&alerta=bajo_minimo'
+curl -H 'X-API-KEY: TU_API_KEY' \
+  'https://tucuroller.com.ar/ecommerce/api/stock_faltante.php?tipo=materiales&alerta=bajo_minimo'
 ```
 
 ---
@@ -262,9 +333,9 @@ Parámetro obligatorio:
 
 Ejemplo:
 
-
 ```bash
-curl 'https://tucuroller.com.ar/ecommerce/api/ventas_mes.php?mes=2026-03'
+curl -H 'X-API-KEY: TU_API_KEY' \
+  'https://tucuroller.com.ar/ecommerce/api/ventas_mes.php?mes=2026-03'
 ```
 
 ---
@@ -279,9 +350,9 @@ Parámetros:
 
 Ejemplo:
 
-
 ```bash
-curl 'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan&mes=2026-03'
+curl -H 'X-API-KEY: TU_API_KEY' \
+  'https://tucuroller.com.ar/ecommerce/api/sueldos_faltantes.php?nombre=Juan&mes=2026-03'
 ```
 
 ---
@@ -300,6 +371,23 @@ Ejemplo:
 ```bash
 curl -H 'X-API-KEY: TU_API_KEY' \
   'https://tucuroller.com.ar/ecommerce/api/consultar_precios.php?codigo=ETQ-001&alto=120&ancho=200'
+```
+
+---
+
+## 7) Precio puntual de un producto
+
+Endpoint: `/ecommerce/api/precio_producto.php`
+
+Parámetros:
+- `producto_id` (obligatorio)
+- `alto` y `ancho` (obligatorios si el producto es de precio variable)
+
+Ejemplo:
+
+```bash
+curl -H 'X-API-KEY: TU_API_KEY' \
+  'https://tucuroller.com.ar/ecommerce/api/precio_producto.php?producto_id=5&alto=120&ancho=200'
 ```
 
 ---
@@ -370,6 +458,7 @@ Si tu bot corre en OpenClaw, usá la guía lista en:
 
 Incluye:
 - system prompt recomendado
-- definición de herramientas HTTP (`buscar_persona`, `detalle_persona`, `consultar_sistema`, `guardar_sistema`)
+- definición de herramientas HTTP (`buscar_persona`, `detalle_persona`, `consultar_sistema`, `listar_modulos`, `guardar_sistema`)
 - plantillas JSON copiables para crear tools directamente en OpenClaw
 - flujo de desambiguación por nombre/apellido para chat normal
+- flujo de consulta general de datos (ventas, compras, producción, CRM, finanzas, etc.)

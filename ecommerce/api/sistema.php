@@ -114,6 +114,308 @@ $MODULES = [
         'search' => ['nombre', 'email', 'telefono'],
         'filters' => ['activo', 'email_verificado'],
         'date_fields' => ['fecha_registro', 'created_at']
+    ],
+
+    // ── Compras / proveedores ────────────────────────────────────────────
+    'proveedores' => [
+        'table' => 'ecommerce_proveedores',
+        'search' => ['nombre', 'email', 'cuit'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'compras' => [
+        'table' => 'ecommerce_compras',
+        'search' => ['numero_compra', 'estado', 'observaciones'],
+        'filters' => ['proveedor_id', 'estado', 'recepcion_estado'],
+        'date_fields' => ['fecha_compra', 'fecha_creacion']
+    ],
+    'compra_items' => [
+        'table' => 'ecommerce_compra_items',
+        'search' => [],
+        'filters' => ['compra_id', 'producto_id'],
+        'date_fields' => []
+    ],
+
+    // ── Cotizaciones / CRM ───────────────────────────────────────────────
+    'cotizaciones' => [
+        'table' => 'ecommerce_cotizaciones',
+        'search' => ['numero_cotizacion', 'nombre_cliente', 'email', 'telefono'],
+        'filters' => ['cliente_id', 'estado', 'crm_id', 'lista_precio_id'],
+        'date_fields' => ['fecha_creacion', 'fecha_envio', 'fecha_actualizacion']
+    ],
+    'cotizacion_items' => [
+        'table' => 'ecommerce_cotizacion_items',
+        'search' => ['nombre_producto', 'descripcion'],
+        'filters' => ['cotizacion_id', 'producto_id'],
+        'date_fields' => []
+    ],
+    'cotizacion_clientes' => [
+        'table' => 'ecommerce_cotizacion_clientes',
+        'search' => ['nombre', 'email', 'telefono', 'dni', 'cuit'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'crm_visitas' => [
+        'table' => 'ecommerce_crm_visitas',
+        'search' => ['estado', 'origen', 'notas_internas'],
+        'filters' => ['estado', 'prioridad', 'asignado_a'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion', 'fecha_cierre']
+    ],
+    'crm_seguimientos' => [
+        'table' => 'ecommerce_crm_seguimientos',
+        'search' => ['canal', 'resultado', 'comentario'],
+        'filters' => ['crm_id', 'visita_id', 'usuario_id'],
+        'date_fields' => ['fecha_contacto']
+    ],
+
+    // ── Catálogo / precios ───────────────────────────────────────────────
+    'categorias' => [
+        'table' => 'ecommerce_categorias',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => ['activo', 'parent_id'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'listas_precios' => [
+        'table' => 'ecommerce_listas_precios',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'lista_precio_items' => [
+        'table' => 'ecommerce_lista_precio_items',
+        'search' => [],
+        'filters' => ['lista_precio_id', 'producto_id', 'activo'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'matriz_precios' => [
+        'table' => 'ecommerce_matriz_precios',
+        'search' => [],
+        'filters' => ['producto_id'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'producto_atributos' => [
+        'table' => 'ecommerce_producto_atributos',
+        'search' => ['nombre', 'tipo'],
+        'filters' => ['producto_id'],
+        'date_fields' => []
+    ],
+    'atributo_opciones' => [
+        'table' => 'ecommerce_atributo_opciones',
+        'search' => ['nombre'],
+        'filters' => ['atributo_id'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'producto_recetas' => [
+        'table' => 'ecommerce_producto_recetas',
+        'search' => ['notas'],
+        'filters' => ['producto_id', 'material_id'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+
+    // ── Inventario ───────────────────────────────────────────────────────
+    'inventario_movimientos' => [
+        'table' => 'ecommerce_inventario_movimientos',
+        'search' => ['tipo', 'referencia', 'observaciones'],
+        'filters' => ['producto_id', 'tipo'],
+        'date_fields' => ['fecha_movimiento', 'fecha_creacion']
+    ],
+    'inventario_alertas' => [
+        'table' => 'ecommerce_inventario_alertas',
+        'search' => [],
+        'filters' => ['tipo_item', 'item_id', 'tipo_alerta', 'resuelta'],
+        'date_fields' => ['fecha_alerta', 'fecha_resolucion']
+    ],
+
+    // ── Finanzas ─────────────────────────────────────────────────────────
+    'flujo_caja' => [
+        'table' => 'flujo_caja',
+        'search' => ['categoria', 'descripcion', 'referencia', 'observaciones'],
+        'filters' => ['tipo', 'categoria', 'cuenta_id', 'usuario_id'],
+        'date_fields' => ['fecha', 'fecha_creacion', 'fecha_actualizacion']
+    ],
+    'cuentas' => [
+        'table' => 'cuentas',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => ['tipo', 'activo'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'tipos_gastos' => [
+        'table' => 'tipos_gastos',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'estados_gastos' => [
+        'table' => 'estados_gastos',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => ['activo'],
+        'date_fields' => []
+    ],
+    'historial_gastos' => [
+        'table' => 'historial_gastos',
+        'search' => ['observaciones'],
+        'filters' => ['gasto_id', 'estado_anterior_id', 'estado_nuevo_id', 'usuario_id'],
+        'date_fields' => ['fecha_cambio']
+    ],
+
+    // ── RRHH / sueldos ───────────────────────────────────────────────────
+    'pagos_sueldos_parciales' => [
+        'table' => 'pagos_sueldos_parciales',
+        'search' => ['mes_pago', 'observaciones'],
+        'filters' => ['empleado_id', 'mes_pago'],
+        'date_fields' => ['fecha_pago', 'fecha_creacion']
+    ],
+    'sueldo_conceptos' => [
+        'table' => 'sueldo_conceptos',
+        'search' => ['mes', 'formula'],
+        'filters' => ['empleado_id', 'concepto_id', 'mes'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'sueldo_base_mensual' => [
+        'table' => 'sueldo_base_mensual',
+        'search' => ['mes'],
+        'filters' => ['empleado_id', 'mes'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'empleados_horarios' => [
+        'table' => 'empleados_horarios',
+        'search' => [],
+        'filters' => ['empleado_id', 'activo'],
+        'date_fields' => ['fecha_creacion', 'fecha_actualizacion']
+    ],
+    'roles' => [
+        'table' => 'roles',
+        'search' => ['nombre', 'descripcion'],
+        'filters' => [],
+        'date_fields' => ['created_at']
+    ],
+    'conceptos' => [
+        'table' => 'conceptos',
+        'search' => ['nombre', 'tipo', 'descripcion'],
+        'filters' => ['activo', 'tipo'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'seguros_permisos' => [
+        'table' => 'seguros_permisos',
+        'search' => ['vehiculo_patente', 'vehiculo_descripcion', 'entidad', 'numero', 'observaciones'],
+        'filters' => ['tipo_id', 'usuario_registra'],
+        'date_fields' => ['fecha_vencimiento', 'fecha_emision', 'fecha_creacion']
+    ],
+
+    // ── Ventas / logística ───────────────────────────────────────────────
+    'pedido_items' => [
+        'table' => 'ecommerce_pedido_items',
+        'search' => [],
+        'filters' => ['pedido_id', 'producto_id'],
+        'date_fields' => []
+    ],
+    'pedido_pagos' => [
+        'table' => 'ecommerce_pedido_pagos',
+        'search' => ['metodo', 'referencia', 'notas'],
+        'filters' => ['pedido_id', 'metodo'],
+        'date_fields' => ['fecha_pago', 'fecha_creacion']
+    ],
+    'remitos' => [
+        'table' => 'ecommerce_remitos',
+        'search' => ['numero_remito', 'tipo', 'observaciones'],
+        'filters' => ['pedido_id', 'tipo'],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'remito_items' => [
+        'table' => 'ecommerce_remito_items',
+        'search' => [],
+        'filters' => ['remito_id', 'pedido_item_id'],
+        'date_fields' => []
+    ],
+    'metodos_pago' => [
+        'table' => 'ecommerce_metodos_pago',
+        'search' => ['nombre', 'codigo'],
+        'filters' => ['tipo', 'activo'],
+        'date_fields' => ['fecha_actualizacion']
+    ],
+    'descuentos' => [
+        'table' => 'ecommerce_descuentos',
+        'search' => ['codigo', 'tipo'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_inicio', 'fecha_fin', 'fecha_creacion']
+    ],
+
+    // ── Calidad / instalaciones / visitas ────────────────────────────────
+    'calidad_inspecciones' => [
+        'table' => 'ecommerce_calidad_inspecciones',
+        'search' => ['cliente_nombre', 'estado_calidad', 'observaciones'],
+        'filters' => ['pedido_id', 'estado_calidad', 'revisado_por'],
+        'date_fields' => ['fecha_revision', 'fecha_creacion', 'fecha_actualizacion']
+    ],
+    'calidad_eventos' => [
+        'table' => 'ecommerce_calidad_eventos',
+        'search' => ['tipo', 'titulo', 'descripcion', 'cliente_nombre'],
+        'filters' => ['pedido_id', 'tipo', 'estado'],
+        'date_fields' => ['fecha_evento', 'fecha_creacion']
+    ],
+    'instalaciones' => [
+        'table' => 'ecommerce_instalaciones_manuales',
+        'search' => ['titulo', 'cliente', 'direccion', 'localidad', 'telefono'],
+        'filters' => ['estado'],
+        'date_fields' => ['fecha_instalacion', 'fecha_creacion', 'fecha_actualizacion']
+    ],
+    'visitas' => [
+        'table' => 'ecommerce_visitas',
+        'search' => ['titulo', 'cliente_nombre', 'direccion', 'telefono'],
+        'filters' => ['estado', 'creado_por'],
+        'date_fields' => ['fecha_visita', 'fecha_creacion', 'fecha_actualizacion']
+    ],
+
+    // ── Tareas / recordatorios / notificaciones ──────────────────────────
+    'tareas_usuarios' => [
+        'table' => 'ecommerce_tareas_usuarios',
+        'search' => ['titulo', 'descripcion', 'estado'],
+        'filters' => ['usuario_id', 'asignada_por', 'estado'],
+        'date_fields' => ['fecha_limite', 'fecha_asignacion', 'fecha_actualizacion', 'fecha_completada']
+    ],
+    'recordatorios' => [
+        'table' => 'ecommerce_recordatorios_usuarios',
+        'search' => ['titulo', 'descripcion', 'estado'],
+        'filters' => ['usuario_id', 'creado_por', 'estado'],
+        'date_fields' => ['fecha_recordatorio', 'fecha_creacion', 'fecha_actualizacion']
+    ],
+    'notificaciones_diarias' => [
+        'table' => 'ecommerce_notificaciones_diarias',
+        'search' => ['tipo'],
+        'filters' => ['tipo'],
+        'date_fields' => ['fecha_notificacion', 'created_at']
+    ],
+
+    // ── Otros ────────────────────────────────────────────────────────────
+    'suscriptores' => [
+        'table' => 'ecommerce_suscriptores',
+        'search' => ['email'],
+        'filters' => [],
+        'date_fields' => ['fecha_creacion']
+    ],
+    'encuestas' => [
+        'table' => 'ecommerce_encuestas',
+        'search' => ['titulo', 'descripcion'],
+        'filters' => ['activo'],
+        'date_fields' => ['fecha_entrega', 'fecha_creacion']
+    ],
+    'empresa' => [
+        'table' => 'ecommerce_empresa',
+        'search' => ['nombre', 'email', 'ciudad', 'provincia'],
+        'filters' => [],
+        'date_fields' => ['fecha_actualizacion']
+    ],
+    'telas' => [
+        'table' => 'telas',
+        'search' => ['nombre', 'tipo'],
+        'filters' => ['activo'],
+        'date_fields' => []
+    ],
+    'colores' => [
+        'table' => 'colores',
+        'search' => ['nombre'],
+        'filters' => ['activo'],
+        'date_fields' => []
     ]
 ];
 
