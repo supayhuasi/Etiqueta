@@ -16,6 +16,7 @@ if (!isset($_SESSION['user']) || $_SESSION['rol'] !== 'admin') {
 require 'includes/header.php';
 require_once 'includes/cuentas_helper.php';
 ensureCuentasSchema($pdo);
+require_once 'includes/sueldos_helper.php';
 
 $cuentas = cuentas_listar($pdo);
 
@@ -140,6 +141,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $sueldo_total = max(0, $sueldo_base + $bonificaciones - $descuentos);
+
+            // Asegurar que se respeten overrides mensuales y conceptos globales
+            $detalle_sueldo_override = sueldosCalcularDetalleMes($pdo, $empleado_id, $mes_pago);
+            $sueldo_base = (float)$detalle_sueldo_override['sueldo_base'];
+            $bonificaciones = (float)$detalle_sueldo_override['bonificaciones'];
+            $descuentos = (float)$detalle_sueldo_override['descuentos'];
+            $sueldo_total = (float)$detalle_sueldo_override['sueldo_total'];
 
             // Registrar en tabla de pagos parciales
             $stmt = $pdo->prepare("
