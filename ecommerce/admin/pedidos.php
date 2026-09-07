@@ -413,7 +413,7 @@ foreach ($pedidos as &$pedido) {
     $pid          = $pedido['id'];
     $total_pagado = (float)($pedido['total_pagado'] ?? 0);
     $total_pedido = (float)($pedido['total'] ?? 0);
-    $pedido['costo_material_estimado'] = calcular_costo_material_pedido($pdo, $pedido_items_map[(int)$pid] ?? []);
+    $pedido['costo_material_estimado'] = calcular_costo_material_pedido($pdo, $pedido_items_map[(int)$pid] ?? [], $pid);
     if ($total_pedido > 0 && $total_pagado >= $total_pedido && $pedido['estado'] !== 'pagado') {
         $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'pagado' WHERE id = ?")->execute([$pid]);
         $pedido['estado'] = 'pagado';

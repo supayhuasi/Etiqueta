@@ -515,7 +515,7 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$pedido_id]);
 $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$costo_material_pedido = calcular_costo_material_pedido($pdo, $items);
+                $costo_material_pedido = calcular_costo_material_pedido($pdo, $items, $pedido_id);
 ?>
 
 <div class="row mb-4">
@@ -568,8 +568,12 @@ $costo_material_pedido = calcular_costo_material_pedido($pdo, $items);
                     <p><strong>Total:</strong> <span class="text-muted fst-italic">Monto oculto para operario</span></p>
                 <?php else: ?>
                     <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
-                    <?php if ($puede_ver_costos): ?>
-                        <p><strong>Costo estimado en materiales:</strong> <span class="text-warning fw-bold">$<?= number_format($costo_material_pedido, 2, ',', '.') ?></span></p>
+                        <?php if ($puede_ver_costos): ?>
+                        <p>
+                            <strong>Costo estimado en materiales:</strong>
+                            <span class="text-warning fw-bold">$<?= number_format($costo_material_pedido, 2, ',', '.') ?></span>
+                            <a href="pedidos_materiales.php?pedido_id=<?= (int)$pedido_id ?>" class="btn btn-sm btn-outline-secondary ms-2">Editar costo</a>
+                        </p>
                         <?php $utilidad_estimado_pedido = (float)$pedido['total'] - $costo_material_pedido; ?>
                         <p><strong>Utilidad estimada:</strong> <span class="fw-bold <?= $utilidad_estimado_pedido >= 0 ? 'text-success' : 'text-danger' ?>">$<?= number_format($utilidad_estimado_pedido, 2, ',', '.') ?></span></p>
                     <?php endif; ?>

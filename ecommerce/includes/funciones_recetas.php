@@ -185,7 +185,7 @@ function obtener_costo_unitario_material(PDO $pdo, int $material_producto_id): f
     return 0.0;
 }
 
-function calcular_costo_material_pedido(PDO $pdo, array $items): float {
+function calcular_costo_material_pedido(PDO $pdo, array $items, ?int $pedido_id = null): float {
     $costo_total = 0.0;
 
     foreach ($items as $item) {
@@ -249,7 +249,25 @@ function calcular_costo_material_pedido(PDO $pdo, array $items): float {
             }
 
             $material_id = (int)($receta['material_producto_id'] ?? 0);
-            $costo_unitario = obtener_costo_unitario_material($pdo, $material_id);
+            // Permitir override a nivel de pedido
+            $costo_unitario = null;
+            if ($pedido_id !== null) {
+                try {
+                    require_once __DIR__ . '/materials_helper.php';
+                } catch (Throwable $e) {
+                    // ignore
+                }
+                if (function_exists('materials_obtener_override')) {
+                    $ov = materials_obtener_override($pdo, $pedido_id, $material_id);
+                    if ($ov !== null && $ov > 0) {
+                        $costo_unitario = $ov;
+                    }
+                }
+            }
+
+            if ($costo_unitario === null) {
+                $costo_unitario = obtener_costo_unitario_material($pdo, $material_id);
+            }
             if ($costo_unitario <= 0) {
                 continue;
             }
@@ -258,7 +276,24 @@ function calcular_costo_material_pedido(PDO $pdo, array $items): float {
         }
     }
 
-    return round($costo_total, 2);
+    $costo_total = round($costo_total, 2);
+
+    // Si existe override total para el pedido, devolverlo
+    if ($pedido_id !== null) {
+        try {
+            require_once __DIR__ . '/materials_helper.php';
+            if (function_exists('materials_obtener_override_total')) {
+                $ov_total = materials_obtener_override_total($pdo, $pedido_id);
+                if ($ov_total !== null && $ov_total >= 0) {
+                    return (float)$ov_total;
+                }
+            }
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+
+    return $costo_total;
 }
 
 /**

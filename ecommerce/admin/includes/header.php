@@ -188,10 +188,8 @@ $role_permissions = [
         'flujo_caja',
         'cheques',
         'gastos',
-        'seguros',
         'encuestas',
         'calidad',
-        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda',
         'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'blog', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'banners', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
         // No incluye 'sueldos'
@@ -209,10 +207,8 @@ $role_permissions = [
         'flujo_caja',
         'cheques',
         'gastos',
-        'seguros',
         'encuestas',
         'calidad',
-        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ],
     'operario' => [
@@ -238,7 +234,6 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'vendedor' => [
@@ -254,7 +249,6 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
-        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'revendedor' => [
@@ -264,7 +258,6 @@ $role_permissions = [
         'cotizacion_clientes',
         'pedidos',
         'blog',
-        'fotos_nube',
         'inicio_principal', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -330,7 +323,6 @@ $page_permissions = [
     'blog.php' => 'blog',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
-    'fotos_nube.php' => 'fotos_nube',
     'slideshow.php' => 'slideshow',
     'slideshow_crear.php' => 'slideshow',
     'slideshow_editar.php' => 'slideshow',
@@ -348,7 +340,6 @@ $page_permissions = [
     'instalaciones.php' => 'instalaciones',
     'instalaciones_reporte_direcciones.php' => 'instalaciones',
     'instalaciones_reporte_productos.php' => 'instalaciones',
-    'instalaciones_prevision.php' => 'instalaciones',
     'visitas.php' => 'instalaciones',
     'visitas_editar.php' => 'instalaciones',
     'facturacion_clientes.php' => 'facturacion_clientes',
@@ -400,10 +391,6 @@ $page_permissions = [
     'gastos_crear.php' => 'gastos',
     'gastos_editar.php' => 'gastos',
     'gastos_cambiar_estado.php' => 'gastos',
-    'seguros.php' => 'seguros',
-    'seguros_crear.php' => 'seguros',
-    'seguros_editar.php' => 'seguros',
-    'tipos_seguros.php' => 'seguros',
     'usuarios_lista.php' => 'usuarios',
     'roles_usuarios.php' => 'roles'
 ];
@@ -513,9 +500,6 @@ $notificaciones_cotizaciones_altas_total = 0;
 $notificaciones_gastos_por_vencer = [];
 $notificaciones_gastos_por_vencer_total = 0;
 $notificaciones_gasto_vencimiento_dias = 5;
-$notificaciones_seguros_por_vencer = [];
-$notificaciones_seguros_por_vencer_total = 0;
-$notificaciones_seguro_vencimiento_dias = 30;
 $notificacion_prueba_manual = [];
 $notificacion_prueba_manual_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
@@ -1215,51 +1199,6 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
-    // --- Sección 9b: Seguros y permisos por vencer ---
-    if (
-        $notificaciones_permiso_admin
-        && admin_table_exists($pdo, 'seguros_permisos')
-    ) {
-        try {
-            $notif_leido_excl_seguros = $notif_usuario_id > 0
-                ? "AND NOT EXISTS (SELECT 1 FROM ecommerce_notif_leidas nl WHERE nl.usuario_id = {$notif_usuario_id} AND nl.categoria = 'seguros_vencer' AND nl.item_id = sp.id)"
-                : '';
-            $sqlSegurosVencerCount = "
-                SELECT COUNT(*)
-                FROM seguros_permisos sp
-                WHERE sp.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
-                  {$notif_leido_excl_seguros}
-            ";
-            $stmtSegurosVencerCount = $pdo->prepare($sqlSegurosVencerCount);
-            $stmtSegurosVencerCount->execute([$notificaciones_seguro_vencimiento_dias]);
-            $notificaciones_seguros_por_vencer_total = (int)$stmtSegurosVencerCount->fetchColumn();
-
-            if ($notificaciones_seguros_por_vencer_total > 0) {
-                $sqlSegurosVencerLista = "
-                    SELECT
-                        sp.id,
-                        sp.vehiculo_patente,
-                        sp.vehiculo_descripcion,
-                        t.nombre AS tipo_nombre,
-                        sp.fecha_vencimiento,
-                        DATEDIFF(sp.fecha_vencimiento, CURDATE()) AS dias_para_vencer
-                    FROM seguros_permisos sp
-                    LEFT JOIN tipos_seguros_permisos t ON t.id = sp.tipo_id
-                    WHERE sp.fecha_vencimiento <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
-                      {$notif_leido_excl_seguros}
-                    ORDER BY sp.fecha_vencimiento ASC
-                    LIMIT 8
-                ";
-                $stmtSegurosVencerLista = $pdo->prepare($sqlSegurosVencerLista);
-                $stmtSegurosVencerLista->execute([$notificaciones_seguro_vencimiento_dias]);
-                $notificaciones_seguros_por_vencer = $stmtSegurosVencerLista->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            }
-        } catch (Throwable $e) {
-            error_log('Notif seguros por vencer error: ' . $e->getMessage());
-            $notif_debug_errors[] = '[seguros_vencer] ' . $e->getMessage();
-        }
-    }
-
     // --- Sección: Tareas personales pendientes del usuario actual ---
     if (
         admin_table_exists($pdo, 'ecommerce_tareas_usuarios')
@@ -1326,7 +1265,6 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             + (int)$notificaciones_pagos_recientes_total
             + (int)$notificaciones_cotizaciones_altas_total
             + (int)$notificaciones_gastos_por_vencer_total
-            + (int)$notificaciones_seguros_por_vencer_total
             + (int)$notificacion_prueba_manual_total;
     }
     
@@ -1341,15 +1279,10 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?= htmlspecialchars(admin_csrf_token()) ?>">
     <title>Admin - STUL</title>
-    <link rel="manifest" href="<?= $admin_url ?>manifest.json">
-    <meta name="theme-color" content="#0d6efd">
-    <link rel="icon" type="image/png" sizes="192x192" href="<?= $admin_url ?>assets/pwa/icon-192.png">
-    <link rel="apple-touch-icon" href="<?= $admin_url ?>assets/pwa/apple-touch-icon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script>
         // @ts-nocheck
-        window.ADMIN_URL = <?= json_encode($admin_url) ?>;
         (function () {
             const storedTheme = localStorage.getItem('admin-theme');
             const theme = storedTheme === 'dark' ? 'dark' : 'light';
@@ -1998,11 +1931,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($pedidoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pedidoNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($pedidoNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-success">
-                                        <?php if (($role ?? '') === 'operario'): ?>
-                                            Total oculto
-                                        <?php else: ?>
-                                            Total: $<?= number_format((float)($pedidoNotif['total'] ?? 0), 0, ',', '.') ?>
-                                        <?php endif; ?>
+                                        Total: $<?= number_format((float)($pedidoNotif['total'] ?? 0), 0, ',', '.') ?>
                                         · <?= !empty($pedidoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pedidoNotif['fecha_evento']))) : '-' ?>
                                     </div>
                                 </a>
@@ -2017,11 +1946,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($entregaNotif['numero_pedido'] ?? ('Pedido #' . (int)($entregaNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($entregaNotif['cliente_nombre'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-success">
-                                        <?php if (($role ?? '') === 'operario'): ?>
-                                            Total oculto
-                                        <?php else: ?>
-                                            Total: $<?= number_format((float)($entregaNotif['total'] ?? 0), 0, ',', '.') ?>
-                                        <?php endif; ?>
+                                        Total: $<?= number_format((float)($entregaNotif['total'] ?? 0), 0, ',', '.') ?>
                                         · Entregado <?= !empty($entregaNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$entregaNotif['fecha_evento']))) : '-' ?>
                                     </div>
                                 </a>
@@ -2036,11 +1961,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($pagoNotif['numero_pedido'] ?? ('Pedido #' . (int)($pagoNotif['pedido_id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($pagoNotif['cliente_nombre'] ?? ($pagoNotif['descripcion'] ?? 'Pago registrado')) ?></div>
                                     <div class="small text-success">
-                                        <?php if (($role ?? '') === 'operario'): ?>
-                                            Pago oculto
-                                        <?php else: ?>
-                                            Pago: $<?= number_format((float)($pagoNotif['monto'] ?? 0), 0, ',', '.') ?>
-                                        <?php endif; ?>
+                                        Pago: $<?= number_format((float)($pagoNotif['monto'] ?? 0), 0, ',', '.') ?>
                                         · <?= htmlspecialchars($pagoNotif['metodo'] ?? 'Método no informado') ?>
                                         · <?= !empty($pagoNotif['fecha_evento']) ? htmlspecialchars(date('d/m H:i', strtotime((string)$pagoNotif['fecha_evento']))) : '-' ?>
                                     </div>
@@ -2111,11 +2032,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($cotNotif['numero_cotizacion'] ?? ('Cotización #' . (int)($cotNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($cotNotif['nombre_cliente'] ?? 'Cliente sin nombre') ?></div>
                                     <div class="small text-warning fw-semibold">
-                                        <?php if (($role ?? '') === 'operario'): ?>
-                                            Monto oculto
-                                        <?php else: ?>
-                                            Monto: $<?= number_format((float)($cotNotif['total'] ?? 0), 0, ',', '.') ?>
-                                        <?php endif; ?>
+                                        Monto: $<?= number_format((float)($cotNotif['total'] ?? 0), 0, ',', '.') ?>
                                         · Vendedor: <?= htmlspecialchars($cotNotif['vendedor_nombre'] ?? 'Sin vendedor') ?>
                                     </div>
                                 </a>
@@ -2131,11 +2048,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                     <div class="fw-semibold"><?= htmlspecialchars($gastoNotif['numero_gasto'] ?? ('Gasto #' . (int)($gastoNotif['id'] ?? 0))) ?></div>
                                     <div class="small text-muted"><?= htmlspecialchars($gastoNotif['descripcion'] ?? '') ?></div>
                                     <div class="small <?= $dias_para_vencer < 0 ? 'text-danger fw-bold' : 'text-warning' ?>">
-                                        <?php if (($role ?? '') === 'operario'): ?>
-                                            Monto oculto
-                                        <?php else: ?>
-                                            Monto: $<?= number_format((float)($gastoNotif['monto'] ?? 0), 0, ',', '.') ?>
-                                        <?php endif; ?>
+                                        Monto: $<?= number_format((float)($gastoNotif['monto'] ?? 0), 0, ',', '.') ?>
                                         · <?php if ($dias_para_vencer < 0): ?>
                                             Vencido el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$gastoNotif['fecha_vencimiento']))) ?>
                                         <?php elseif ($dias_para_vencer === 0): ?>
@@ -2147,27 +2060,6 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                 </a>
                             <?php endforeach; ?>
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>gastos/gastos.php">Ver gastos</a>
-                        <?php endif; ?>
-
-                        <?php if ($notificaciones_permiso_admin && $notificaciones_seguros_por_vencer_total > 0): ?>
-                            <div class="notif-section-title">Seguros/permisos por vencer (<?= (int)$notificaciones_seguros_por_vencer_total ?>)</div>
-                            <?php foreach ($notificaciones_seguros_por_vencer as $seguroNotif): ?>
-                                <?php $dias_para_vencer_seguro = (int)($seguroNotif['dias_para_vencer'] ?? 0); ?>
-                                <a class="notif-item" href="<?= $admin_url ?>seguros/seguros_editar.php?id=<?= (int)($seguroNotif['id'] ?? 0) ?>">
-                                    <div class="fw-semibold"><?= htmlspecialchars($seguroNotif['tipo_nombre'] ?? 'Seguro/Permiso') ?> · <?= htmlspecialchars($seguroNotif['vehiculo_patente'] ?? '') ?></div>
-                                    <div class="small text-muted"><?= htmlspecialchars($seguroNotif['vehiculo_descripcion'] ?? '') ?></div>
-                                    <div class="small <?= $dias_para_vencer_seguro < 0 ? 'text-danger fw-bold' : 'text-warning' ?>">
-                                        <?php if ($dias_para_vencer_seguro < 0): ?>
-                                            Vencido el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$seguroNotif['fecha_vencimiento']))) ?>
-                                        <?php elseif ($dias_para_vencer_seguro === 0): ?>
-                                            Vence hoy
-                                        <?php else: ?>
-                                            Vence el <?= htmlspecialchars(date('d/m/Y', strtotime((string)$seguroNotif['fecha_vencimiento']))) ?> (<?= $dias_para_vencer_seguro ?> día(s))
-                                        <?php endif; ?>
-                                    </div>
-                                </a>
-                            <?php endforeach; ?>
-                            <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>seguros/seguros.php">Ver seguros y permisos</a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_atrasos_total > 0): ?>
@@ -2281,9 +2173,6 @@ if ($notificaciones_permiso_admin && $notificaciones_cotizaciones_altas_total > 
 if ($notificaciones_permiso_admin && $notificaciones_gastos_por_vencer_total > 0) {
     $notif_strip_parts[] = (int)$notificaciones_gastos_por_vencer_total . ' gasto(s) por vencer';
 }
-if ($notificaciones_permiso_admin && $notificaciones_seguros_por_vencer_total > 0) {
-    $notif_strip_parts[] = (int)$notificaciones_seguros_por_vencer_total . ' seguro(s)/permiso(s) por vencer';
-}
 if ($notificaciones_atrasos_total > 0) {
     $notif_strip_atrasos = (int)$notificaciones_atrasos_total . ' orden(es) de producción atrasada(s)';
     if ($notificaciones_atrasos_clientes_texto !== '') {
@@ -2328,10 +2217,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     if (!empty($empresa_logo['logo'])):
                         $logo_filename = $empresa_logo['logo'];
                         $logo_src = null;
-                        // El docroot del sitio apunta a la carpeta ecommerce/, por lo que
-                        // la URL pública nunca lleva el prefijo /ecommerce.
-                        if (file_exists($base_path . '/ecommerce/uploads/' . $logo_filename)
-                            || file_exists($base_path . '/uploads/' . $logo_filename)) {
+                        if (file_exists($base_path . '/ecommerce/uploads/' . $logo_filename)) {
+                            $logo_src = '/ecommerce/uploads/' . $logo_filename;
+                        } elseif (file_exists($base_path . '/uploads/' . $logo_filename)) {
                             $logo_src = '/uploads/' . $logo_filename;
                         }
                         if ($logo_src):
@@ -2400,7 +2288,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'fotos_nube', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa" title="Empresa">
                         <span><i class="bi bi-building"></i><span class="menu-label"> Empresa</span></span>
@@ -2422,9 +2310,6 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('banners')): ?>
                         <a href="<?= $admin_url ?>banners.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['banners.php', 'banners_crear.php', 'banners_eliminar.php'], true) ? 'active' : '' ?>"><i class="bi bi-images"></i> Banners Promocionales</a>
-                        <?php endif; ?>
-                        <?php if ($can_access('fotos_nube')): ?>
-                        <a href="<?= $admin_url ?>fotos_nube.php" class="<?= basename($_SERVER['PHP_SELF']) === 'fotos_nube.php' ? 'active' : '' ?>"><i class="bi bi-cloud-arrow-up"></i> Nube de Fotos</a>
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
@@ -2477,7 +2362,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <a href="<?= $admin_url ?>produccion_tareas_usuarios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'produccion_tareas_usuarios.php' ? 'active' : '' ?>"><i class="bi bi-person-workspace"></i> Tareas por Usuario</a>
                         <?php endif; ?>
                         <?php if ($can_access('instalaciones')): ?>
-                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php', 'instalaciones_prevision.php', 'visitas.php', 'visitas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones y visitas</a>
+                        <a href="<?= $admin_url ?>instalaciones.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['instalaciones.php', 'instalaciones_reporte_direcciones.php', 'instalaciones_reporte_productos.php', 'visitas.php', 'visitas_editar.php']) ? 'active' : '' ?>"><i class="bi bi-tools"></i> Instalaciones y visitas</a>
                         <?php endif; ?>
                         <?php if ($can_access('recordatorios')): ?>
                         <a href="<?= $admin_url ?>recordatorios.php" class="<?= basename($_SERVER['PHP_SELF']) === 'recordatorios.php' ? 'active' : '' ?>"><i class="bi bi-journal-check"></i> Recordatorios</a>
@@ -2566,7 +2451,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php endif; ?>
 
                 <!-- Finanzas -->
-                <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos', 'seguros'])): ?>
+                <?php if ($can_access_any(['finanzas', 'flujo_caja', 'cheques', 'gastos'])): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuFinanzas" title="Finanzas">
                         <span><i class="bi bi-cash-stack"></i><span class="menu-label"> Finanzas</span></span>
@@ -2586,9 +2471,6 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('gastos')): ?>
                         <a href="<?= $admin_url ?>gastos/gastos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'gastos.php' ? 'active' : '' ?>"><i class="bi bi-wallet2"></i> Gastos</a>
-                        <?php endif; ?>
-                        <?php if ($can_access('seguros')): ?>
-                        <a href="<?= $admin_url ?>seguros/seguros.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['seguros.php', 'seguros_crear.php', 'seguros_editar.php', 'tipos_seguros.php']) ? 'active' : '' ?>"><i class="bi bi-shield-check"></i> Seguros y Permisos</a>
                         <?php endif; ?>
                     </div>
                 </div>
