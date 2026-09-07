@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
+require_once __DIR__ . '/includes/audit_helper.php';
 
 $pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
 if (!($pdo instanceof PDO)) {
@@ -506,6 +507,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute($pedidoVals);
                 $pedido_id = (int)$pdo->lastInsertId();
 
+                // Auditoría: pedido creado a partir de cotización
+                try {
+                    auditoria_registrar($pdo, 'ecommerce_pedidos', $pedido_id, 'crear_desde_cotizacion', [
+                        'cotizacion_id' => $id,
+                        'items_count' => count($items),
+                        'total' => $subtotalPedido
+                    ], $_SESSION['user']['id'] ?? null);
+                } catch (Throwable $e) {
+                }
+
                 // Migración: la descripción por ítem (cargada en la cotización) no existía en pedidos
                 $colDescripcionItem = $pdo->query("SHOW COLUMNS FROM ecommerce_pedido_items LIKE 'descripcion'");
                 if ($colDescripcionItem->rowCount() === 0) {
@@ -560,6 +571,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = 'convertida' WHERE id = ?");
                 $stmt->execute([$id]);
+                try {
+                    auditoria_registrar($pdo, 'ecommerce_cotizaciones', $id, 'convertir_a_pedido', ['pedido_id' => $pedido_id], $_SESSION['user']['id'] ?? null);
+                } catch (Throwable $e) {
+                }
                 cotizacion_sync_crm_estado($pdo, $cotizacion, 'convertida', $pedido_id);
 
                 $pdo->commit();
@@ -570,6 +585,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nuevo_estado = $_POST['estado'];
             $stmt = $pdo->prepare("UPDATE ecommerce_cotizaciones SET estado = ? WHERE id = ?");
             $stmt->execute([$nuevo_estado, $id]);
+            try {
+                auditoria_registrar($pdo, 'ecommerce_cotizaciones', $id, 'cambiar_estado', ['nuevo_estado' => $nuevo_estado], $_SESSION['user']['id'] ?? null);
+            } catch (Throwable $e) {
+            }
             cotizacion_sync_crm_estado($pdo, $cotizacion, (string)$nuevo_estado);
             
             if ($nuevo_estado === 'enviada') {
@@ -608,6 +627,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ?>
             Estado: <span class="badge bg-<?= $badge ?>"><?= ucfirst($cotizacion['estado']) ?></span>
         </p>
+    </div>
+    <div class="text-end">
+        <?php
+        // Mostrar historial de auditoría de la cotización
+        $audits = auditoria_listar($pdo, 'ecommerce_cotizaciones', $id, 50);
+        if (!empty($audits)):
+        ?>
+        <div class="card">
+            <div class="card-body p-2" style="min-width:280px;">
+                <strong>Historial</strong>
+                <ul class="list-unstyled small mb-0">
+                    <?php foreach ($audits as $a):
+                        $userName = null;
+                        if (!empty($a['usuario_id'])) {
+                            $stmtU = $pdo->prepare("SELECT COALESCE(NULLIF(TRIM(nombre), ''), usuario) AS nombre FROM usuarios WHERE id = ? LIMIT 1");
+                            $stmtU->execute([(int)$a['usuario_id']]);
+                            $rowU = $stmtU->fetch(PDO::FETCH_ASSOC);
+                            $userName = $rowU ? $rowU['nombre'] : null;
+                        }
+                    ?>
+                    <li>
+                        <small><?= htmlspecialchars($a['created_at'] ?? '') ?> — <strong><?= htmlspecialchars($a['accion']) ?></strong>
+                        <?php if ($userName): ?> por <?= htmlspecialchars($userName) ?><?php endif; ?>
+                        </small>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
     <div>
         <a href="cotizacion_pdf.php?id=<?= $id ?>" class="btn btn-info" target="_blank">📄 Descargar PDF</a>

@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/audit_helper.php';
 
 $pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
 if (!($pdo instanceof PDO)) {
@@ -324,6 +325,49 @@ $modulos = [
                     <a href="auth/logout.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión segura</a>
                     <a href="../api/manual_robot.md" class="btn btn-outline-primary btn-sm" target="_blank"><i class="bi bi-book me-1"></i>Manual API Robot</a>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Últimas auditorías</h5>
+                <a href="auditorias.php" class="btn btn-sm btn-outline-primary">Ver historial completo</a>
+            </div>
+            <div class="card-body">
+                <?php
+                try {
+                    auditoria_asegurar_tabla($pdo);
+                    $stmtA = $pdo->query("SELECT * FROM ecommerce_auditorias ORDER BY created_at DESC LIMIT 8");
+                    $audits = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+                } catch (Throwable $e) {
+                    $audits = [];
+                }
+                if (empty($audits)): ?>
+                    <div class="text-muted">Sin actividad reciente registrada.</div>
+                <?php else: ?>
+                    <ul class="list-group list-group-flush">
+                        <?php foreach ($audits as $a):
+                            $userName = null;
+                            if (!empty($a['usuario_id'])) {
+                                $stmtU = $pdo->prepare("SELECT COALESCE(NULLIF(TRIM(nombre), ''), usuario) AS nombre FROM usuarios WHERE id = ? LIMIT 1");
+                                $stmtU->execute([(int)$a['usuario_id']]);
+                                $rowU = $stmtU->fetch(PDO::FETCH_ASSOC);
+                                $userName = $rowU ? $rowU['nombre'] : null;
+                            }
+                        ?>
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-semibold small"><?= htmlspecialchars($a['accion']) ?> — <?= htmlspecialchars($a['tabla']) ?>#<?= htmlspecialchars($a['registro_id']) ?></div>
+                                <div class="small text-muted"><?= htmlspecialchars($a['created_at']) ?><?php if ($userName): ?> • <?= htmlspecialchars($userName) ?><?php endif; ?></div>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
             </div>
         </div>
     </div>

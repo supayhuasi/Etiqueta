@@ -2,6 +2,7 @@
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/descuentos.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
+require_once __DIR__ . '/includes/audit_helper.php';
 
 $contabilidad_config = contabilidad_get_config($pdo);
 $contabilidad_impuestos_activos = contabilidad_get_impuestos($pdo, true);
@@ -268,6 +269,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $stmt = $pdo->prepare($sql_update);
             $stmt->execute($params);
+
+            // Registrar auditoría: edición de cotización
+            try {
+                $auditData = [
+                    'cliente' => $nombre_cliente,
+                    'email' => $email,
+                    'total' => $total,
+                    'items_count' => count($items_nuevos),
+                ];
+                auditoria_registrar($pdo, 'ecommerce_cotizaciones', $id, 'editar', $auditData, $_SESSION['user']['id'] ?? null);
+            } catch (Throwable $e) {
+                // continue silently
+            }
 
             $cliente_id_rel = (int)($cotizacion['cliente_id'] ?? 0);
             if ($cliente_id_rel <= 0) {
