@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require_once __DIR__ . '/../includes/funciones_recetas.php';
+require_once __DIR__ . '/../includes/materials_helper.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
 require_once __DIR__ . '/includes/cuentas_helper.php';
 
@@ -569,10 +570,37 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php else: ?>
                     <p><strong>Total:</strong> <span class="text-success fw-bold">$<?= number_format($pedido['total'], 2, ',', '.') ?></span></p>
                         <?php if ($puede_ver_costos): ?>
+                        <?php
+                            // Detectar overrides aplicados (total o por material)
+                            $has_override_total = materials_obtener_override_total($pdo, $pedido_id) !== null;
+                            $has_override_material = false;
+                            foreach ($items as $it_check) {
+                                $prod_id = (int)($it_check['producto_id'] ?? 0);
+                                $an = (float)($it_check['ancho_cm'] ?? ($it_check['ancho'] ?? 0));
+                                $al = (float)($it_check['alto_cm'] ?? ($it_check['alto'] ?? 0));
+                                $attrs = [];
+                                if (!empty($it_check['atributos'])) {
+                                    $dec = json_decode((string)$it_check['atributos'], true);
+                                    if (is_array($dec)) $attrs = $dec;
+                                }
+                                $recs = obtener_receta_con_condiciones($pdo, $prod_id, $an, $al, $attrs);
+                                foreach ($recs as $r) {
+                                    $mid = (int)($r['material_producto_id'] ?? 0);
+                                    if ($mid <= 0) continue;
+                                    if (materials_obtener_override($pdo, $pedido_id, $mid) !== null) {
+                                        $has_override_material = true;
+                                        break 2;
+                                    }
+                                }
+                            }
+                        ?>
                         <p>
                             <strong>Costo estimado en materiales:</strong>
                             <span class="text-warning fw-bold">$<?= number_format($costo_material_pedido, 2, ',', '.') ?></span>
                             <a href="pedidos_materiales.php?pedido_id=<?= (int)$pedido_id ?>" class="btn btn-sm btn-outline-secondary ms-2">Editar costo</a>
+                            <?php if ($has_override_total || $has_override_material): ?>
+                                <span class="badge bg-info ms-2">Override aplicado</span>
+                            <?php endif; ?>
                         </p>
                         <?php $utilidad_estimado_pedido = (float)$pedido['total'] - $costo_material_pedido; ?>
                         <p><strong>Utilidad estimada:</strong> <span class="fw-bold <?= $utilidad_estimado_pedido >= 0 ? 'text-success' : 'text-danger' ?>">$<?= number_format($utilidad_estimado_pedido, 2, ',', '.') ?></span></p>
