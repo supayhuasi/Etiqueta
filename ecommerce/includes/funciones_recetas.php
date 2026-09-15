@@ -5,35 +5,96 @@
  */
 
 /**
+ * Separa valores de condición por coma (ej: "Blanco, Negro")
+ *
+ * @param string $condicion_valor
+ * @return array
+ */
+function parsear_valores_condicion($condicion_valor) {
+    $partes = explode(',', (string)$condicion_valor);
+    $valores = [];
+    foreach ($partes as $parte) {
+        $parte = trim($parte);
+        if ($parte !== '') {
+            $valores[] = $parte;
+        }
+    }
+    return $valores;
+}
+
+/**
  * Evalúa si una condición se cumple
  * 
  * @param string $condicion_tipo Tipo de condición: 'ancho', 'alto', 'area', 'atributo'
  * @param string $condicion_operador Operador: 'igual', 'mayor', 'mayor_igual', 'menor', 'menor_igual', 'diferente'
- * @param string $condicion_valor Valor a comparar
- * @param float $valor_actual Valor actual (ancho, alto, área)
+ * @param string $condicion_valor Valor a comparar (admite varios separados por coma)
+ * @param float|string $valor_actual Valor actual (ancho, alto, área o texto de atributo)
  * @return bool True si la condición se cumple
  */
 function evaluar_condicion($condicion_tipo, $condicion_operador, $condicion_valor, $valor_actual) {
-    if (empty($condicion_tipo) || empty($condicion_operador) || empty($condicion_valor)) {
+    if (empty($condicion_tipo) || empty($condicion_operador) || $condicion_valor === '' || $condicion_valor === null) {
         return true; // Si no hay condición, siempre se incluye
     }
-    
-    $valor_actual = floatval($valor_actual);
-    $valor_condicion = floatval($condicion_valor);
-    
+
+    $valores = parsear_valores_condicion($condicion_valor);
+    if (empty($valores)) {
+        return true;
+    }
+
+    // Atributos (color, etc.) y valores no numéricos: comparación de texto
+    $es_texto = ($condicion_tipo === 'atributo')
+        || !is_numeric($valor_actual)
+        || !is_numeric($valores[0]);
+
+    if ($es_texto) {
+        $actual = mb_strtolower(trim((string)$valor_actual));
+        $lista = array_map(static function ($v) {
+            return mb_strtolower(trim((string)$v));
+        }, $valores);
+        $esta_en_lista = in_array($actual, $lista, true);
+
+        switch ($condicion_operador) {
+            case 'igual':
+                return $esta_en_lista;
+            case 'diferente':
+                return !$esta_en_lista;
+            case 'mayor':
+                return $actual > $lista[0];
+            case 'mayor_igual':
+                return $actual >= $lista[0];
+            case 'menor':
+                return $actual < $lista[0];
+            case 'menor_igual':
+                return $actual <= $lista[0];
+            default:
+                return true;
+        }
+    }
+
+    $actual = floatval($valor_actual);
+
+    // Para = y ≠ con varios números: cumple si coincide con alguno
+    if ($condicion_operador === 'igual' || $condicion_operador === 'diferente') {
+        $coincide = false;
+        foreach ($valores as $v) {
+            if (abs($actual - floatval($v)) < 0.01) {
+                $coincide = true;
+                break;
+            }
+        }
+        return $condicion_operador === 'igual' ? $coincide : !$coincide;
+    }
+
+    $valor_condicion = floatval($valores[0]);
     switch ($condicion_operador) {
-        case 'igual':
-            return abs($valor_actual - $valor_condicion) < 0.01;
         case 'mayor':
-            return $valor_actual > $valor_condicion;
+            return $actual > $valor_condicion;
         case 'mayor_igual':
-            return $valor_actual >= $valor_condicion;
+            return $actual >= $valor_condicion;
         case 'menor':
-            return $valor_actual < $valor_condicion;
+            return $actual < $valor_condicion;
         case 'menor_igual':
-            return $valor_actual <= $valor_condicion;
-        case 'diferente':
-            return abs($valor_actual - $valor_condicion) >= 0.01;
+            return $actual <= $valor_condicion;
         default:
             return true;
     }
@@ -64,15 +125,15 @@ function obtener_valor_condicion($pdo, $producto_id, $condicion_tipo, $condicion
             return ($ancho / 100) * ($alto / 100);
             
         case 'atributo':
-            // Buscar el valor del atributo seleccionado
+            // Buscar el valor del atributo seleccionado (texto, ej. color)
             if (is_array($atributos_seleccionados) && !empty($atributos_seleccionados)) {
                 foreach ($atributos_seleccionados as $attr) {
-                    if ($attr['id'] == $condicion_atributo_id) {
-                        return floatval($attr['valor'] ?? 0);
+                    if ((int)($attr['id'] ?? 0) === (int)$condicion_atributo_id) {
+                        return trim((string)($attr['valor'] ?? ''));
                     }
                 }
             }
-            return 0;
+            return '';
             
         default:
             return 0;
@@ -324,7 +385,9 @@ function describir_condicion($condicion_tipo, $condicion_operador, $condicion_va
     
     $tipo_texto = $tipos[$condicion_tipo] ?? $condicion_tipo;
     $operador_texto = $operadores[$condicion_operador] ?? $condicion_operador;
-    
-    return "Si {$tipo_texto} {$operador_texto} {$condicion_valor}";
+    $valores = parsear_valores_condicion($condicion_valor);
+    $valor_texto = count($valores) > 1 ? '(' . implode(', ', $valores) . ')' : ($valores[0] ?? $condicion_valor);
+
+    return "Si {$tipo_texto} {$operador_texto} {$valor_texto}";
 }
 ?>

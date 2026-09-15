@@ -174,8 +174,18 @@ try {
         $m['override_unit'] = materials_obtener_override($pdo, $pedido_id, $mid);
         $m['costo_total_calc'] = round($m['cantidad_total'] * $m['unit_calc'], 2);
         $m['costo_total_override'] = $m['override_unit'] !== null ? round($m['cantidad_total'] * $m['override_unit'], 2) : null;
+        $m['comentario'] = null;
     }
     unset($m);
+
+    // Cargar comentarios de overrides existentes y mapearlos
+    $existing_overrides = materials_listar_overrides_por_pedido($pdo, $pedido_id);
+    foreach ($existing_overrides as $ov) {
+        $mid = (int)($ov['material_producto_id'] ?? 0);
+        if ($mid > 0 && isset($material_summary[$mid])) {
+            $material_summary[$mid]['comentario'] = $ov['comentario'] ?? null;
+        }
+    }
 
 } catch (Throwable $e) {
     $error = $e->getMessage();
@@ -252,7 +262,7 @@ try {
                                     <tr>
                                         <td colspan="6">
                                             <div class="form-text">Comentario (opcional):
-                                                <input type="text" name="comentario_<?= (int)$mat['material_id'] ?>" class="form-control form-control-sm d-inline-block ms-2" style="width:50%;" value="<?= htmlspecialchars((string)($_POST['comentario_' . $mat['material_id']] ?? '')) ?>" <?= $can_edit ? '' : 'disabled' ?>>
+                                                <input type="text" name="comentario_<?= (int)$mat['material_id'] ?>" class="form-control form-control-sm d-inline-block ms-2" style="width:50%;" value="<?= htmlspecialchars((string)($_POST['comentario_' . $mat['material_id']] ?? ($mat['comentario'] ?? ''))) ?>" <?= $can_edit ? '' : 'disabled' ?>>
                                             </div>
                                         </td>
                                     </tr>

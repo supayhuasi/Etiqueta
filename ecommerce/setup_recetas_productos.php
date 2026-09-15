@@ -14,7 +14,7 @@ try {
             con_condicion TINYINT(1) DEFAULT 0,
             condicion_tipo ENUM('ancho','alto','area','atributo') NULL,
             condicion_operador ENUM('igual','mayor','mayor_igual','menor','menor_igual','diferente') NULL,
-            condicion_valor VARCHAR(100) NULL,
+            condicion_valor VARCHAR(255) NULL,
             condicion_atributo_id INT NULL,
             fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
             fecha_actualizacion DATETIME ON UPDATE CURRENT_TIMESTAMP,
@@ -35,9 +35,12 @@ try {
             $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN con_condicion TINYINT(1) DEFAULT 0");
             $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN condicion_tipo ENUM('ancho','alto','area','atributo') NULL");
             $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN condicion_operador ENUM('igual','mayor','mayor_igual','menor','menor_igual','diferente') NULL");
-            $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN condicion_valor VARCHAR(100) NULL");
+            $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN condicion_valor VARCHAR(255) NULL");
             $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos ADD COLUMN condicion_atributo_id INT NULL");
             echo "<br>✓ Columnas de condición agregadas";
+        } else {
+            // Ampliar campo de valor para listas de colores (ej: Blanco, Negro, Rojo)
+            $pdo->exec("ALTER TABLE ecommerce_producto_recetas_productos MODIFY COLUMN condicion_valor VARCHAR(255) NULL");
         }
     } catch (Exception $e) {
         echo "<br>ℹ Columnas de condición ya existen";

@@ -145,6 +145,10 @@ foreach ($receta as $r) {
             <?php if (empty($materiales)): ?>
                 <div class="alert alert-info">No hay productos marcados como material. Marcá productos con “Es material”.</div>
             <?php else: ?>
+                <p class="small text-muted mb-2">
+                    En <strong>Valor</strong> podés indicar varios valores separados por coma (ej: <code>Blanco, Negro</code>).
+                    Con operador <code>=</code> el material se usa si el atributo coincide con <em>cualquiera</em> de esos valores.
+                </p>
                 <div class="table-responsive">
                     <table class="table table-sm">
                         <thead class="table-light">
@@ -200,7 +204,7 @@ foreach ($receta as $r) {
                                             <?php if (!empty($atributos)): ?>
                                                 <optgroup label="Atributos">
                                                     <?php foreach ($atributos as $attr): ?>
-                                                        <option value="atributo_<?= $attr['id'] ?>" <?= ($r['condicion_tipo'] ?? '') === 'atributo_' . $attr['id'] ? 'selected' : '' ?>>
+                                                        <option value="atributo_<?= $attr['id'] ?>" <?= (($r['condicion_tipo'] ?? '') === 'atributo' && (int)($r['condicion_atributo_id'] ?? 0) === (int)$attr['id']) ? 'selected' : '' ?>>
                                                             <?= htmlspecialchars($attr['nombre']) ?>
                                                         </option>
                                                     <?php endforeach; ?>
@@ -220,7 +224,7 @@ foreach ($receta as $r) {
                                         </select>
                                     </td>
                                     <td>
-                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="Valor" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="ej: Blanco, Negro" title="Podés poner varios valores separados por coma" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

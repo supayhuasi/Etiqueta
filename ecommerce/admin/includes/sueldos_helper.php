@@ -93,3 +93,121 @@ function sueldosCalcularTotalMes(PDO $pdo, int $empleado_id, string $mes): float
 {
     return sueldosCalcularDetalleMes($pdo, $empleado_id, $mes)['sueldo_total'];
 }
+
+/**
+ * Minutos del día respecto al horario:
+ * - Si llega tarde, la salida esperada se corre esos mismos minutos.
+ * - Si no los recupera al salir, el día queda en minutos negativos.
+ * - Llegar temprano no adelanta la salida ni suma extras.
+ */
+function sueldosCalcularMinutosDiaAsistencia(
+    string $fecha,
+    ?string $horaEntradaReal,
+    ?string $horaSalidaReal,
+    ?string $horaEntradaHorario,
+    ?string $horaSalidaHorario
+): ?int {
+    $fecha = trim($fecha);
+    $horaSalidaReal = trim((string)$horaSalidaReal);
+    $horaSalidaHorario = trim((string)$horaSalidaHorario);
+
+    if ($fecha === '' || $horaSalidaReal === '' || $horaSalidaHorario === '') {
+        return null;
+    }
+
+    $tsSalidaReal = strtotime($fecha . ' ' . $horaSalidaReal);
+    $tsSalidaHorario = strtotime($fecha . ' ' . $horaSalidaHorario);
+    if ($tsSalidaReal === false || $tsSalidaHorario === false) {
+        return null;
+    }
+
+    $minutosTarde = 0;
+    $horaEntradaReal = trim((string)$horaEntradaReal);
+    $horaEntradaHorario = trim((string)$horaEntradaHorario);
+    if ($horaEntradaReal !== '' && $horaEntradaHorario !== '') {
+        $tsEntradaReal = strtotime($fecha . ' ' . $horaEntradaReal);
+        $tsEntradaHorario = strtotime($fecha . ' ' . $horaEntradaHorario);
+        if ($tsEntradaReal !== false && $tsEntradaHorario !== false) {
+            $minutosTarde = (int)floor(($tsEntradaReal - $tsEntradaHorario) / 60);
+            if ($minutosTarde < 0) {
+                $minutosTarde = 0; // llegada temprana no adelanta la salida
+            }
+        }
+    }
+
+    $tsSalidaEsperada = $tsSalidaHorario + ($minutosTarde * 60);
+    return (int)floor(($tsSalidaReal - $tsSalidaEsperada) / 60);
+}
+
+/**
+ * @return array<int,int> empleado_id => minutos del mes (puede ser negativo)
+ */
+function sueldosCalcularMinutosExtrasMesPorEmpleado(PDO $pdo, string $mes, ?int $empleado_id = null): array
+{
+    $resultado = [];
+
+    try {
+        $sql = "
+            SELECT
+                a.empleado_id,
+                a.fecha,
+                a.hora_entrada,
+                a.hora_salida,
+                COALESCE(hd.hora_entrada, h.hora_entrada) AS horario_entrada,
+                COALESCE(hd.hora_salida, h.hora_salida) AS horario_salida
+            FROM asistencias a
+            LEFT JOIN empleados_horarios h
+                ON a.empleado_id = h.empleado_id
+               AND h.activo = 1
+            LEFT JOIN empleados_horarios_dias hd
+                ON a.empleado_id = hd.empleado_id
+               AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1
+               AND hd.activo = 1
+            WHERE DATE_FORMAT(a.fecha, '%Y-%m') = ?
+              AND a.hora_salida IS NOT NULL
+              AND a.hora_salida <> ''
+        ";
+        $params = [$mes];
+        if ($empleado_id !== null && $empleado_id > 0) {
+            $sql .= " AND a.empleado_id = ?";
+            $params[] = $empleado_id;
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($filas as $fila) {
+            $empId = (int)($fila['empleado_id'] ?? 0);
+            if ($empId <= 0) {
+                continue;
+            }
+
+            $minutos = sueldosCalcularMinutosDiaAsistencia(
+                (string)($fila['fecha'] ?? ''),
+                $fila['hora_entrada'] ?? null,
+                $fila['hora_salida'] ?? null,
+                $fila['horario_entrada'] ?? null,
+                $fila['horario_salida'] ?? null
+            );
+            if ($minutos === null) {
+                continue;
+            }
+
+            if (!isset($resultado[$empId])) {
+                $resultado[$empId] = 0;
+            }
+            $resultado[$empId] += $minutos;
+        }
+    } catch (Exception $e) {
+        return [];
+    }
+
+    return $resultado;
+}
+
+function sueldosCalcularMinutosExtrasMesEmpleado(PDO $pdo, int $empleado_id, string $mes): int
+{
+    $mapa = sueldosCalcularMinutosExtrasMesPorEmpleado($pdo, $mes, $empleado_id);
+    return (int)($mapa[$empleado_id] ?? 0);
+}

@@ -3,59 +3,6 @@ require '../../../config.php';
 require '../../../fpdf.php';
 require_once __DIR__ . '/../includes/sueldos_helper.php';
 
-function calcularMinutosExtrasMesEmpleadoRecibo(PDO $pdo, int $empleado_id, string $mes): int
-{
-    $total = 0;
-
-    try {
-        $stmt = $pdo->prepare(" 
-            SELECT
-                a.fecha,
-                a.hora_salida,
-                COALESCE(hd.hora_salida, h.hora_salida) AS horario_salida
-            FROM asistencias a
-            LEFT JOIN empleados_horarios h
-                ON a.empleado_id = h.empleado_id
-               AND h.activo = 1
-            LEFT JOIN empleados_horarios_dias hd
-                ON a.empleado_id = hd.empleado_id
-               AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1
-               AND hd.activo = 1
-            WHERE a.empleado_id = ?
-              AND DATE_FORMAT(a.fecha, '%Y-%m') = ?
-              AND a.hora_salida IS NOT NULL
-              AND a.hora_salida <> ''
-        ");
-        $stmt->execute([$empleado_id, $mes]);
-        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($filas as $fila) {
-            $fecha = trim((string)($fila['fecha'] ?? ''));
-            $horaSalidaReal = trim((string)($fila['hora_salida'] ?? ''));
-            $horaSalidaHorario = trim((string)($fila['horario_salida'] ?? ''));
-
-            if ($fecha === '' || $horaSalidaReal === '' || $horaSalidaHorario === '') {
-                continue;
-            }
-
-            $tsReal = strtotime($fecha . ' ' . $horaSalidaReal);
-            $tsHorario = strtotime($fecha . ' ' . $horaSalidaHorario);
-            if ($tsReal === false || $tsHorario === false) {
-                continue;
-            }
-
-            $minExtra = (int)floor(($tsReal - $tsHorario) / 60);
-            if ($minExtra > 0) {
-                $total += $minExtra;
-            }
-        }
-    } catch (Exception $e) {
-        return 0;
-    }
-
-    return $total;
-}
-
 function evaluarFormula($formula, $sueldo_base)
 {
     if (!$formula) {
@@ -100,7 +47,7 @@ $conceptos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $sueldo_base = sueldosObtenerSueldoBaseMes($pdo, $id, $mes);
 $bonificaciones = 0;
 $descuentos = 0;
-$minutos_extras_mes = calcularMinutosExtrasMesEmpleadoRecibo($pdo, $id, $mes);
+$minutos_extras_mes = sueldosCalcularMinutosExtrasMesEmpleado($pdo, $id, $mes);
 
 foreach ($conceptos as $c) {
     $monto = (float)($c['monto'] ?? 0);

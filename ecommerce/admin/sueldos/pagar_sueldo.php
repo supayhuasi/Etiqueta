@@ -8,59 +8,6 @@ if (!isset($_SESSION['user'])) {
     exit;
 }
 
-function calcularMinutosExtrasMesEmpleado(PDO $pdo, int $empleado_id, string $mes): int
-{
-    $total = 0;
-
-    try {
-        $stmt = $pdo->prepare(" 
-            SELECT
-                a.fecha,
-                a.hora_salida,
-                COALESCE(hd.hora_salida, h.hora_salida) AS horario_salida
-            FROM asistencias a
-            LEFT JOIN empleados_horarios h
-                ON a.empleado_id = h.empleado_id
-               AND h.activo = 1
-            LEFT JOIN empleados_horarios_dias hd
-                ON a.empleado_id = hd.empleado_id
-               AND hd.dia_semana = DAYOFWEEK(a.fecha) - 1
-               AND hd.activo = 1
-            WHERE a.empleado_id = ?
-              AND DATE_FORMAT(a.fecha, '%Y-%m') = ?
-              AND a.hora_salida IS NOT NULL
-              AND a.hora_salida <> ''
-        ");
-        $stmt->execute([$empleado_id, $mes]);
-        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($filas as $fila) {
-            $fecha = (string)($fila['fecha'] ?? '');
-            $horaSalidaReal = trim((string)($fila['hora_salida'] ?? ''));
-            $horaSalidaHorario = trim((string)($fila['horario_salida'] ?? ''));
-
-            if ($fecha === '' || $horaSalidaReal === '' || $horaSalidaHorario === '') {
-                continue;
-            }
-
-            $tsReal = strtotime($fecha . ' ' . $horaSalidaReal);
-            $tsHorario = strtotime($fecha . ' ' . $horaSalidaHorario);
-            if ($tsReal === false || $tsHorario === false) {
-                continue;
-            }
-
-            $minExtra = (int)floor(($tsReal - $tsHorario) / 60);
-            if ($minExtra > 0) {
-                $total += $minExtra;
-            }
-        }
-    } catch (Exception $e) {
-        return 0;
-    }
-
-    return $total;
-}
-
 $empleado_id = $_GET['id'] ?? 0;
 $mes = $_GET['mes'] ?? date('Y-m');
 
@@ -80,7 +27,7 @@ if (!$empleado) {
 // Obtener el sueldo total del mes (base + conceptos)
 $sueldo_info = sueldosCalcularDetalleMes($pdo, (int)$empleado_id, $mes);
 $sueldo_total = $sueldo_info['sueldo_total'];
-$minutos_extras_mes = calcularMinutosExtrasMesEmpleado($pdo, (int)$empleado_id, $mes);
+$minutos_extras_mes = sueldosCalcularMinutosExtrasMesEmpleado($pdo, (int)$empleado_id, $mes);
 
 // Obtener pago registrado para este mes
 $stmt = $pdo->prepare("
@@ -184,8 +131,10 @@ $saldo_pendiente = $sueldo_total - $total_pagado;
                         </div>
                         <div class="col-md-6">
                             <h4 class="text-primary">Sueldo Total: $<?= number_format($sueldo_total, 2) ?></h4>
-                            <p><strong>Minutos extra (mes):</strong> <span class="badge bg-warning text-dark"><?= (int)$minutos_extras_mes ?> min</span></p>
-                            <small class="text-muted d-block">Solo se contabiliza salida posterior al horario. Ingresos antes de hora no suman extra.</small>
+                            <p><strong>Minutos extra (mes):</strong>
+                                <span class="badge <?= $minutos_extras_mes < 0 ? 'bg-danger' : 'bg-warning text-dark' ?>"><?= (int)$minutos_extras_mes ?> min</span>
+                            </p>
+                            <small class="text-muted d-block">Si llega tarde, la salida esperada se corre esa demora. Si no la recupera, quedan minutos negativos. Llegar temprano no suma extras.</small>
                             <?php if ($total_parciales > 0): ?>
                                 <small class="text-info d-block">Pagos parciales: $<?= number_format($total_parciales, 2) ?></small>
                             <?php endif; ?>
