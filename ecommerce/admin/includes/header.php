@@ -380,6 +380,7 @@ $page_permissions = [
     'inventario_ajustes.php' => 'inventario_ajustes',
     'sueldos.php' => 'sueldos',
     'pagar_sueldo.php' => 'sueldos',
+    'sueldos_reporte.php' => 'sueldos',
     'plantillas.php' => 'plantillas',
     'asistencias.php' => 'asistencias',
     'flujo_caja.php' => 'flujo_caja',
@@ -2444,7 +2445,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     </div>
                     <div class="collapse menu-items" id="menuRRHH">
                         <?php if ($can_access('sueldos')): ?>
-                        <a href="<?= $admin_url ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php']) ? 'active' : '' ?>"><i class="bi bi-cash-coin"></i> Sueldos</a>
+                        <a href="<?= $admin_url ?>sueldos/sueldos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['sueldos.php', 'pagar_sueldo.php', 'sueldos_reporte.php']) ? 'active' : '' ?>"><i class="bi bi-cash-coin"></i> Sueldos</a>
                         <?php endif; ?>
                         <?php if ($role === 'admin'): ?>
                         <a href="<?= $admin_url ?>empleados.php" class="<?= basename($_SERVER['PHP_SELF']) === 'empleados.php' ? 'active' : '' ?>"><i class="bi bi-people"></i> Empleados</a>

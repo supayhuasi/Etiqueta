@@ -364,6 +364,7 @@ foreach ($empleados as $emp) {
                         <tr>
                             <td class="align-middle">
                                 <input type="checkbox" class="emp-checkbox form-check-input"
+                                       value="<?= (int)$emp['id'] ?>"
                                        data-sueldo="<?= $sueldo_total_emp ?>"
                                        data-pagado="<?= $monto_total_pagado ?>"
                                        data-pendiente="<?= max(0, $saldo_pendiente) ?>"
@@ -501,7 +502,12 @@ foreach ($empleados as $emp) {
                     <div class="col-auto">
                         Pendiente: <strong class="text-danger" id="sel-pendiente">$0</strong>
                     </div>
-                    <div class="col-auto ms-auto">
+                    <div class="col-auto ms-auto d-flex gap-2">
+                        <form id="form-reporte-sueldos" method="GET" action="sueldos_reporte.php" target="_blank" class="d-inline">
+                            <input type="hidden" name="mes" value="<?= htmlspecialchars($mes_filtro) ?>">
+                            <input type="hidden" name="empleado_ids" id="reporte_empleado_ids" value="">
+                            <button type="button" class="btn btn-sm btn-danger" id="btn-reporte-pendiente">Imprimir lo que falta pagar</button>
+                        </form>
                         <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-desel-todos">Deseleccionar todo</button>
                     </div>
                 </div>
@@ -619,6 +625,21 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.emp-checkbox').forEach(function(c) { c.checked = false; });
             if (selTodos) selTodos.checked = false;
             actualizarResumen();
+        });
+    }
+
+    var btnReporte = document.getElementById('btn-reporte-pendiente');
+    if (btnReporte) {
+        btnReporte.addEventListener('click', function() {
+            var ids = Array.from(document.querySelectorAll('.emp-checkbox:checked'))
+                .map(function(el) { return el.value; })
+                .filter(Boolean);
+            if (ids.length === 0) {
+                alert('Seleccioná al menos un empleado para imprimir lo que falta pagar.');
+                return;
+            }
+            document.getElementById('reporte_empleado_ids').value = ids.join(',');
+            document.getElementById('form-reporte-sueldos').submit();
         });
     }
 
