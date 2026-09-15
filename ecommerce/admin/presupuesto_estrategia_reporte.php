@@ -10,10 +10,12 @@ if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
 $caja = (float)str_replace(',', '.', (string)($_GET['caja'] ?? '0'));
 $cobrosSel = presupuestoParseParesMonto((string)($_GET['cobros'] ?? ''));
 $sueldosSel = presupuestoParseParesMonto((string)($_GET['sueldos'] ?? ''));
+$gastosSel = presupuestoParseParesMonto((string)($_GET['gastos'] ?? ''));
 $otrosSel = presupuestoParseOtrosPagos((string)($_GET['otros'] ?? ''));
 
 $clientes = presupuestoClientesConSaldo($pdo);
 $sueldos = presupuestoSueldosPendientes($pdo, $mes);
+$gastos = presupuestoGastosAprobadosPendientes($pdo);
 $clientesPorId = [];
 foreach ($clientes as $c) {
     $clientesPorId[(int)$c['id']] = $c;
@@ -21,6 +23,10 @@ foreach ($clientes as $c) {
 $sueldosPorId = [];
 foreach ($sueldos as $s) {
     $sueldosPorId[(int)$s['id']] = $s;
+}
+$gastosPorId = [];
+foreach ($gastos as $g) {
+    $gastosPorId[(int)$g['id']] = $g;
 }
 
 $filasCobro = [];
@@ -61,12 +67,35 @@ foreach ($sueldosSel as $id => $monto) {
     $totalSueldos += $monto;
 }
 
+$filasGasto = [];
+$totalGastos = 0.0;
+foreach ($gastosSel as $id => $monto) {
+    if (!isset($gastosPorId[$id])) {
+        continue;
+    }
+    $pendiente = (float)$gastosPorId[$id]['monto'];
+    $monto = min(max($monto, 0), $pendiente);
+    if ($monto <= 0) {
+        continue;
+    }
+    $label = trim((string)($gastosPorId[$id]['descripcion'] ?: ($gastosPorId[$id]['tipo_nombre'] ?? 'Gasto')));
+    if (!empty($gastosPorId[$id]['numero_gasto'])) {
+        $label = $gastosPorId[$id]['numero_gasto'] . ' — ' . $label;
+    }
+    $filasGasto[] = [
+        'nombre' => $label,
+        'pendiente' => $pendiente,
+        'monto' => $monto,
+    ];
+    $totalGastos += $monto;
+}
+
 $totalOtros = 0.0;
 foreach ($otrosSel as $otro) {
     $totalOtros += (float)$otro['monto'];
 }
 
-$totalPagos = $totalSueldos + $totalOtros;
+$totalPagos = $totalSueldos + $totalGastos + $totalOtros;
 $queda = $caja + $totalCobros - $totalPagos;
 
 $meses_es = [
@@ -99,7 +128,7 @@ $mes_texto = ($meses_es[(int)($mes_partes[1] ?? 0)] ?? $mes) . ' ' . ($mes_parte
     </div>
 </div>
 
-<?php if (empty($filasCobro) && empty($filasSueldo) && empty($otrosSel)): ?>
+<?php if (empty($filasCobro) && empty($filasSueldo) && empty($filasGasto) && empty($otrosSel)): ?>
     <div class="alert alert-warning">No hay cobros ni pagos para mostrar en esta estrategia.</div>
 <?php else: ?>
     <div class="row mb-3">
@@ -168,7 +197,7 @@ $mes_texto = ($meses_es[(int)($mes_partes[1] ?? 0)] ?? $mes) . ' ' . ($mes_parte
         </div>
     <?php endif; ?>
 
-    <?php if (!empty($filasSueldo) || !empty($otrosSel)): ?>
+    <?php if (!empty($filasSueldo) || !empty($filasGasto) || !empty($otrosSel)): ?>
         <h5 class="mt-4">Pagos</h5>
         <div class="table-responsive">
             <table class="table table-bordered">
@@ -183,6 +212,13 @@ $mes_texto = ($meses_es[(int)($mes_partes[1] ?? 0)] ?? $mes) . ' ' . ($mes_parte
                     <?php foreach ($filasSueldo as $fila): ?>
                         <tr>
                             <td>Sueldo — <?= htmlspecialchars((string)$fila['nombre']) ?></td>
+                            <td class="text-end">$<?= number_format((float)$fila['pendiente'], 2, ',', '.') ?></td>
+                            <td class="text-end text-danger fw-semibold">$<?= number_format((float)$fila['monto'], 2, ',', '.') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php foreach ($filasGasto as $fila): ?>
+                        <tr>
+                            <td>Gasto — <?= htmlspecialchars((string)$fila['nombre']) ?></td>
                             <td class="text-end">$<?= number_format((float)$fila['pendiente'], 2, ',', '.') ?></td>
                             <td class="text-end text-danger fw-semibold">$<?= number_format((float)$fila['monto'], 2, ',', '.') ?></td>
                         </tr>

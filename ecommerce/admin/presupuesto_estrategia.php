@@ -10,6 +10,7 @@ if (!preg_match('/^\d{4}-\d{2}$/', $mes)) {
 $caja_actual = presupuestoCajaActual($pdo);
 $clientes = presupuestoClientesConSaldo($pdo);
 $sueldos = presupuestoSueldosPendientes($pdo, $mes);
+$gastos = presupuestoGastosAprobadosPendientes($pdo);
 
 $total_cxc = 0.0;
 foreach ($clientes as $c) {
@@ -18,6 +19,10 @@ foreach ($clientes as $c) {
 $total_sueldos_pend = 0.0;
 foreach ($sueldos as $s) {
     $total_sueldos_pend += (float)$s['pendiente'];
+}
+$total_gastos_aprob = 0.0;
+foreach ($gastos as $g) {
+    $total_gastos_aprob += (float)$g['monto'];
 }
 ?>
 <style>
@@ -79,6 +84,7 @@ foreach ($sueldos as $s) {
                 <input type="hidden" name="caja" id="rep_caja" value="">
                 <input type="hidden" name="cobros" id="rep_cobros" value="">
                 <input type="hidden" name="sueldos" id="rep_sueldos" value="">
+                <input type="hidden" name="gastos" id="rep_gastos" value="">
                 <input type="hidden" name="otros" id="rep_otros" value="">
                 <button type="button" class="btn btn-danger" id="btn-imprimir-estrategia">Imprimir estrategia</button>
             </form>
@@ -142,7 +148,7 @@ foreach ($sueldos as $s) {
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Pagos a hacer</strong>
-                <span class="badge bg-danger">Sueldos $<?= number_format($total_sueldos_pend, 2, ',', '.') ?></span>
+                <span class="badge bg-danger">Sueldos $<?= number_format($total_sueldos_pend, 2, ',', '.') ?> · Gastos $<?= number_format($total_gastos_aprob, 2, ',', '.') ?></span>
             </div>
             <div class="card-body">
                 <h6 class="text-muted">Sueldos pendientes — <?= htmlspecialchars($mes) ?></h6>
@@ -174,6 +180,61 @@ foreach ($sueldos as $s) {
                                             <input type="number" step="0.01" min="0" max="<?= htmlspecialchars((string)$s['pendiente']) ?>"
                                                    class="form-control form-control-sm input-sueldo"
                                                    value="<?= htmlspecialchars((string)round((float)$s['pendiente'], 2)) ?>"
+                                                   disabled>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+
+                <h6 class="text-muted">Gastos aprobados sin pagar</h6>
+                <?php if (empty($gastos)): ?>
+                    <div class="alert alert-info">No hay gastos aprobados pendientes de pago.</div>
+                <?php else: ?>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-hover presupuesto-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:36px;"><input type="checkbox" class="form-check-input" id="sel-todos-gastos"></th>
+                                    <th>Gasto</th>
+                                    <th class="text-end">Monto</th>
+                                    <th class="text-end">Voy a pagar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($gastos as $g): ?>
+                                    <?php
+                                        $gastoLabel = trim((string)($g['descripcion'] ?: ($g['tipo_nombre'] ?? 'Gasto')));
+                                        if (!empty($g['numero_gasto'])) {
+                                            $gastoLabel = $g['numero_gasto'] . ' — ' . $gastoLabel;
+                                        }
+                                    ?>
+                                    <tr class="fila-gasto presupuesto-row-off">
+                                        <td>
+                                            <input type="checkbox" class="form-check-input chk-gasto"
+                                                   value="<?= (int)$g['id'] ?>"
+                                                   data-nombre="<?= htmlspecialchars($gastoLabel) ?>"
+                                                   data-monto="<?= (float)$g['monto'] ?>">
+                                        </td>
+                                        <td>
+                                            <strong><?= htmlspecialchars($gastoLabel) ?></strong>
+                                            <div class="small text-muted">
+                                                <?= !empty($g['fecha']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$g['fecha']))) : '' ?>
+                                                <?php if (!empty($g['tipo_nombre'])): ?>
+                                                    · <?= htmlspecialchars((string)$g['tipo_nombre']) ?>
+                                                <?php endif; ?>
+                                                <?php if (!empty($g['beneficiario'])): ?>
+                                                    · <?= htmlspecialchars((string)$g['beneficiario']) ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">$<?= number_format((float)$g['monto'], 2, ',', '.') ?></td>
+                                        <td class="text-end">
+                                            <input type="number" step="0.01" min="0" max="<?= htmlspecialchars((string)$g['monto']) ?>"
+                                                   class="form-control form-control-sm input-gasto"
+                                                   value="<?= htmlspecialchars((string)round((float)$g['monto'], 2)) ?>"
                                                    disabled>
                                         </td>
                                     </tr>
@@ -232,6 +293,13 @@ function actualizarEscenario() {
         pagos += val;
     });
 
+    document.querySelectorAll('.chk-gasto:checked').forEach(function(chk) {
+        var input = chk.closest('tr').querySelector('.input-gasto');
+        var max = parseFloat(chk.dataset.monto) || 0;
+        var val = Math.min(Math.max(montoInput(input), 0), max);
+        pagos += val;
+    });
+
     document.querySelectorAll('.otro-monto').forEach(function(input) {
         pagos += Math.max(montoInput(input), 0);
     });
@@ -261,7 +329,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.chk-sueldo').forEach(function(chk) {
         chk.addEventListener('change', function() { syncFila(chk, '.input-sueldo'); });
     });
-    document.querySelectorAll('.input-cobro, .input-sueldo, .otro-monto').forEach(function(input) {
+    document.querySelectorAll('.chk-gasto').forEach(function(chk) {
+        chk.addEventListener('change', function() { syncFila(chk, '.input-gasto'); });
+    });
+    document.querySelectorAll('.input-cobro, .input-sueldo, .input-gasto, .otro-monto').forEach(function(input) {
         input.addEventListener('input', actualizarEscenario);
     });
     document.getElementById('caja_inicial').addEventListener('input', actualizarEscenario);
@@ -282,6 +353,16 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.chk-sueldo').forEach(function(chk) {
                 chk.checked = selSueldos.checked;
                 syncFila(chk, '.input-sueldo');
+            });
+        });
+    }
+
+    var selGastos = document.getElementById('sel-todos-gastos');
+    if (selGastos) {
+        selGastos.addEventListener('change', function() {
+            document.querySelectorAll('.chk-gasto').forEach(function(chk) {
+                chk.checked = selGastos.checked;
+                syncFila(chk, '.input-gasto');
             });
         });
     }
@@ -327,6 +408,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (val > 0) sueldos.push(chk.value + ':' + val.toFixed(2));
         });
 
+        var gastos = [];
+        document.querySelectorAll('.chk-gasto:checked').forEach(function(chk) {
+            var input = chk.closest('tr').querySelector('.input-gasto');
+            var max = parseFloat(chk.dataset.monto) || 0;
+            var val = Math.min(Math.max(montoInput(input), 0), max);
+            if (val > 0) gastos.push(chk.value + ':' + val.toFixed(2));
+        });
+
         var otrosPairs = [];
         document.querySelectorAll('.fila-otro').forEach(function(fila) {
             var desc = (fila.querySelector('.otro-desc').value || '').trim().replace(/[|:]+/g, ' ');
@@ -334,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (desc && monto > 0) otrosPairs.push(desc + ':' + monto.toFixed(2));
         });
 
-        if (cobros.length === 0 && sueldos.length === 0 && otrosPairs.length === 0) {
+        if (cobros.length === 0 && sueldos.length === 0 && gastos.length === 0 && otrosPairs.length === 0) {
             alert('Seleccioná al menos un cobro o un pago para imprimir la estrategia.');
             return;
         }
@@ -342,6 +431,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('rep_caja').value = montoInput(document.getElementById('caja_inicial')).toFixed(2);
         document.getElementById('rep_cobros').value = cobros.join(',');
         document.getElementById('rep_sueldos').value = sueldos.join(',');
+        document.getElementById('rep_gastos').value = gastos.join(',');
         document.getElementById('rep_otros').value = otrosPairs.join('|');
         document.getElementById('form-reporte-estrategia').submit();
     });

@@ -152,6 +152,41 @@ function presupuestoSueldosPendientes(PDO $pdo, string $mes): array
     return $resultado;
 }
 
+function presupuestoGastosAprobadosPendientes(PDO $pdo): array
+{
+    if (!function_exists('admin_table_exists')
+        || !admin_table_exists($pdo, 'gastos')
+        || !admin_table_exists($pdo, 'estados_gastos')
+    ) {
+        return [];
+    }
+
+    $joinTipo = admin_table_exists($pdo, 'tipos_gastos')
+        ? 'LEFT JOIN tipos_gastos t ON t.id = g.tipo_gasto_id'
+        : '';
+    $tipoSelect = admin_table_exists($pdo, 'tipos_gastos')
+        ? 't.nombre AS tipo_nombre'
+        : 'NULL AS tipo_nombre';
+
+    $sql = "
+        SELECT g.id, g.numero_gasto, g.fecha, g.descripcion, g.monto, g.beneficiario,
+               {$tipoSelect}
+        FROM gastos g
+        INNER JOIN estados_gastos e ON e.id = g.estado_gasto_id
+        {$joinTipo}
+        WHERE LOWER(e.nombre) = 'aprobado'
+          AND COALESCE(g.monto, 0) > 0.009
+        ORDER BY g.fecha ASC, g.id ASC
+    ";
+
+    try {
+        return $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        error_log('presupuestoGastosAprobadosPendientes: ' . $e->getMessage());
+        return [];
+    }
+}
+
 function presupuestoParseParesMonto(string $raw): array
 {
     $pares = [];
