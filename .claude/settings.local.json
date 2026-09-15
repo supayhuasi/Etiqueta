@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l ecommerce/admin/flujo_caja_ingreso.php)",
+      "Bash(php -l ecommerce/admin/gastos/gastos_editar.php)",
+      "Bash(cat)",
+      "Bash(/c/xampp/php/php \"/c/Users/rcoria/AppData/Local/Temp/claude/c--Users-rcoria-Etiqueta-Git-Etiqueta/26d908eb-8fbc-4183-9964-845213c92223/scratchpad/check_table.php\")",
+      "Bash(php -r ' *)",
+      "Bash(php -l ecommerce/admin/asistencias.php)",
+      "Bash(php -l ecommerce/admin/asistencias/asistencias.php)"
+    ]
+  }
+}

@@ -190,6 +190,7 @@ $role_permissions = [
         'gastos',
         'encuestas',
         'calidad',
+        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda',
         'plantillas', 'asistencias', 'usuarios', 'roles', 'faq', 'blog', 'ventas_reportes', 'compras', 'proveedores', 'empresa', 'email_config', 'mp_config', 'mp_link_pago', 'trabajos', 'slideshow', 'banners', 'metodos_pago', 'descuentos', 'cotizaciones', 'cotizacion_clientes', 'google_analytics', 'inventario_ajustes', 'clientes_web', 'contabilidad', 'flujo_caja_reportes', 'flujo_caja_ingreso', 'flujo_caja_egreso', 'cheques_crear', 'cheques_editar', 'cheques_cambiar_estado', 'gastos_crear', 'gastos_editar', 'gastos_cambiar_estado', 'usuarios_lista', 'roles_usuarios', 'compras_crear', 'compras_detalle', 'inventario_reporte_productos', 'inventario_reporte_reponer', 'instalaciones_reporte_direcciones', 'instalaciones_reporte_productos', 'visitas', 'visitas_editar', 'facturacion_clientes', 'slideshow_crear', 'slideshow_editar', 'slideshow_eliminar'
         // No incluye 'sueldos'
@@ -209,6 +210,7 @@ $role_permissions = [
         'gastos',
         'encuestas',
         'calidad',
+        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda'
     ],
     'operario' => [
@@ -219,6 +221,7 @@ $role_permissions = [
         'recordatorios',
         'inventario',
         'calidad',
+        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'ventas' => [
@@ -249,6 +252,7 @@ $role_permissions = [
         'clientes_web',
         'encuestas',
         'calidad',
+        'fotos_nube',
         'inicio_principal', 'scan', 'dashboard_principal', 'tienda', 'blog'
     ],
     'revendedor' => [
@@ -258,6 +262,7 @@ $role_permissions = [
         'cotizacion_clientes',
         'pedidos',
         'blog',
+        'fotos_nube',
         'inicio_principal', 'dashboard_principal', 'tienda'
     ]
 ];
@@ -323,6 +328,7 @@ $page_permissions = [
     'blog.php' => 'blog',
     'envio_config.php' => 'envio_config',
     'trabajos.php' => 'trabajos',
+    'fotos_nube.php' => 'fotos_nube',
     'slideshow.php' => 'slideshow',
     'slideshow_crear.php' => 'slideshow',
     'slideshow_editar.php' => 'slideshow',
@@ -2288,7 +2294,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                 <?php endif; ?>
 
                 <!-- Empresa -->
-                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
+                <?php if ($can_access_any(['empresa', 'trabajos', 'slideshow', 'banners', 'fotos_nube', 'mp_config', 'precios_ecommerce', 'google_analytics', 'email_config', 'envio_config', 'metodos_pago', 'faq', 'blog', 'suscriptores', 'admin_mensajes']) || $role === 'admin'): ?>
                 <div class="menu-section">
                     <div class="menu-header collapsed" data-bs-toggle="collapse" data-bs-target="#menuEmpresa" title="Empresa">
                         <span><i class="bi bi-building"></i><span class="menu-label"> Empresa</span></span>
@@ -2310,6 +2316,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('banners')): ?>
                         <a href="<?= $admin_url ?>banners.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['banners.php', 'banners_crear.php', 'banners_eliminar.php'], true) ? 'active' : '' ?>"><i class="bi bi-images"></i> Banners Promocionales</a>
+                        <?php endif; ?>
+                        <?php if ($can_access('fotos_nube')): ?>
+                        <a href="<?= $admin_url ?>fotos_nube.php" class="<?= basename($_SERVER['PHP_SELF']) === 'fotos_nube.php' ? 'active' : '' ?>"><i class="bi bi-cloud-arrow-up"></i> Nube de Fotos</a>
                         <?php endif; ?>
                         <?php if ($can_access('mp_config')): ?>
                         <a href="<?= $admin_url ?>mp_config.php" class="<?= basename($_SERVER['PHP_SELF']) === 'mp_config.php' ? 'active' : '' ?>"><i class="bi bi-credit-card"></i> Mercado Pago</a>
