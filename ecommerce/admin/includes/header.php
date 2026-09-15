@@ -388,6 +388,8 @@ $page_permissions = [
     'flujo_caja_egreso.php' => 'flujo_caja',
     'flujo_caja_reportes.php' => 'flujo_caja',
     'finanzas.php' => 'finanzas',
+    'presupuesto_estrategia.php' => 'finanzas',
+    'presupuesto_estrategia_reporte.php' => 'finanzas',
     'contabilidad.php' => 'finanzas',
     'pagos_sueldos_parciales.php' => 'flujo_caja',
     'cheques.php' => 'cheques',
@@ -2470,6 +2472,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     <div class="collapse menu-items" id="menuFinanzas">
                         <?php if ($can_access('finanzas')): ?>
                         <a href="<?= $admin_url ?>finanzas.php" class="<?= basename($_SERVER['PHP_SELF']) === 'finanzas.php' ? 'active' : '' ?>"><i class="bi bi-speedometer2"></i> Estado Financiero</a>
+                        <a href="<?= $admin_url ?>presupuesto_estrategia.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['presupuesto_estrategia.php', 'presupuesto_estrategia_reporte.php'], true) ? 'active' : '' ?>"><i class="bi bi-diagram-3"></i> Presupuesto / Estrategia</a>
                         <a href="<?= $admin_url ?>contabilidad.php" class="<?= basename($_SERVER['PHP_SELF']) === 'contabilidad.php' ? 'active' : '' ?>"><i class="bi bi-receipt-cutoff"></i> Contabilidad</a>
                         <?php endif; ?>
                         <?php if ($can_access('flujo_caja')): ?>
