@@ -27,8 +27,11 @@ if ($estadoPago === 'por_pagar') {
 
 $params = [];
 if ($busqueda !== '') {
-    $whereAdicional .= ' AND (c.nombre LIKE :busqueda OR c.email LIKE :busqueda)';
-    $params[':busqueda'] = '%' . $busqueda . '%';
+    $like = '%' . $busqueda . '%';
+    $whereAdicional .= ' AND (c.nombre LIKE :busqueda_nombre OR c.email LIKE :busqueda_email OR c.telefono LIKE :busqueda_telefono)';
+    $params[':busqueda_nombre'] = $like;
+    $params[':busqueda_email'] = $like;
+    $params[':busqueda_telefono'] = $like;
 }
 
 $saldoExpr = '(COALESCE(ped.total_pedidos, 0) - COALESCE(pag.total_pagado, 0))';
@@ -49,8 +52,10 @@ $sql = "
            p_last.tipo_factura AS ultimo_tipo_factura,
            p_last.numero_factura AS ultimo_numero_factura,
            p_last.fecha_facturacion AS ultima_fecha_facturacion,
+           p_last.estado AS ultimo_pedido_estado,
            op.fecha_creacion AS orden_fecha_creacion,
-           op.fecha_entrega AS orden_fecha_entrega
+           op.fecha_entrega AS orden_fecha_entrega,
+           COALESCE(ent.entregado_con_saldo, 0) AS entregado_con_saldo
     FROM ecommerce_clientes c
     LEFT JOIN (
         SELECT cliente_id, SUM(total) AS total_pedidos, MAX(id) AS ultimo_pedido_id
@@ -73,14 +78,40 @@ $sql = "
         FROM ecommerce_ordenes_produccion
         GROUP BY pedido_id
     ) op ON op.pedido_id = p_last.id
+    LEFT JOIN (
+        SELECT p.cliente_id, 1 AS entregado_con_saldo
+        FROM ecommerce_pedidos p
+        LEFT JOIN (
+            SELECT pedido_id, SUM(monto) AS pagado
+            FROM ecommerce_pedido_pagos
+            GROUP BY pedido_id
+        ) pp ON pp.pedido_id = p.id
+        LEFT JOIN (
+            SELECT pedido_id,
+                   MAX(CASE WHEN LOWER(estado) = 'entregado' THEN 1 ELSE 0 END) AS op_entregada
+            FROM ecommerce_ordenes_produccion
+            GROUP BY pedido_id
+        ) opx ON opx.pedido_id = p.id
+        WHERE p.estado != 'cancelado'
+          AND (LOWER(p.estado) = 'entregado' OR COALESCE(opx.op_entregada, 0) = 1)
+          AND (COALESCE(p.total, 0) - COALESCE(pp.pagado, 0)) > 0.009
+        GROUP BY p.cliente_id
+    ) ent ON ent.cliente_id = c.id
     WHERE COALESCE(ped.total_pedidos, 0) > 0
     {$whereAdicional}
     ORDER BY {$orderBy}
 ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$error = '';
+$clientes = [];
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    error_log('facturacion_clientes filtro: ' . $e->getMessage());
+    $error = 'No se pudo aplicar el filtro. Probá de nuevo o limpiá la búsqueda.';
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -194,8 +225,12 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         </form>
 
+        <?php if ($error !== ''): ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+
         <?php if (empty($clientes)): ?>
-            <div class="alert alert-info">No hay clientes.</div>
+            <div class="alert alert-info"><?= $error !== '' ? 'No se pudieron listar clientes.' : 'No hay clientes.' ?></div>
         <?php else: ?>
             <div class="row mb-3">
                 <div class="col-md-6">
@@ -230,11 +265,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     </thead>
                     <tbody>
                         <?php foreach ($clientes as $c): ?>
-                            <tr data-saldo="<?= $c['saldo'] ?>">
+                            <?php
+                                $saldoPendiente = (float)$c['saldo'] > 0.009;
+                                $pedidoEntregado = strtolower((string)($c['ultimo_pedido_estado'] ?? '')) === 'entregado';
+                                $entregadoConSaldo = $saldoPendiente && (!empty($c['entregado_con_saldo']) || $pedidoEntregado);
+                            ?>
+                            <tr data-saldo="<?= $c['saldo'] ?>" class="<?= $entregadoConSaldo ? 'table-danger fw-semibold' : '' ?>">
                                 <td>
                                     <input type="checkbox" name="cliente_check" class="form-check-input" value="<?= $c['id'] ?>">
                                 </td>
-                                <td><strong><?= htmlspecialchars($c['nombre']) ?></strong></td>
+                                <td>
+                                    <strong class="<?= $entregadoConSaldo ? 'text-danger' : '' ?>"><?= htmlspecialchars($c['nombre']) ?></strong>
+                                    <?php if ($entregadoConSaldo): ?>
+                                        <div class="small text-danger">Entregado con saldo</div>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <?= htmlspecialchars($c['email'] ?? '-') ?><br>
                                     <small class="text-muted"><?= htmlspecialchars($c['telefono'] ?? '-') ?></small>
