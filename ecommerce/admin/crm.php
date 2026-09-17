@@ -1,6 +1,8 @@
 <?php
 require 'includes/header.php';
 
+const CRM_LEADS_DESDE = '2026-09-14';
+
 function crm_table_exists(PDO $pdo, string $table): bool
 {
     try {
@@ -157,9 +159,10 @@ function crm_match_lead_id(PDO $pdo, string $nombre = '', string $telefono = '',
                 FROM ecommerce_crm_visitas c
                 INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
                 WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(v.telefono,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '') = ?
+                  AND COALESCE(v.fecha_visita, DATE(c.fecha_creacion)) >= ?
                 ORDER BY c.id DESC
                 LIMIT 1");
-            $stmt->execute([$telefonoNorm]);
+            $stmt->execute([$telefonoNorm, CRM_LEADS_DESDE]);
             $crmId = (int)$stmt->fetchColumn();
             if ($crmId > 0) {
                 return $crmId;
@@ -175,8 +178,9 @@ function crm_match_lead_id(PDO $pdo, string $nombre = '', string $telefono = '',
             $sql = "SELECT c.id
                 FROM ecommerce_crm_visitas c
                 INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
-                WHERE LOWER(TRIM(COALESCE(v.cliente_nombre, ''))) = ?";
-            $params = [$nombreNorm];
+                WHERE LOWER(TRIM(COALESCE(v.cliente_nombre, ''))) = ?
+                  AND COALESCE(v.fecha_visita, DATE(c.fecha_creacion)) >= ?";
+            $params = [$nombreNorm, CRM_LEADS_DESDE];
             if ($direccionNorm !== '') {
                 $sql .= " AND LOWER(TRIM(COALESCE(v.direccion, ''))) = ?";
                 $params[] = $direccionNorm;
@@ -297,7 +301,7 @@ function crm_sync_from_visits(PDO $pdo): array
     }
 
     try {
-        $result['inserted'] = (int)$pdo->exec("INSERT IGNORE INTO ecommerce_crm_visitas (visita_id, estado, prioridad, origen, proximo_contacto, asignado_a, fecha_creacion, fecha_actualizacion)
+        $stmt = $pdo->prepare("INSERT IGNORE INTO ecommerce_crm_visitas (visita_id, estado, prioridad, origen, proximo_contacto, asignado_a, fecha_creacion, fecha_actualizacion)
             SELECT
                 v.id,
                 CASE
@@ -311,7 +315,10 @@ function crm_sync_from_visits(PDO $pdo): array
                 v.creado_por,
                 COALESCE(v.fecha_creacion, NOW()),
                 NOW()
-            FROM ecommerce_visitas v");
+            FROM ecommerce_visitas v
+            WHERE COALESCE(v.fecha_visita, DATE(v.fecha_creacion)) >= ?");
+        $stmt->execute([CRM_LEADS_DESDE]);
+        $result['inserted'] = (int)$stmt->rowCount();
     } catch (Throwable $e) {
         $result['warnings'][] = 'No se pudieron sincronizar visitas automáticamente.';
         error_log('crm_sync_from_visits: ' . $e->getMessage());
@@ -336,7 +343,7 @@ function crm_sync_linked_quotes(PDO $pdo): array
             ? "COALESCE(q.direccion, '')"
             : (crm_column_exists($pdo, 'ecommerce_cotizaciones', 'empresa') ? "COALESCE(q.empresa, '')" : "''");
 
-        $stmt = $pdo->query("SELECT
+        $stmt = $pdo->prepare("SELECT
                 q.id,
                 q.numero_cotizacion,
                 COALESCE(q.nombre_cliente, '') AS nombre_cliente,
@@ -349,8 +356,10 @@ function crm_sync_linked_quotes(PDO $pdo): array
                 COALESCE(q.creado_por, 0) AS creado_por,
                 COALESCE(q.crm_id, 0) AS crm_id_actual
             FROM ecommerce_cotizaciones q
-            WHERE q.crm_id IS NULL OR q.crm_id = 0
+            WHERE (q.crm_id IS NULL OR q.crm_id = 0)
+              AND DATE(COALESCE(q.fecha_creacion, NOW())) >= ?
             ORDER BY q.fecha_creacion ASC, q.id ASC");
+        $stmt->execute([CRM_LEADS_DESDE]);
         $cotizaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($cotizaciones as $cotizacion) {
@@ -441,6 +450,40 @@ function crm_sync_linked_quotes(PDO $pdo): array
     }
 
     return $result;
+}
+
+function crm_purge_leads_anteriores(PDO $pdo): int
+{
+    if (!crm_table_exists($pdo, 'ecommerce_crm_visitas') || !crm_table_exists($pdo, 'ecommerce_visitas')) {
+        return 0;
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT c.id
+            FROM ecommerce_crm_visitas c
+            INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
+            WHERE COALESCE(v.fecha_visita, DATE(c.fecha_creacion)) < ?");
+        $stmt->execute([CRM_LEADS_DESDE]);
+        $ids = array_values(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
+        if (empty($ids)) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        if (crm_table_exists($pdo, 'ecommerce_cotizaciones') && crm_column_exists($pdo, 'ecommerce_cotizaciones', 'crm_id')) {
+            $pdo->prepare("UPDATE ecommerce_cotizaciones SET crm_id = NULL WHERE crm_id IN ($placeholders)")->execute($ids);
+        }
+        if (crm_table_exists($pdo, 'ecommerce_crm_seguimientos')) {
+            $pdo->prepare("DELETE FROM ecommerce_crm_seguimientos WHERE crm_id IN ($placeholders)")->execute($ids);
+        }
+        $del = $pdo->prepare("DELETE FROM ecommerce_crm_visitas WHERE id IN ($placeholders)");
+        $del->execute($ids);
+        return $del->rowCount();
+    } catch (Throwable $e) {
+        error_log('crm_purge_leads_anteriores: ' . $e->getMessage());
+        return 0;
+    }
 }
 
 function crm_redirect_with_flash(string $type, string $message, array $extraQuery = []): void
@@ -591,6 +634,7 @@ function crm_whatsapp_link(?string $telefono): string
 }
 
 $crm_schema_warnings = crm_ensure_schema($pdo);
+$crm_purged = crm_purge_leads_anteriores($pdo);
 $crm_sync_result = crm_sync_from_visits($pdo);
 $crm_sync_quotes = crm_sync_linked_quotes($pdo);
 
@@ -886,8 +930,8 @@ $lead_id = (int)($_GET['lead'] ?? 0);
 $lead_link_query = $_GET;
 unset($lead_link_query['ok'], $lead_link_query['error']);
 
-$where = ['1=1'];
-$params = [];
+$where = ['COALESCE(v.fecha_visita, DATE(c.fecha_creacion)) >= ?'];
+$params = [CRM_LEADS_DESDE];
 if ($busqueda !== '') {
     $where[] = '(v.titulo LIKE ? OR COALESCE(v.cliente_nombre, "") LIKE ? OR COALESCE(v.telefono, "") LIKE ? OR COALESCE(v.direccion, "") LIKE ? OR COALESCE(c.ultima_cotizacion_numero, "") LIKE ?)';
     $like = '%' . $busqueda . '%';
@@ -922,14 +966,17 @@ $kpis = [
     'potencial' => 0,
 ];
 try {
-    $stmt = $pdo->query("SELECT
+    $stmt = $pdo->prepare("SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS activos,
-        SUM(CASE WHEN proximo_contacto = CURDATE() AND estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS hoy,
-        SUM(CASE WHEN proximo_contacto IS NOT NULL AND proximo_contacto < CURDATE() AND estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS vencidos,
-        SUM(CASE WHEN estado = 'ganado' THEN 1 ELSE 0 END) AS ganados,
-        SUM(CASE WHEN estado != 'perdido' THEN monto_estimado ELSE 0 END) AS potencial
-    FROM ecommerce_crm_visitas");
+        SUM(CASE WHEN c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS activos,
+        SUM(CASE WHEN c.proximo_contacto = CURDATE() AND c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS hoy,
+        SUM(CASE WHEN c.proximo_contacto IS NOT NULL AND c.proximo_contacto < CURDATE() AND c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS vencidos,
+        SUM(CASE WHEN c.estado = 'ganado' THEN 1 ELSE 0 END) AS ganados,
+        SUM(CASE WHEN c.estado != 'perdido' THEN c.monto_estimado ELSE 0 END) AS potencial
+    FROM ecommerce_crm_visitas c
+    INNER JOIN ecommerce_visitas v ON v.id = c.visita_id
+    WHERE COALESCE(v.fecha_visita, DATE(c.fecha_creacion)) >= ?");
+    $stmt->execute([CRM_LEADS_DESDE]);
     $kpis = $stmt->fetch(PDO::FETCH_ASSOC) ?: $kpis;
 } catch (Throwable $e) {
     $kpis = [
@@ -1251,11 +1298,11 @@ if ($lead_actual) {
 <div class="crm-hero d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
     <div>
         <div class="d-flex flex-wrap gap-2 mb-2">
-            <span class="badge rounded-pill">CRM desde visitas</span>
+            <span class="badge rounded-pill">Desde el 14/09/2026</span>
             <span class="badge rounded-pill">Seguimiento comercial</span>
         </div>
-        <h1 class="h3 mb-1">📞 CRM de visitas</h1>
-        <p class="mb-0 opacity-75">Cada visita queda convertida en una oportunidad para hacer seguimiento, cotizar y cerrar.</p>
+        <h1 class="h3 mb-1">CRM de visitas</h1>
+        <p class="mb-0 opacity-75">Leads desde el lunes 14 de septiembre. Las oportunidades anteriores se sacaron para organizar el tablero.</p>
     </div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
         <a href="instalaciones.php" class="btn btn-light"><i class="bi bi-calendar-check"></i> Ver visitas</a>
@@ -1317,6 +1364,9 @@ if ($lead_actual) {
 
 <?php if ($mensaje !== ''): ?>
     <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+<?php endif; ?>
+<?php if (($crm_purged ?? 0) > 0): ?>
+    <div class="alert alert-warning">Se organizó el CRM: se quitaron <?= (int)$crm_purged ?> leads anteriores al 14/09/2026.</div>
 <?php endif; ?>
 <?php if (($crm_sync_result['inserted'] ?? 0) > 0): ?>
     <div class="alert alert-info">Se sincronizaron automáticamente <?= (int)$crm_sync_result['inserted'] ?> visitas al CRM.</div>
