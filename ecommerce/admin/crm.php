@@ -1,7 +1,6 @@
 <?php
 require 'includes/header.php';
-
-const CRM_LEADS_DESDE = '2026-09-14';
+require_once __DIR__ . '/includes/crm_config_helper.php';
 
 function crm_table_exists(PDO $pdo, string $table): bool
 {
@@ -634,6 +633,16 @@ function crm_whatsapp_link(?string $telefono): string
 }
 
 $crm_schema_warnings = crm_ensure_schema($pdo);
+$crm_config = crm_config_load($pdo);
+$crm_dias_vencido = (int)$crm_config['dias_vencido'];
+$crm_sql_vencido = crm_config_sql_vencido_expr('c', $crm_dias_vencido);
+if (!empty($crm_config['notificar_email'])) {
+    try {
+        crm_enviar_avisos_vencidos($pdo, false);
+    } catch (Throwable $e) {
+        error_log('crm_avisos_auto: ' . $e->getMessage());
+    }
+}
 $crm_purged = crm_purge_leads_anteriores($pdo);
 $crm_sync_result = crm_sync_from_visits($pdo);
 $crm_sync_quotes = crm_sync_linked_quotes($pdo);
@@ -954,7 +963,7 @@ if ($usuario_filtro > 0) {
     $params[] = $usuario_filtro;
 }
 if ($solo_vencidos) {
-    $where[] = "c.proximo_contacto IS NOT NULL AND c.proximo_contacto < CURDATE() AND c.estado NOT IN ('ganado','perdido')";
+    $where[] = $crm_sql_vencido;
 }
 
 $kpis = [
@@ -970,7 +979,7 @@ try {
         COUNT(*) AS total,
         SUM(CASE WHEN c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS activos,
         SUM(CASE WHEN c.proximo_contacto = CURDATE() AND c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS hoy,
-        SUM(CASE WHEN c.proximo_contacto IS NOT NULL AND c.proximo_contacto < CURDATE() AND c.estado NOT IN ('ganado','perdido') THEN 1 ELSE 0 END) AS vencidos,
+        SUM(CASE WHEN {$crm_sql_vencido} THEN 1 ELSE 0 END) AS vencidos,
         SUM(CASE WHEN c.estado = 'ganado' THEN 1 ELSE 0 END) AS ganados,
         SUM(CASE WHEN c.estado != 'perdido' THEN c.monto_estimado ELSE 0 END) AS potencial
     FROM ecommerce_crm_visitas c
@@ -1305,6 +1314,9 @@ if ($lead_actual) {
         <p class="mb-0 opacity-75">Leads desde el lunes 14 de septiembre. Las oportunidades anteriores se sacaron para organizar el tablero.</p>
     </div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
+        <?php if ($is_admin): ?>
+        <a href="crm_configuracion.php" class="btn btn-outline-light"><i class="bi bi-sliders"></i> Configuración</a>
+        <?php endif; ?>
         <a href="instalaciones.php" class="btn btn-light"><i class="bi bi-calendar-check"></i> Ver visitas</a>
         <a href="cotizaciones.php" class="btn btn-outline-light"><i class="bi bi-file-earmark-richtext"></i> Cotizaciones</a>
         <form method="POST" class="m-0">
@@ -1342,7 +1354,7 @@ if ($lead_actual) {
         <div class="card crm-kpi">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <div class="text-muted small">Vencidos</div>
+                    <div class="text-muted small">Vencidos (<?= (int)$crm_dias_vencido ?> día<?= $crm_dias_vencido === 1 ? '' : 's' ?>)</div>
                     <div class="fs-4 fw-bold text-danger"><?= (int)($kpis['vencidos'] ?? 0) ?></div>
                 </div>
                 <div class="icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></div>
@@ -1490,7 +1502,7 @@ if ($lead_actual) {
             <div class="col-12">
                 <div class="form-check mt-1">
                     <input class="form-check-input" type="checkbox" value="1" id="vencidos" name="vencidos" <?= $solo_vencidos ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="vencidos">Mostrar solo seguimientos vencidos</label>
+                    <label class="form-check-label" for="vencidos">Mostrar solo seguimientos vencidos (<?= (int)$crm_dias_vencido ?> día<?= (int)$crm_dias_vencido === 1 ? '' : 's' ?>)</label>
                 </div>
             </div>
         </form>
@@ -1525,7 +1537,7 @@ if ($lead_actual) {
                                 ][(string)($kanban['prioridad'] ?? 'media')] ?? 'priority-medium';
                                 $proximoKanban = (string)($kanban['proximo_contacto'] ?? '');
                                 $venceHoy = $proximoKanban !== '' && $proximoKanban === date('Y-m-d');
-                                $estaVencidoKanban = $proximoKanban !== '' && $proximoKanban < date('Y-m-d') && !in_array((string)$estado_key, ['ganado', 'perdido'], true);
+                                $estaVencidoKanban = crm_lead_esta_vencido($kanban, $crm_dias_vencido);
                                 $extraClaseCard = $estaVencidoKanban ? 'is-overdue' : ($venceHoy ? 'is-today' : '');
                                 ?>
                                 <div class="crm-kanban-card <?= htmlspecialchars($prioridadClase) ?> <?= htmlspecialchars($extraClaseCard) ?>" draggable="true" data-crm-id="<?= (int)$kanban['id'] ?>" data-current-estado="<?= htmlspecialchars($estado_key) ?>">
@@ -1587,7 +1599,7 @@ if ($lead_actual) {
                             <tbody>
                                 <?php foreach ($leads as $lead): ?>
                                     <?php
-                                    $esta_vencido = !empty($lead['proximo_contacto']) && $lead['proximo_contacto'] < date('Y-m-d') && !in_array($lead['estado'], ['ganado', 'perdido'], true);
+                                    $esta_vencido = crm_lead_esta_vencido($lead, $crm_dias_vencido);
                                     $es_activo = ((int)$lead['id'] === (int)$lead_id);
                                     ?>
                                     <tr class="<?= $esta_vencido ? 'crm-row-overdue' : '' ?> <?= $es_activo ? 'table-primary' : '' ?>">

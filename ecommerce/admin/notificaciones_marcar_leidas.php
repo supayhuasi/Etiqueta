@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/crm_config_helper.php';
 admin_require_csrf_post();
 
 header('Content-Type: application/json; charset=utf-8');
@@ -85,6 +86,12 @@ try {
         $stmtG->execute();
         foreach ($stmtG->fetchAll(PDO::FETCH_COLUMN, 0) as $id) {
             $marcados += $stmtIns->execute([$usuarioId, 'gastos_vencer', $id]) ? $stmtIns->rowCount() : 0;
+        }
+    }
+
+    if (function_exists('crm_contactos_vencidos')) {
+        foreach (crm_contactos_vencidos($pdo, 0, 300) as $crmLead) {
+            $marcados += $stmtIns->execute([$usuarioId, 'crm_vencidos', (string)($crmLead['id'] ?? '')]) ? $stmtIns->rowCount() : 0;
         }
     }
 

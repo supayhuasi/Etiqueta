@@ -359,6 +359,7 @@ $page_permissions = [
     'cotizacion_clientes_eliminar.php' => 'cotizacion_clientes',
     'recordatorios.php' => 'recordatorios',
     'crm.php' => 'crm',
+    'crm_configuracion.php' => 'crm',
     'descuentos.php' => 'descuentos',
     'cotizacion_clientes.php' => 'cotizacion_clientes',
     'encuestas.php' => 'encuestas',
@@ -509,6 +510,8 @@ $notificaciones_cotizaciones_altas_total = 0;
 $notificaciones_gastos_por_vencer = [];
 $notificaciones_gastos_por_vencer_total = 0;
 $notificaciones_gasto_vencimiento_dias = 5;
+$notificaciones_crm_vencidos = [];
+$notificaciones_crm_vencidos_total = 0;
 $notificacion_prueba_manual = [];
 $notificacion_prueba_manual_total = 0;
 $notificaciones_cotizacion_alta_monto = 500000.0;
@@ -519,6 +522,8 @@ $notif_debug_info = [];
 
 $notificaciones_permiso_produccion = ($role === 'admin') || $can_access('ordenes_produccion');
 $notificaciones_permiso_admin = ($role === 'admin');
+$notificaciones_permiso_crm = $can_access('crm');
+require_once __DIR__ . '/crm_config_helper.php';
 
 if ($notificaciones_permiso_admin && isset($_GET['test_notif'])) {
     $notificacion_prueba_manual_total = 1;
@@ -536,7 +541,7 @@ if ($notificaciones_permiso_admin && isset($_GET['test_notif'])) {
 // marcarlas como leídas para dejar de verlas hasta que aparezca un ítem nuevo.
 $notif_usuario_id = (int)($_SESSION['user']['id'] ?? 0);
 $notif_leidos_por_categoria = [];
-if (($notificaciones_permiso_produccion || $notificaciones_permiso_admin) && $notif_usuario_id > 0) {
+if (($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $notificaciones_permiso_crm) && $notif_usuario_id > 0) {
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS ecommerce_notif_leidas (
             id INT PRIMARY KEY AUTO_INCREMENT,
@@ -572,7 +577,7 @@ if (!function_exists('notif_filtrar_leidos')) {
     }
 }
 
-if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
+if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $notificaciones_permiso_crm) {
 
     // --- Sección 1: Órdenes de producción atrasadas (cache diario) ---
     if (
@@ -1260,6 +1265,22 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
         }
     }
 
+    // --- CRM: contactos vencidos ---
+    if ($notificaciones_permiso_crm) {
+        try {
+            $crm_notif_config = crm_config_load($pdo);
+            if (!empty($crm_notif_config['notificar_campana'])) {
+                $crm_notif_usuario = $notificaciones_permiso_admin ? 0 : $notif_usuario_id;
+                $notificaciones_crm_vencidos = crm_contactos_vencidos($pdo, $crm_notif_usuario, 8);
+                $notificaciones_crm_vencidos = notif_filtrar_leidos($notificaciones_crm_vencidos, $notif_leidos_por_categoria, 'crm_vencidos', 'id');
+                $notificaciones_crm_vencidos_total = count($notificaciones_crm_vencidos);
+            }
+        } catch (Throwable $e) {
+            error_log('Notif CRM vencidos error: ' . $e->getMessage());
+            $notif_debug_errors[] = '[crm_vencidos] ' . $e->getMessage();
+        }
+    }
+
     // --- Totales finales ---
     $notificaciones_total = (int)$notificaciones_atrasos_total;
     if ($notificaciones_permiso_admin) {
@@ -1279,6 +1300,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
     
     // Agregar tareas personales al total para todos los usuarios (no solo admin)
     $notificaciones_total += (int)$notificaciones_tareas_personales_total;
+    $notificaciones_total += (int)$notificaciones_crm_vencidos_total;
 }
 ?>
 <!DOCTYPE html>
@@ -1868,7 +1890,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
             <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
             <span class="theme-toggle-label" id="themeToggleLabel">Modo oscuro</span>
         </button>
-        <?php if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin): ?>
+        <?php if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $notificaciones_permiso_crm): ?>
             <div class="dropdown">
                 <button class="btn btn-outline-danger btn-sm notif-btn" type="button" data-bs-toggle="dropdown" aria-label="Notificaciones">
                     <i class="bi bi-bell"></i>
@@ -1880,7 +1902,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                     <div class="notif-header d-flex justify-content-between align-items-center">
                         <span>Notificaciones Admin</span>
                         <?php
-                        $notif_hay_persistentes = ((int)$notificaciones_tareas_vencidas_total + (int)$notificaciones_sin_tareas_total + (int)$notificaciones_gastos_por_vencer_total + (int)$notificaciones_atrasos_total) > 0;
+                        $notif_hay_persistentes = ((int)$notificaciones_tareas_vencidas_total + (int)$notificaciones_sin_tareas_total + (int)$notificaciones_gastos_por_vencer_total + (int)$notificaciones_atrasos_total + (int)$notificaciones_crm_vencidos_total) > 0;
                         ?>
                         <?php if ($notif_hay_persistentes): ?>
                             <button type="button" id="btnMarcarNotifLeidas" class="btn btn-sm btn-link p-0" style="font-size:12px;" title="Oculta tareas vencidas, gastos por vencer, órdenes atrasadas y usuarios sin tarea hasta que aparezca algo nuevo">
@@ -2047,6 +2069,27 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin) {
                                 </a>
                             <?php endforeach; ?>
                             <a class="notif-item text-primary fw-semibold" href="<?= $admin_url ?>cotizaciones.php">Ver cotizaciones</a>
+                        <?php endif; ?>
+
+                        <?php if ($notificaciones_crm_vencidos_total > 0): ?>
+                            <div class="notif-section-title">CRM contactos vencidos (<?= (int)$notificaciones_crm_vencidos_total ?>)</div>
+                            <?php foreach ($notificaciones_crm_vencidos as $crmNotif): ?>
+                                <?php
+                                $crmCliente = trim((string)($crmNotif['cliente_nombre'] ?? '')) !== ''
+                                    ? (string)$crmNotif['cliente_nombre']
+                                    : (string)($crmNotif['titulo'] ?? 'Contacto');
+                                $crmAtraso = max(0, (int)($crmNotif['dias_atraso'] ?? 0));
+                                ?>
+                                <a class="notif-item" href="<?= $admin_url ?>crm.php?lead=<?= (int)($crmNotif['id'] ?? 0) ?>&vencidos=1">
+                                    <div class="fw-semibold"><?= htmlspecialchars($crmCliente) ?></div>
+                                    <div class="small text-muted"><?= htmlspecialchars($crmNotif['asignado_nombre'] ?? 'Sin asignar') ?><?php if (!empty($crmNotif['telefono'])): ?> · <?= htmlspecialchars((string)$crmNotif['telefono']) ?><?php endif; ?></div>
+                                    <div class="small text-danger">
+                                        Próximo: <?= !empty($crmNotif['proximo_contacto']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$crmNotif['proximo_contacto']))) : 'Sin fecha' ?>
+                                        · Vencido hace <?= $crmAtraso ?> día(s)
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            <a class="notif-item text-danger fw-semibold" href="<?= $admin_url ?>crm.php?vencidos=1">Ver contactos vencidos</a>
                         <?php endif; ?>
 
                         <?php if ($notificaciones_permiso_admin && $notificaciones_gastos_por_vencer_total > 0): ?>
@@ -2381,6 +2424,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php endif; ?>
                         <?php if ($can_access('crm')): ?>
                         <a href="<?= $admin_url ?>crm.php" class="<?= basename($_SERVER['PHP_SELF']) === 'crm.php' ? 'active' : '' ?>"><i class="bi bi-person-lines-fill"></i> CRM Seguimiento</a>
+                        <?php if ($role === 'admin'): ?>
+                        <a href="<?= $admin_url ?>crm_configuracion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'crm_configuracion.php' ? 'active' : '' ?>"><i class="bi bi-sliders"></i> CRM Configuración</a>
+                        <?php endif; ?>
                         <?php endif; ?>
                         <?php if ($can_access('facturacion_clientes')): ?>
                         <a href="<?= $admin_url ?>facturacion_clientes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'facturacion_clientes.php' ? 'active' : '' ?>"><i class="bi bi-file-earmark-text"></i> Facturación</a>
