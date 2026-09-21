@@ -749,6 +749,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'mover_kanban') {
             $crm_id = (int)($_POST['crm_id'] ?? 0);
             $nuevo_estado = trim((string)($_POST['nuevo_estado'] ?? ''));
+            $es_ajax = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+                || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
 
             if ($crm_id <= 0 || !isset($estado_options[$nuevo_estado])) {
                 throw new Exception('No se pudo mover el lead en el Kanban.');
@@ -757,6 +759,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fecha_cierre = in_array($nuevo_estado, ['ganado', 'perdido'], true) ? date('Y-m-d') : null;
             $stmt = $pdo->prepare("UPDATE ecommerce_crm_visitas SET estado = ?, ultima_gestion = NOW(), fecha_cierre = ? WHERE id = ?");
             $stmt->execute([$nuevo_estado, $fecha_cierre, $crm_id]);
+
+            if ($es_ajax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'ok' => true,
+                    'crm_id' => $crm_id,
+                    'estado' => $nuevo_estado,
+                    'estado_label' => $estado_options[$nuevo_estado] ?? $nuevo_estado,
+                ]);
+                exit;
+            }
 
             crm_redirect_with_flash('ok', 'Lead movido correctamente en el Kanban.', ['lead' => $crm_id]);
         }
@@ -927,6 +940,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         $error = $e->getMessage();
+        $es_ajax = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+            || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
+        if ($es_ajax && $accion === 'mover_kanban') {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => $error]);
+            exit;
+        }
     }
 }
 
@@ -1206,17 +1227,22 @@ if ($lead_actual) {
         top: 1rem;
     }
     .crm-kanban-board {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(220px, 1fr));
+        display: flex;
         gap: 1rem;
-        align-items: start;
+        align-items: stretch;
+        overflow-x: auto;
+        padding-bottom: .4rem;
+        -webkit-overflow-scrolling: touch;
     }
     .crm-kanban-col {
         background: #f8fafc;
         border: 1px solid #e5edf7;
         border-radius: 16px;
         overflow: hidden;
-        min-height: 220px;
+        min-height: 260px;
+        flex: 0 0 min(260px, 86vw);
+        display: flex;
+        flex-direction: column;
     }
     .crm-kanban-header {
         padding: .85rem 1rem;
@@ -1230,6 +1256,10 @@ if ($lead_actual) {
         padding: .8rem;
         display: grid;
         gap: .75rem;
+        min-height: 200px;
+        max-height: 70vh;
+        overflow-y: auto;
+        flex: 1;
     }
     .crm-kanban-card {
         background: #fff;
@@ -1239,6 +1269,23 @@ if ($lead_actual) {
         box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
         cursor: grab;
         border-left: 5px solid #94a3b8;
+        touch-action: pan-y;
+        user-select: none;
+    }
+    .crm-kanban-card .crm-drag-handle {
+        font-size: .8rem;
+        color: #64748b;
+        letter-spacing: 1px;
+        margin: -.25rem -.25rem .45rem;
+        padding: .35rem .45rem;
+        border-radius: 8px;
+        background: #f1f5f9;
+        cursor: grab;
+        touch-action: none;
+    }
+    .crm-kanban-card.dragging,
+    .crm-kanban-card.dragging .crm-drag-handle {
+        cursor: grabbing;
     }
     .crm-kanban-card.prio-baja { border-left-color: #94a3b8; }
     .crm-kanban-card.prio-media { border-left-color: #64748b; }
@@ -1253,8 +1300,16 @@ if ($lead_actual) {
         border-color: #93c5fd;
     }
     .crm-kanban-card.dragging {
-        opacity: .65;
-        transform: rotate(1deg);
+        opacity: .35;
+    }
+    .crm-kanban-ghost {
+        position: fixed;
+        z-index: 2400;
+        pointer-events: none;
+        width: 240px;
+        opacity: .95;
+        transform: rotate(2deg);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, .18);
     }
     .crm-kanban-body.drag-over {
         background: #eef5ff;
@@ -1289,17 +1344,12 @@ if ($lead_actual) {
         font-size: .85rem;
         color: #64748b;
     }
-    @media (max-width: 1400px) {
-        .crm-kanban-board {
-            grid-template-columns: repeat(3, minmax(220px, 1fr));
-        }
-    }
     @media (max-width: 991px) {
         .crm-sticky {
             position: static;
         }
-        .crm-kanban-board {
-            grid-template-columns: 1fr;
+        .crm-kanban-col {
+            flex-basis: min(280px, 86vw);
         }
     }
 </style>
@@ -1524,9 +1574,9 @@ if ($lead_actual) {
                     </div>
                     <div class="crm-kanban-body" data-drop-estado="<?= htmlspecialchars($estado_key) ?>">
                         <?php if (empty($kanban_leads[$estado_key] ?? [])): ?>
-                            <div class="text-muted small">Sin registros</div>
+                            <div class="text-muted small crm-kanban-empty">Sin registros</div>
                         <?php else: ?>
-                            <?php foreach (array_slice($kanban_leads[$estado_key], 0, 8) as $kanban): ?>
+                            <?php foreach (array_slice($kanban_leads[$estado_key], 0, 20) as $kanban): ?>
                                 <?php
                                 $prioridadClase = 'prio-' . preg_replace('/[^a-z]/', '', strtolower((string)($kanban['prioridad'] ?? 'media')));
                                 $prioridadChipClase = [
@@ -1540,7 +1590,8 @@ if ($lead_actual) {
                                 $estaVencidoKanban = crm_lead_esta_vencido($kanban, $crm_dias_vencido);
                                 $extraClaseCard = $estaVencidoKanban ? 'is-overdue' : ($venceHoy ? 'is-today' : '');
                                 ?>
-                                <div class="crm-kanban-card <?= htmlspecialchars($prioridadClase) ?> <?= htmlspecialchars($extraClaseCard) ?>" draggable="true" data-crm-id="<?= (int)$kanban['id'] ?>" data-current-estado="<?= htmlspecialchars($estado_key) ?>">
+                                <div class="crm-kanban-card <?= htmlspecialchars($prioridadClase) ?> <?= htmlspecialchars($extraClaseCard) ?>" data-crm-id="<?= (int)$kanban['id'] ?>" data-current-estado="<?= htmlspecialchars($estado_key) ?>">
+                                    <div class="crm-drag-handle">⠿ Arrastrar</div>
                                     <div class="title mb-1"><?= htmlspecialchars(trim((string)($kanban['cliente_nombre'] ?? '')) !== '' ? $kanban['cliente_nombre'] : $kanban['titulo']) ?></div>
                                     <div class="meta mb-1"><?= htmlspecialchars($kanban['titulo'] ?? '') ?></div>
                                     <?php if (!empty($kanban['telefono'])): ?>
@@ -1561,8 +1612,8 @@ if ($lead_actual) {
                                     </div>
                                 </div>
                             <?php endforeach; ?>
-                            <?php if (count($kanban_leads[$estado_key] ?? []) > 8): ?>
-                                <div class="text-muted small">+<?= count($kanban_leads[$estado_key]) - 8 ?> más</div>
+                            <?php if (count($kanban_leads[$estado_key] ?? []) > 20): ?>
+                                <div class="text-muted small">+<?= count($kanban_leads[$estado_key]) - 20 ?> más</div>
                             <?php endif; ?>
                         <?php endif; ?>
                     </div>
@@ -1949,68 +2000,188 @@ if ($lead_actual) {
 
 <script>
 (function() {
-    const cards = document.querySelectorAll('.crm-kanban-card[draggable="true"]');
-    const dropzones = document.querySelectorAll('.crm-kanban-body[data-drop-estado]');
-    const openLinks = document.querySelectorAll('.crm-open-link');
-    const moveForm = document.getElementById('crmKanbanMoveForm');
-    const moveIdInput = document.getElementById('crmKanbanMoveId');
-    const moveEstadoInput = document.getElementById('crmKanbanMoveEstado');
-    let draggedCard = null;
+    const board = document.querySelector('.crm-kanban-board');
+    const dropzones = Array.prototype.slice.call(document.querySelectorAll('.crm-kanban-body[data-drop-estado]'));
+    const csrfToken = document.querySelector('#crmKanbanMoveForm input[name="csrf_token"]');
+    let drag = null;
 
-    openLinks.forEach(link => {
-        link.addEventListener('mousedown', event => event.stopPropagation());
-        link.addEventListener('touchstart', event => event.stopPropagation(), { passive: true });
-        link.addEventListener('click', event => {
-            event.preventDefault();
+    function zoneDesdePunto(x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        const body = el.closest('.crm-kanban-body[data-drop-estado]');
+        if (body) return body;
+        const col = el.closest('.crm-kanban-col');
+        return col ? col.querySelector('.crm-kanban-body[data-drop-estado]') : null;
+    }
+
+    function limpiarOver() {
+        dropzones.forEach(function (zone) { zone.classList.remove('drag-over'); });
+    }
+
+    function actualizarContadores() {
+        document.querySelectorAll('.crm-kanban-col').forEach(function (col) {
+            const body = col.querySelector('.crm-kanban-body');
+            const badge = col.querySelector('.crm-kanban-header .badge');
+            if (!body || !badge) return;
+            badge.textContent = String(body.querySelectorAll('.crm-kanban-card').length);
+            let empty = body.querySelector('.crm-kanban-empty');
+            const hayCards = body.querySelector('.crm-kanban-card');
+            if (!hayCards && !empty) {
+                empty = document.createElement('div');
+                empty.className = 'text-muted small crm-kanban-empty';
+                empty.textContent = 'Sin registros';
+                body.appendChild(empty);
+            } else if (hayCards && empty) {
+                empty.remove();
+            }
+        });
+    }
+
+    function moverLead(card, zone) {
+        const crmId = card.getAttribute('data-crm-id') || '';
+        const estadoActual = card.getAttribute('data-current-estado') || '';
+        const nuevoEstado = zone.getAttribute('data-drop-estado') || '';
+        if (!crmId || !nuevoEstado || estadoActual === nuevoEstado) {
+            return Promise.resolve(false);
+        }
+
+        const fd = new FormData();
+        fd.append('csrf_token', csrfToken ? csrfToken.value : '');
+        fd.append('accion', 'mover_kanban');
+        fd.append('crm_id', crmId);
+        fd.append('nuevo_estado', nuevoEstado);
+
+        return fetch('crm.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: fd,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        }).then(function (r) {
+            return r.text().then(function (text) {
+                var res = {};
+                try {
+                    res = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    throw new Error(r.status === 403 ? 'Sesión vencida. Recargá la página.' : 'No se pudo mover el lead');
+                }
+                if (!r.ok || !res.ok) {
+                    throw new Error(res.msg || 'No se pudo mover el lead');
+                }
+                return res;
+            });
+        }).then(function () {
+            const empty = zone.querySelector('.crm-kanban-empty');
+            if (empty) empty.remove();
+            zone.appendChild(card);
+            card.setAttribute('data-current-estado', nuevoEstado);
+            actualizarContadores();
+            return true;
+        });
+    }
+
+    function terminarDrag(okZone) {
+        if (!drag) return;
+        const card = drag.card;
+        const ghost = drag.ghost;
+        if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        card.classList.remove('dragging');
+        card.style.touchAction = '';
+        limpiarOver();
+        if (okZone) {
+            moverLead(card, okZone).catch(function (err) {
+                alert(err.message || 'No se pudo mover el lead');
+            });
+        }
+        drag = null;
+    }
+
+    document.querySelectorAll('.crm-open-link').forEach(function (link) {
+        link.addEventListener('pointerdown', function (event) { event.stopPropagation(); });
+        link.addEventListener('click', function (event) {
             event.stopPropagation();
-            const href = link.getAttribute('href');
-            if (href) {
-                window.location.href = href;
-            }
         });
     });
 
-    cards.forEach(card => {
-        card.addEventListener('dragstart', () => {
-            draggedCard = card;
-            card.classList.add('dragging');
-        });
+    document.querySelectorAll('.crm-kanban-card').forEach(function (card) {
+        card.addEventListener('pointerdown', function (event) {
+            if (event.button !== 0) return;
+            if (event.target.closest('a, button, input, select, textarea, label')) return;
 
-        card.addEventListener('dragend', () => {
-            card.classList.remove('dragging');
-            dropzones.forEach(zone => zone.classList.remove('drag-over'));
-            draggedCard = null;
-        });
-    });
+            const rect = card.getBoundingClientRect();
+            const desdeHandle = !!event.target.closest('.crm-drag-handle');
+            drag = {
+                card: card,
+                ghost: null,
+                startX: event.clientX,
+                startY: event.clientY,
+                offsetX: event.clientX - rect.left,
+                offsetY: event.clientY - rect.top,
+                active: false,
+                pointerId: event.pointerId,
+                pointerType: event.pointerType || 'mouse'
+            };
 
-    dropzones.forEach(zone => {
-        zone.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            zone.classList.add('drag-over');
-        });
+            try { card.setPointerCapture(event.pointerId); } catch (e) {}
 
-        zone.addEventListener('dragleave', () => {
-            zone.classList.remove('drag-over');
-        });
+            function onMove(ev) {
+                if (!drag || ev.pointerId !== drag.pointerId) return;
+                const dx = ev.clientX - drag.startX;
+                const dy = ev.clientY - drag.startY;
+                const absX = Math.abs(dx);
+                const absY = Math.abs(dy);
+                if (!drag.active) {
+                    if ((absX + absY) < 8) return;
+                    if (!desdeHandle && drag.pointerType === 'touch' && absX <= absY) return;
+                    drag.active = true;
+                    card.classList.add('dragging');
+                    card.style.touchAction = 'none';
+                    const ghost = card.cloneNode(true);
+                    ghost.classList.add('crm-kanban-ghost');
+                    ghost.style.width = rect.width + 'px';
+                    document.body.appendChild(ghost);
+                    drag.ghost = ghost;
+                }
+                ev.preventDefault();
+                drag.ghost.style.left = (ev.clientX - drag.offsetX) + 'px';
+                drag.ghost.style.top = (ev.clientY - drag.offsetY) + 'px';
+                limpiarOver();
+                const zone = zoneDesdePunto(ev.clientX, ev.clientY);
+                if (zone) zone.classList.add('drag-over');
 
-        zone.addEventListener('drop', (event) => {
-            event.preventDefault();
-            zone.classList.remove('drag-over');
-            if (!draggedCard || !moveForm || !moveIdInput || !moveEstadoInput) {
-                return;
+                if (board) {
+                    const boardRect = board.getBoundingClientRect();
+                    if (ev.clientX > boardRect.right - 48) {
+                        board.scrollLeft += 22;
+                    } else if (ev.clientX < boardRect.left + 48) {
+                        board.scrollLeft -= 22;
+                    }
+                }
+                if (zone) {
+                    const zoneRect = zone.getBoundingClientRect();
+                    if (ev.clientY > zoneRect.bottom - 36) {
+                        zone.scrollTop += 18;
+                    } else if (ev.clientY < zoneRect.top + 36) {
+                        zone.scrollTop -= 18;
+                    }
+                }
             }
 
-            const crmId = draggedCard.getAttribute('data-crm-id') || '0';
-            const estadoActual = draggedCard.getAttribute('data-current-estado') || '';
-            const nuevoEstado = zone.getAttribute('data-drop-estado') || '';
-
-            if (!crmId || !nuevoEstado || estadoActual === nuevoEstado) {
-                return;
+            function onUp(ev) {
+                if (drag && ev.pointerId !== drag.pointerId) return;
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+                document.removeEventListener('pointercancel', onUp);
+                try { card.releasePointerCapture(drag ? drag.pointerId : ev.pointerId); } catch (e) {}
+                const zone = drag && drag.active ? zoneDesdePunto(ev.clientX, ev.clientY) : null;
+                terminarDrag(zone);
             }
 
-            moveIdInput.value = crmId;
-            moveEstadoInput.value = nuevoEstado;
-            moveForm.submit();
+            document.addEventListener('pointermove', onMove, { passive: false });
+            document.addEventListener('pointerup', onUp);
+            document.addEventListener('pointercancel', onUp);
         });
     });
 })();
