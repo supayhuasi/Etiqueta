@@ -199,6 +199,51 @@ function valor_fecha_valido($valor) {
     return $dt && $dt->format('Y-m-d') === $valor;
 }
 
+function instalaciones_formatear_dinero($valor): string
+{
+    return '$' . number_format((float)$valor, 0, ',', '.');
+}
+
+function instalaciones_estado_op_label(string $estado): string
+{
+    $map = [
+        'pendiente' => 'Pendiente',
+        'en_produccion' => 'En producción',
+        'terminado' => 'Terminado',
+        'entregado' => 'Entregado',
+        'cancelado' => 'Cancelado',
+    ];
+    $key = strtolower(trim($estado));
+    return $map[$key] ?? ucfirst(str_replace('_', ' ', $key));
+}
+
+function instalaciones_saldos_pedidos(PDO $pdo, array $pedidoIds): array
+{
+    $pedidoIds = array_values(array_unique(array_filter(array_map('intval', $pedidoIds))));
+    if ($pedidoIds === [] || !tabla_existe($pdo, 'ecommerce_pedidos') || !columna_existe($pdo, 'ecommerce_pedidos', 'total')) {
+        return [];
+    }
+
+    $in = implode(',', array_fill(0, count($pedidoIds), '?'));
+    $pagadoSql = '0';
+    if (tabla_existe($pdo, 'ecommerce_pedido_pagos') && columna_existe($pdo, 'ecommerce_pedido_pagos', 'monto')) {
+        $pagadoSql = "COALESCE((SELECT SUM(pp.monto) FROM ecommerce_pedido_pagos pp WHERE pp.pedido_id = p.id), 0)";
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT p.id, COALESCE(p.total, 0) - {$pagadoSql} AS saldo FROM ecommerce_pedidos p WHERE p.id IN ({$in})");
+        $stmt->execute($pedidoIds);
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int)$row['id']] = (float)$row['saldo'];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('instalaciones_saldos_pedidos: ' . $e->getMessage());
+        return [];
+    }
+}
+
 function proximo_orden_visual($pdo, $tipo, $fecha) {
     $map = [
         'orden' => ['tabla' => 'ecommerce_ordenes_produccion', 'campo_fecha' => 'fecha_instalacion'],
@@ -748,6 +793,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'marcar_entregado') {
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        verificar_sesion_json();
+
+        $item_id = (int)($_POST['item_id'] ?? 0);
+        $cuando = trim((string)($_POST['cuando'] ?? ''));
+        $fecha = trim((string)($_POST['fecha'] ?? ''));
+
+        if (!$tablas_base_ok || $item_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para marcar entregado']);
+            exit;
+        }
+
+        if ($cuando === 'manana') {
+            $fecha = date('Y-m-d', strtotime('+1 day'));
+        } elseif ($cuando === 'hoy') {
+            $fecha = date('Y-m-d');
+        } elseif ($fecha === '' || !valor_fecha_valido($fecha)) {
+            $fecha = date('Y-m-d');
+        }
+
+        try {
+            $stmt = $pdo->prepare("SELECT id, pedido_id, estado FROM ecommerce_ordenes_produccion WHERE id = ? LIMIT 1");
+            $stmt->execute([$item_id]);
+            $orden = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$orden) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'msg' => 'La orden no existe']);
+                exit;
+            }
+            if (strtolower((string)$orden['estado']) === 'cancelado') {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'msg' => 'No se puede entregar una orden cancelada']);
+                exit;
+            }
+
+            $set = ['estado = ?'];
+            $params = ['entregado'];
+            if ($tiene_fecha_instalacion) {
+                $set[] = 'fecha_instalacion = ?';
+                $params[] = $fecha;
+            }
+            if (columna_existe($pdo, 'ecommerce_ordenes_produccion', 'fecha_entrega')) {
+                $set[] = 'fecha_entrega = COALESCE(fecha_entrega, ?)';
+                $params[] = $fecha;
+            }
+            $extra = fragmento_update_fecha_actualizacion($pdo, 'ecommerce_ordenes_produccion');
+            $params[] = $item_id;
+            $stmt = $pdo->prepare('UPDATE ecommerce_ordenes_produccion SET ' . implode(', ', $set) . $extra . ' WHERE id = ?');
+            $stmt->execute($params);
+
+            $pedidoId = (int)($orden['pedido_id'] ?? 0);
+            if ($pedidoId > 0 && tabla_existe($pdo, 'ecommerce_pedidos')) {
+                if (columna_existe($pdo, 'ecommerce_pedidos', 'fecha_entregado')) {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'entregado', fecha_entregado = NOW() WHERE id = ? AND LOWER(COALESCE(estado, '')) <> 'cancelado'");
+                    $stmt->execute([$pedidoId]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE ecommerce_pedidos SET estado = 'entregado' WHERE id = ? AND LOWER(COALESCE(estado, '')) <> 'cancelado'");
+                    $stmt->execute([$pedidoId]);
+                }
+            }
+
+            echo json_encode([
+                'ok' => true,
+                'data' => [
+                    'item_id' => $item_id,
+                    'pedido_id' => $pedidoId,
+                    'estado' => 'entregado',
+                    'fecha_instalacion' => $fecha,
+                ],
+            ]);
+            exit;
+        } catch (Exception $e) {
+            error_log('marcar_entregado: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo marcar como entregado']);
+            exit;
+        }
+    }
+
     if ($action === 'guardar_texto_tarjeta') {
         ob_clean();
         header('Content-Type: application/json; charset=utf-8');
@@ -926,7 +1053,9 @@ try {
         FROM ecommerce_ordenes_produccion op
         JOIN ecommerce_pedidos p ON op.pedido_id = p.id
         {$join_cliente}
-        WHERE " . ($incluir_entregados ? "op.estado IN ('terminado','entregado')" : "op.estado = 'terminado'");
+        WHERE LOWER(COALESCE(op.estado, '')) <> 'cancelado'
+          AND LOWER(COALESCE(p.estado, '')) <> 'cancelado'
+          AND " . ($incluir_entregados ? "1=1" : "LOWER(COALESCE(op.estado, '')) <> 'entregado'");
 
     $params_ordenes = [];
 
@@ -953,6 +1082,7 @@ try {
     $stmt = $pdo->prepare($sql_ordenes);
     $stmt->execute($params_ordenes);
     $ordenes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $saldos_pedidos = instalaciones_saldos_pedidos($pdo, array_column($ordenes, 'pedido_id'));
 
     foreach ($ordenes as $row) {
         $nombre = trim($row['envio_nombre'] ?? '') ?: ($row['cliente_nombre'] ?? 'Sin nombre');
@@ -976,6 +1106,8 @@ try {
             'texto_tarjeta' => trim($row['notas_instalacion'] ?? ''),
             'orden_visual' => (int)($row['orden_visual'] ?? 0),
             'cliente_id' => !empty($row['cliente_id']) ? (int)$row['cliente_id'] : null,
+            'estado_produccion' => strtolower(trim((string)($row['estado_produccion'] ?? ''))),
+            'saldo' => (float)($saldos_pedidos[(int)$row['pedido_id']] ?? 0),
         ];
 
         $clave = (!empty($item['fecha_instalacion']) && isset($items_por_columna[$item['fecha_instalacion']]))
@@ -1185,8 +1317,20 @@ function render_tarjeta_instalacion($item) {
         $badgeClass = 'bg-dark';
         $badgeText = 'Manual';
     } elseif ($tipo === 'orden') {
-        $badgeClass = 'bg-primary';
-        $badgeText = 'OP';
+        $estadoOp = strtolower((string)($item['estado_produccion'] ?? ''));
+        if ($estadoOp === 'entregado') {
+            $badgeClass = 'bg-success';
+            $badgeText = 'Entregado';
+        } elseif ($estadoOp === 'en_produccion') {
+            $badgeClass = 'bg-info text-dark';
+            $badgeText = 'En prod.';
+        } elseif ($estadoOp === 'pendiente') {
+            $badgeClass = 'bg-secondary';
+            $badgeText = 'Pendiente';
+        } else {
+            $badgeClass = 'bg-primary';
+            $badgeText = 'OP';
+        }
     } elseif ($tipo === 'visita') {
         $badgeClass = 'bg-warning text-dark';
         $badgeText = 'Visita';
@@ -1221,6 +1365,8 @@ function render_tarjeta_instalacion($item) {
         <?php if ($tipo === 'orden'): ?>
             data-orden-fecha="<?= htmlspecialchars($item['fecha_instalacion']) ?>"
             data-orden-notas="<?= htmlspecialchars($item['texto_tarjeta']) ?>"
+            data-orden-estado="<?= htmlspecialchars((string)($item['estado_produccion'] ?? '')) ?>"
+            data-orden-saldo="<?= htmlspecialchars((string)($item['saldo'] ?? 0)) ?>"
         <?php endif; ?>
     >
         <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
@@ -1233,9 +1379,15 @@ function render_tarjeta_instalacion($item) {
         <?php if (!empty($item['hora_visita'])): ?>
             <div class="small text-muted mb-1">Hora: <?= htmlspecialchars(date('H:i', strtotime($item['hora_visita']))) ?> hs</div>
         <?php endif; ?>
+        <?php if ($tipo === 'orden' && !empty($item['estado_produccion'])): ?>
+            <div class="small text-muted mb-1 inst-card-estado">Estado: <?= htmlspecialchars(instalaciones_estado_op_label((string)$item['estado_produccion'])) ?></div>
+        <?php endif; ?>
         <?php if ($subtitulo !== ''): ?><div class="small inst-card-subtitle"><?= htmlspecialchars($subtitulo) ?></div><?php endif; ?>
         <?php if ($direccion !== ''): ?><div class="small text-muted inst-card-address"><?= htmlspecialchars($direccion) ?></div><?php endif; ?>
         <?php if ($localidad !== ''): ?><div class="small text-muted inst-card-locality"><?= htmlspecialchars($localidad) ?></div><?php endif; ?>
+        <?php if ($tipo === 'orden' && (float)($item['saldo'] ?? 0) > 0.009): ?>
+            <div class="small inst-card-saldo mt-1">Saldo: <?= htmlspecialchars(instalaciones_formatear_dinero($item['saldo'])) ?></div>
+        <?php endif; ?>
 
         <div class="mt-2">
             <label class="form-label small mb-1">Texto tarjeta</label>
@@ -1246,6 +1398,19 @@ function render_tarjeta_instalacion($item) {
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-subir" title="Subir">↑</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-bajar" title="Bajar">↓</button>
                 <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">✕</button>
+                <?php
+                $estadoOpBtn = strtolower((string)($item['estado_produccion'] ?? ''));
+                if ($tipo === 'orden' && !in_array($estadoOpBtn, ['entregado', 'cancelado'], true)):
+                    $fechaEsteDia = !empty($item['fecha_instalacion']) ? (string)$item['fecha_instalacion'] : date('Y-m-d');
+                    $fechaDiaSiguiente = date('Y-m-d', strtotime($fechaEsteDia . ' +1 day'));
+                ?>
+                    <button type="button" class="btn btn-sm btn-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaEsteDia) ?>" title="Marcar entregado ese día">
+                        Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaEsteDia))) ?>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaDiaSiguiente) ?>" title="Marcar entregado al día siguiente">
+                        Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaDiaSiguiente))) ?>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -1311,6 +1476,10 @@ function render_tarjeta_instalacion($item) {
     font-size: .68rem;
     flex-shrink: 0;
 }
+.inst-card-saldo {
+    color: #b42318;
+    font-weight: 700;
+}
 
 /* Mobile optimizations */
 @media (max-width: 768px) {
@@ -1372,7 +1541,7 @@ function render_tarjeta_instalacion($item) {
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h1 class="mb-1">Instalaciones y visitas</h1>
-        <p class="text-muted mb-0">Tablero único para programar, ordenar y documentar tarjetas por día</p>
+        <p class="text-muted mb-0">Las órdenes no entregadas sin fecha aparecen a la izquierda para arrastrarlas a un día. Desde la tarjeta se pueden entregar ese día o el siguiente, y se muestra el saldo si el pedido lo tiene.</p>
     </div>
     <a href="ordenes_produccion.php" class="btn btn-outline-secondary">Órdenes de Producción</a>
 </div>
@@ -1696,7 +1865,12 @@ function render_tarjeta_instalacion($item) {
                                 <?php endif; ?>
                             </td>
                             <td class="cell-title"><?= htmlspecialchars($item['titulo']) ?></td>
-                            <td class="cell-cliente"><?= htmlspecialchars($item['subtitulo'] ?: '-') ?></td>
+                            <td class="cell-cliente">
+                                <?= htmlspecialchars($item['subtitulo'] ?: '-') ?>
+                                <?php if ($item['tipo'] === 'orden' && (float)($item['saldo'] ?? 0) > 0.009): ?>
+                                    <div class="small text-danger fw-semibold">Saldo <?= htmlspecialchars(instalaciones_formatear_dinero($item['saldo'])) ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td class="cell-direccion"><?= htmlspecialchars($item['direccion'] ?: '-') ?></td>
                             <td class="cell-localidad"><?= htmlspecialchars($item['localidad'] ?: '-') ?></td>
                             <td class="cell-fecha" data-fecha="<?= htmlspecialchars($item['fecha_instalacion'] ?: '') ?>"><?= $item['fecha_instalacion'] ? htmlspecialchars(date('d/m/Y', strtotime($item['fecha_instalacion']))) : '-' ?></td>
@@ -1869,8 +2043,11 @@ function render_tarjeta_instalacion($item) {
                             <textarea name="notas" id="orden-notas" rows="4" class="form-control"></textarea>
                         </div>
                     </div>
+                    <div class="small text-muted mt-3">Podés marcar entregado el mismo día de la tarjeta o el día siguiente.</div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer flex-wrap">
+                    <button type="button" class="btn btn-success" id="btn-orden-entregar-hoy">Entregar hoy</button>
+                    <button type="button" class="btn btn-outline-success" id="btn-orden-entregar-manana">Entregar mañana</button>
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar cambios</button>
                 </div>
@@ -1967,6 +2144,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var formEditarOrden = document.getElementById('form-editar-orden');
     var ordenModal     = (ordenModalEl && window.bootstrap) ? new bootstrap.Modal(ordenModalEl) : null;
     var activeOrdenId  = null;
+    var btnEntregarHoy = document.getElementById('btn-orden-entregar-hoy');
+    var btnEntregarManana = document.getElementById('btn-orden-entregar-manana');
     var formCrearManual = document.getElementById('form-crear-instalacion-manual');
     var formCrearVisitaNueva = document.getElementById('form-crear-visita');
 
@@ -2183,6 +2362,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
+            if (card.getAttribute('data-tipo') === 'orden') {
+                card.setAttribute('data-orden-fecha', fechaDestino || '');
+                actualizarBotonesEntrega(card, fechaDestino || '');
+            }
+
             var zona = card.closest('.inst-dropzone');
             guardarOrdenColumna(zona);
         })
@@ -2192,6 +2376,33 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             alert(err.message || 'No se pudo guardar el cambio');
         });
+    }
+
+    function fmtDiaMes(fechaIso) {
+        if (!fechaIso) return '';
+        var p = fechaIso.split('-');
+        if (p.length !== 3) return fechaIso;
+        return p[2] + '/' + p[1];
+    }
+
+    function actualizarBotonesEntrega(card, fechaBase) {
+        if (!card || card.getAttribute('data-tipo') !== 'orden') return;
+        if ((card.getAttribute('data-orden-estado') || '') === 'entregado') return;
+        var botones = card.querySelectorAll('.inst-btn-entregar');
+        if (botones.length < 2) return;
+        var n = new Date();
+        var hoyLocal = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+        var base = fechaBase || hoyLocal;
+        var d = new Date(base + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        var siguiente = y + '-' + m + '-' + day;
+        botones[0].setAttribute('data-fecha', base);
+        botones[0].textContent = 'Entregar ' + fmtDiaMes(base);
+        botones[1].setAttribute('data-fecha', siguiente);
+        botones[1].textContent = 'Entregar ' + fmtDiaMes(siguiente);
     }
 
     function setOrCreateText(card, selector, text, muted) {
@@ -2367,6 +2578,9 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('orden-item-id').value = activeOrdenId || '';
         document.getElementById('orden-fecha').value   = card.getAttribute('data-orden-fecha') || '';
         document.getElementById('orden-notas').value   = card.getAttribute('data-orden-notas') || '';
+        var yaEntregada = (card.getAttribute('data-orden-estado') || '') === 'entregado';
+        if (btnEntregarHoy) btnEntregarHoy.style.display = yaEntregada ? 'none' : '';
+        if (btnEntregarManana) btnEntregarManana.style.display = yaEntregada ? 'none' : '';
         ordenModal.show();
     }
 
@@ -2739,6 +2953,99 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (ordenModal) ordenModal.hide();
             })
             .catch(function (err) { alert(err.message || 'No se pudo guardar la orden'); });
+        });
+    }
+
+    var incluirEntregadosTablero = <?= $incluir_entregados ? 'true' : 'false' ?>;
+
+    function aplicarEntregaEnCard(card, fecha) {
+        if (!card) return;
+        card.setAttribute('data-orden-fecha', fecha || '');
+        card.setAttribute('data-orden-estado', 'entregado');
+        var badge = card.querySelector('.badge');
+        if (badge) {
+            badge.className = 'badge bg-success';
+            badge.textContent = 'Entregado';
+        }
+        var estadoEl = card.querySelector('.inst-card-estado');
+        if (estadoEl) {
+            estadoEl.textContent = 'Estado: Entregado';
+        }
+        card.querySelectorAll('.inst-btn-entregar').forEach(function (btn) { btn.remove(); });
+
+        var destino = document.querySelector('.inst-dropzone[data-fecha="' + (fecha || '') + '"]');
+        var origen = card.parentNode;
+        if (destino && origen && destino !== origen) {
+            destino.appendChild(card);
+            actualizarBadgeColumna(origen);
+            actualizarBadgeColumna(destino);
+        }
+    }
+
+    function marcarOrdenEntregada(itemId, fecha, card, cuando) {
+        if (!itemId) return;
+        var fd = new FormData();
+        fd.append('action', 'marcar_entregado');
+        fd.append('item_id', itemId);
+        fd.append('fecha', fecha || '');
+        if (cuando) {
+            fd.append('cuando', cuando);
+        }
+        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res || !res.ok) {
+                throw new Error((res && res.msg) ? res.msg : 'No se pudo marcar como entregado');
+            }
+            var fechaOk = (res.data && res.data.fecha_instalacion) ? res.data.fecha_instalacion : fecha;
+            if (!incluirEntregadosTablero && card) {
+                var origen = card.parentNode;
+                card.remove();
+                if (origen) actualizarBadgeColumna(origen);
+                actualizarResumenInstalaciones();
+            } else if (card) {
+                aplicarEntregaEnCard(card, fechaOk);
+            } else {
+                window.location.reload();
+            }
+            if (ordenModal) ordenModal.hide();
+        })
+        .catch(function (err) {
+            alert(err.message || 'No se pudo marcar como entregado');
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.inst-btn-entregar');
+        if (!btn) return;
+        var card = btn.closest('.inst-card');
+        if (!card || card.getAttribute('data-tipo') !== 'orden') return;
+        e.preventDefault();
+        e.stopPropagation();
+        var fecha = btn.getAttribute('data-fecha') || '';
+        var itemId = card.getAttribute('data-id');
+        if (!confirm('¿Marcar esta orden como entregada el ' + fecha.split('-').reverse().join('/') + '?')) {
+            return;
+        }
+        marcarOrdenEntregada(itemId, fecha, card);
+    });
+
+    if (btnEntregarHoy) {
+        btnEntregarHoy.addEventListener('click', function () {
+            var itemId = document.getElementById('orden-item-id').value;
+            var card = document.querySelector('.inst-card[data-tipo="orden"][data-id="' + itemId + '"]');
+            marcarOrdenEntregada(itemId, '', card, 'hoy');
+        });
+    }
+    if (btnEntregarManana) {
+        btnEntregarManana.addEventListener('click', function () {
+            var itemId = document.getElementById('orden-item-id').value;
+            var card = document.querySelector('.inst-card[data-tipo="orden"][data-id="' + itemId + '"]');
+            marcarOrdenEntregada(itemId, '', card, 'manana');
         });
     }
 
