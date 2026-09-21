@@ -1,6 +1,23 @@
 <?php
-require 'includes/header.php';
-require_once __DIR__ . '/includes/crm_config_helper.php';
+$crm_es_ajax = (
+    ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
+    && (
+        strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false
+    )
+);
+
+if ($crm_es_ajax) {
+    ob_start();
+    require 'includes/header.php';
+    require_once __DIR__ . '/includes/crm_config_helper.php';
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+} else {
+    require 'includes/header.php';
+    require_once __DIR__ . '/includes/crm_config_helper.php';
+}
 
 function crm_table_exists(PDO $pdo, string $table): bool
 {
@@ -485,6 +502,25 @@ function crm_purge_leads_anteriores(PDO $pdo): int
     }
 }
 
+function crm_request_is_ajax(): bool
+{
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
+}
+
+function crm_json_exit(array $payload, int $code = 200): void
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        http_response_code($code);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 function crm_redirect_with_flash(string $type, string $message, array $extraQuery = []): void
 {
     $query = array_merge($_GET, $extraQuery);
@@ -632,20 +668,22 @@ function crm_whatsapp_link(?string $telefono): string
     return 'https://wa.me/' . $digits;
 }
 
-$crm_schema_warnings = crm_ensure_schema($pdo);
+$crm_schema_warnings = $crm_es_ajax ? [] : crm_ensure_schema($pdo);
 $crm_config = crm_config_load($pdo);
 $crm_dias_vencido = (int)$crm_config['dias_vencido'];
 $crm_sql_vencido = crm_config_sql_vencido_expr('c', $crm_dias_vencido);
-if (!empty($crm_config['notificar_email'])) {
+if (!$crm_es_ajax && !empty($crm_config['notificar_email'])) {
     try {
         crm_enviar_avisos_vencidos($pdo, false);
     } catch (Throwable $e) {
         error_log('crm_avisos_auto: ' . $e->getMessage());
     }
 }
-$crm_purged = crm_purge_leads_anteriores($pdo);
-$crm_sync_result = crm_sync_from_visits($pdo);
-$crm_sync_quotes = crm_sync_linked_quotes($pdo);
+if (!$crm_es_ajax) {
+    $crm_purged = crm_purge_leads_anteriores($pdo);
+    $crm_sync_result = crm_sync_from_visits($pdo);
+    $crm_sync_quotes = crm_sync_linked_quotes($pdo);
+}
 
 $usuario_actual_id = (int)($_SESSION['user']['id'] ?? 0);
 $is_admin = (($role ?? '') === 'admin');
@@ -666,8 +704,14 @@ try {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    admin_require_csrf_post();
     $accion = trim((string)($_POST['accion'] ?? ''));
+    $es_ajax = !empty($crm_es_ajax) || crm_request_is_ajax();
+    if ($es_ajax && $accion === 'mover_kanban' && !admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        crm_json_exit(['ok' => false, 'msg' => 'Sesión vencida. Recargá la página.'], 403);
+    }
+    if (!$es_ajax || $accion !== 'mover_kanban') {
+        admin_require_csrf_post();
+    }
 
     try {
         if ($accion === 'resincronizar') {
@@ -749,26 +793,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'mover_kanban') {
             $crm_id = (int)($_POST['crm_id'] ?? 0);
             $nuevo_estado = trim((string)($_POST['nuevo_estado'] ?? ''));
-            $es_ajax = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-                || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
 
             if ($crm_id <= 0 || !isset($estado_options[$nuevo_estado])) {
                 throw new Exception('No se pudo mover el lead en el Kanban.');
             }
 
+            $chk = $pdo->prepare('SELECT id FROM ecommerce_crm_visitas WHERE id = ? LIMIT 1');
+            $chk->execute([$crm_id]);
+            if (!(int)$chk->fetchColumn()) {
+                throw new Exception('No se encontró el lead.');
+            }
+
             $fecha_cierre = in_array($nuevo_estado, ['ganado', 'perdido'], true) ? date('Y-m-d') : null;
-            $stmt = $pdo->prepare("UPDATE ecommerce_crm_visitas SET estado = ?, ultima_gestion = NOW(), fecha_cierre = ? WHERE id = ?");
-            $stmt->execute([$nuevo_estado, $fecha_cierre, $crm_id]);
+            $set = ['estado = ?'];
+            $updateParams = [$nuevo_estado];
+            if (crm_column_exists($pdo, 'ecommerce_crm_visitas', 'ultima_gestion')) {
+                $set[] = 'ultima_gestion = NOW()';
+            }
+            if (crm_column_exists($pdo, 'ecommerce_crm_visitas', 'fecha_cierre')) {
+                $set[] = 'fecha_cierre = ?';
+                $updateParams[] = $fecha_cierre;
+            }
+            $updateParams[] = $crm_id;
+            $stmt = $pdo->prepare('UPDATE ecommerce_crm_visitas SET ' . implode(', ', $set) . ' WHERE id = ?');
+            $stmt->execute($updateParams);
 
             if ($es_ajax) {
-                header('Content-Type: application/json; charset=utf-8');
-                echo json_encode([
+                crm_json_exit([
                     'ok' => true,
                     'crm_id' => $crm_id,
                     'estado' => $nuevo_estado,
                     'estado_label' => $estado_options[$nuevo_estado] ?? $nuevo_estado,
                 ]);
-                exit;
             }
 
             crm_redirect_with_flash('ok', 'Lead movido correctamente en el Kanban.', ['lead' => $crm_id]);
@@ -940,13 +996,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         $error = $e->getMessage();
-        $es_ajax = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-            || strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
-        if ($es_ajax && $accion === 'mover_kanban') {
-            header('Content-Type: application/json; charset=utf-8');
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'msg' => $error]);
-            exit;
+        if (!empty($es_ajax) && $accion === 'mover_kanban') {
+            crm_json_exit(['ok' => false, 'msg' => $error !== '' ? $error : 'No se pudo mover el lead'], 400);
         }
     }
 }
