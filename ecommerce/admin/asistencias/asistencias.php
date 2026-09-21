@@ -1,5 +1,6 @@
 <?php
 require '../includes/header.php';
+require_once __DIR__ . '/../includes/sueldos_helper.php';
 
 // Obtener filtros
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
@@ -47,30 +48,36 @@ $stmt->execute($params);
 $asistencias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $minutos_extra_total_mes = 0;
+$minutos_faltantes_total_mes = 0;
 $asistencias_por_empleado = [];
 foreach ($asistencias as $asistencia) {
     $emp_id = (int)($asistencia['empleado_id'] ?? 0);
-
-    $minutos_extra = 0;
-    if (!empty($asistencia['fecha']) && !empty($asistencia['horario_salida']) && !empty($asistencia['hora_salida'])) {
-        $dt_programada = strtotime($asistencia['fecha'] . ' ' . $asistencia['horario_salida']);
-        $dt_real = strtotime($asistencia['fecha'] . ' ' . $asistencia['hora_salida']);
-        if ($dt_programada && $dt_real && $dt_real > $dt_programada) {
-            $minutos_extra = (int) floor(($dt_real - $dt_programada) / 60);
-        }
-    }
+    $balance = asistenciasCalcularBalanceDia(
+        (string)($asistencia['fecha'] ?? ''),
+        $asistencia['hora_entrada'] ?? null,
+        $asistencia['hora_salida'] ?? null,
+        $asistencia['horario_entrada'] ?? null,
+        $asistencia['horario_salida'] ?? null
+    );
+    $minutos_extra = (int)$balance['minutos_extra'];
+    $minutos_faltantes = (int)$balance['minutos_faltantes'];
     $asistencia['minutos_extra'] = $minutos_extra;
+    $asistencia['minutos_faltantes'] = $minutos_faltantes;
+    $asistencia['minutos_tarde'] = (int)$balance['minutos_tarde'];
 
     if (!isset($asistencias_por_empleado[$emp_id])) {
         $asistencias_por_empleado[$emp_id] = [
             'nombre' => $asistencia['empleado_nombre'] ?? 'Empleado',
             'minutos_extra_total' => 0,
+            'minutos_faltantes_total' => 0,
             'items' => []
         ];
     }
 
     $asistencias_por_empleado[$emp_id]['minutos_extra_total'] += $minutos_extra;
+    $asistencias_por_empleado[$emp_id]['minutos_faltantes_total'] += $minutos_faltantes;
     $minutos_extra_total_mes += $minutos_extra;
+    $minutos_faltantes_total_mes += $minutos_faltantes;
     $asistencias_por_empleado[$emp_id]['items'][] = $asistencia;
 }
 
@@ -98,7 +105,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
     <div class="row mb-4">
         <div class="col-md-6">
             <h1 class="mb-1">📋 Control de Asistencias</h1>
-            <p class="text-muted mb-0">Gestiona entradas, salidas y estado de asistencia por empleado</p>
+            <p class="text-muted mb-0">Si llega tarde, lo que se quede después de la salida primero cubre esa tardanza. Extra recién cuando completa las horas del horario. Si no las cubre, se marcan minutos faltantes.</p>
         </div>
         <div class="col-md-6 mt-3 mt-md-0">
             <div class="d-flex flex-wrap gap-2 justify-content-md-end">
@@ -126,7 +133,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
     <!-- Estadísticas -->
     <div class="row mb-4 g-3">
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center">
                     <h6>Total</h6>
@@ -134,7 +141,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-success text-white h-100">
                 <div class="card-body text-center">
                     <h6>Presentes</h6>
@@ -142,7 +149,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-warning text-white h-100">
                 <div class="card-body text-center">
                     <h6>Tardanzas</h6>
@@ -150,7 +157,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-danger text-white h-100">
                 <div class="card-body text-center">
                     <h6>Ausentes</h6>
@@ -158,7 +165,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-info text-white h-100">
                 <div class="card-body text-center">
                     <h6>Justificados</h6>
@@ -166,11 +173,19 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md">
             <div class="card bg-dark text-white h-100">
                 <div class="card-body text-center">
                     <h6>Min. Extra</h6>
                     <h3><?= (int)$minutos_extra_total_mes ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="card bg-secondary text-white h-100">
+                <div class="card-body text-center">
+                    <h6>Min. Faltantes</h6>
+                    <h3><?= (int)$minutos_faltantes_total_mes ?></h3>
                 </div>
             </div>
         </div>
@@ -225,7 +240,12 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#<?= $collapse_id ?>" aria-expanded="false" aria-controls="<?= $collapse_id ?>">
                                     👤 <?= htmlspecialchars($grupo['nombre']) ?>
                                     <span class="badge bg-secondary ms-2"><?= count($grupo['items']) ?></span>
-                                    <span class="badge bg-dark ms-2" title="Minutos extra del mes">+<?= (int)($grupo['minutos_extra_total'] ?? 0) ?> min</span>
+                                    <?php if ((int)($grupo['minutos_extra_total'] ?? 0) > 0): ?>
+                                        <span class="badge bg-dark ms-2" title="Minutos extra del mes, después de cubrir el horario">+<?= (int)$grupo['minutos_extra_total'] ?> min</span>
+                                    <?php endif; ?>
+                                    <?php if ((int)($grupo['minutos_faltantes_total'] ?? 0) > 0): ?>
+                                        <span class="badge bg-danger ms-2" title="Minutos que le faltaron para completar el horario">-<?= (int)$grupo['minutos_faltantes_total'] ?> min</span>
+                                    <?php endif; ?>
                                 </button>
                             </h2>
                             <div id="<?= $collapse_id ?>" class="accordion-collapse collapse" aria-labelledby="<?= $heading_id ?>" data-bs-parent="#asistenciasAccordion">
@@ -239,6 +259,7 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                                     <th>Entrada</th>
                                                     <th>Salida</th>
                                                     <th>Min. Extra</th>
+                                                    <th>Min. Faltantes</th>
                                                     <th>Estado</th>
                                                     <th>Observaciones</th>
                                                     <th>Acciones</th>
@@ -278,6 +299,16 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                                         <td>
                                                             <?php if (($asistencia['minutos_extra'] ?? 0) > 0): ?>
                                                                 <span class="badge bg-dark">+<?= (int)$asistencia['minutos_extra'] ?> min</span>
+                                                            <?php else: ?>
+                                                                <span class="text-muted">0</span>
+                                                            <?php endif; ?>
+                                                        </td>
+                                                        <td>
+                                                            <?php if (($asistencia['minutos_faltantes'] ?? 0) > 0): ?>
+                                                                <span class="badge bg-danger">-<?= (int)$asistencia['minutos_faltantes'] ?> min</span>
+                                                                <?php if (($asistencia['minutos_tarde'] ?? 0) > 0): ?>
+                                                                    <div class="small text-muted">Tarde: <?= (int)$asistencia['minutos_tarde'] ?> min</div>
+                                                                <?php endif; ?>
                                                             <?php else: ?>
                                                                 <span class="text-muted">0</span>
                                                             <?php endif; ?>

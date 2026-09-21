@@ -6,6 +6,7 @@ ini_set('display_errors', 1);
 // Incluir configuración para obtener $pdo
 $base_path = dirname(dirname(dirname(dirname(__FILE__))));
 require $base_path . '/config.php';
+require_once dirname(__DIR__) . '/includes/sueldos_helper.php';
 
 // Verificar que $pdo existe
 if (!isset($pdo)) {
@@ -59,23 +60,24 @@ $totales = [
     'tardes' => 0,
     'ausentes' => 0,
     'justificados' => 0,
-    'minutos_extra' => 0
+    'minutos_extra' => 0,
+    'minutos_faltantes' => 0
 ];
 
 foreach ($asistencias as &$a) {
     $totales[$a['estado'] . 's']++;
 
-    $minutos_extra = 0;
-    if (!empty($a['fecha']) && !empty($a['horario_salida']) && !empty($a['hora_salida'])) {
-        $dt_programada = strtotime($a['fecha'] . ' ' . $a['horario_salida']);
-        $dt_real = strtotime($a['fecha'] . ' ' . $a['hora_salida']);
-        if ($dt_programada && $dt_real && $dt_real > $dt_programada) {
-            $minutos_extra = (int) floor(($dt_real - $dt_programada) / 60);
-        }
-    }
-
-    $a['minutos_extra'] = $minutos_extra;
-    $totales['minutos_extra'] += $minutos_extra;
+    $balance = asistenciasCalcularBalanceDia(
+        (string)($a['fecha'] ?? ''),
+        $a['hora_entrada'] ?? null,
+        $a['hora_salida'] ?? null,
+        $a['horario_entrada'] ?? null,
+        $a['horario_salida'] ?? null
+    );
+    $a['minutos_extra'] = (int)$balance['minutos_extra'];
+    $a['minutos_faltantes'] = (int)$balance['minutos_faltantes'];
+    $totales['minutos_extra'] += (int)$balance['minutos_extra'];
+    $totales['minutos_faltantes'] += (int)$balance['minutos_faltantes'];
 }
 unset($a);
 ?>
@@ -147,6 +149,9 @@ unset($a);
         <div class="stats-box bg-dark text-white">
             <strong>Min. Extra:</strong> <?= (int)$totales['minutos_extra'] ?>
         </div>
+        <div class="stats-box bg-secondary text-white">
+            <strong>Min. Faltantes:</strong> <?= (int)$totales['minutos_faltantes'] ?>
+        </div>
     </div>
 
     <!-- Tabla de Asistencias -->
@@ -159,6 +164,7 @@ unset($a);
                 <th>Entrada</th>
                 <th>Salida</th>
                 <th>Min. Extra</th>
+                <th>Min. Faltantes</th>
                 <th>Estado</th>
                 <th>Observaciones</th>
             </tr>
@@ -166,7 +172,7 @@ unset($a);
         <tbody>
             <?php if (empty($asistencias)): ?>
                 <tr>
-                    <td colspan="8" class="text-center">No hay registros</td>
+                    <td colspan="9" class="text-center">No hay registros</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($asistencias as $a): ?>
@@ -175,14 +181,7 @@ unset($a);
                         <td><?= date('d/m/Y', strtotime($a['fecha'])) ?></td>
                         <td>
                             <?php if ($a['horario_entrada']): ?>
-                        <td>
-                            <?php if (($a['minutos_extra'] ?? 0) > 0): ?>
-                                <strong>+<?= (int)$a['minutos_extra'] ?> min</strong>
-                            <?php else: ?>
-                                <span class="text-muted">0</span>
-                            <?php endif; ?>
-                        </td>
-                                <?= date('H:i', strtotime($a['horario_entrada'])) ?> - 
+                                <?= date('H:i', strtotime($a['horario_entrada'])) ?> -
                                 <?= date('H:i', strtotime($a['horario_salida'])) ?>
                             <?php else: ?>
                                 -
@@ -190,6 +189,20 @@ unset($a);
                         </td>
                         <td><?= $a['hora_entrada'] ? date('H:i', strtotime($a['hora_entrada'])) : '-' ?></td>
                         <td><?= $a['hora_salida'] ? date('H:i', strtotime($a['hora_salida'])) : '-' ?></td>
+                        <td>
+                            <?php if (($a['minutos_extra'] ?? 0) > 0): ?>
+                                <strong>+<?= (int)$a['minutos_extra'] ?> min</strong>
+                            <?php else: ?>
+                                <span class="text-muted">0</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (($a['minutos_faltantes'] ?? 0) > 0): ?>
+                                <strong class="text-danger">-<?= (int)$a['minutos_faltantes'] ?> min</strong>
+                            <?php else: ?>
+                                <span class="text-muted">0</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php
                             $badges = [

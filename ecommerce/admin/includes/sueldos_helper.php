@@ -94,11 +94,84 @@ function sueldosCalcularTotalMes(PDO $pdo, int $empleado_id, string $mes): float
     return sueldosCalcularDetalleMes($pdo, $empleado_id, $mes)['sueldo_total'];
 }
 
+function asistenciasParseTs(string $fecha, ?string $hora): ?int
+{
+    $fecha = trim($fecha);
+    $hora = trim((string)$hora);
+    if ($fecha === '' || $hora === '') {
+        return null;
+    }
+
+    $ts = strtotime($fecha . ' ' . $hora);
+    return $ts === false ? null : $ts;
+}
+
+function asistenciasAjustarSalida(?int $entradaTs, ?int $salidaTs): ?int
+{
+    if ($salidaTs === null) {
+        return null;
+    }
+    if ($entradaTs !== null && $salidaTs < $entradaTs) {
+        return $salidaTs + 86400;
+    }
+    return $salidaTs;
+}
+
 /**
- * Minutos del día respecto al horario:
- * - Si llega tarde, la salida esperada se corre esos mismos minutos.
- * - Si no los recupera al salir, el día queda en minutos negativos.
- * - Llegar temprano no adelanta la salida ni suma extras.
+ * Balance del día respecto al horario contratado.
+ * Importa completar las horas del rango:
+ * - Si llega tarde, lo que se quede después de la salida primero cubre esa tardanza.
+ * - Recién cuando cubre esos minutos empiezan a contar extras.
+ * - Si se va antes de completar el rango o de recuperar la tardanza, cuenta minutos faltantes.
+ * - Llegar temprano no suma extras ni adelanta la salida.
+ *
+ * @return array{calculable:bool,minutos_extra:int,minutos_faltantes:int,minutos_neto:int,minutos_tarde:int}
+ */
+function asistenciasCalcularBalanceDia(
+    string $fecha,
+    ?string $horaEntradaReal,
+    ?string $horaSalidaReal,
+    ?string $horaEntradaHorario,
+    ?string $horaSalidaHorario
+): array {
+    $vacio = [
+        'calculable' => false,
+        'minutos_extra' => 0,
+        'minutos_faltantes' => 0,
+        'minutos_neto' => 0,
+        'minutos_tarde' => 0,
+    ];
+
+    $tsEntradaHorario = asistenciasParseTs($fecha, $horaEntradaHorario);
+    $tsSalidaHorario = asistenciasAjustarSalida($tsEntradaHorario, asistenciasParseTs($fecha, $horaSalidaHorario));
+    $tsEntradaReal = asistenciasParseTs($fecha, $horaEntradaReal);
+    $tsSalidaReal = asistenciasAjustarSalida($tsEntradaReal ?? $tsEntradaHorario, asistenciasParseTs($fecha, $horaSalidaReal));
+
+    if ($tsSalidaReal === null || $tsSalidaHorario === null) {
+        return $vacio;
+    }
+
+    $minutosTarde = 0;
+    if ($tsEntradaReal !== null && $tsEntradaHorario !== null) {
+        $minutosTarde = (int)floor(($tsEntradaReal - $tsEntradaHorario) / 60);
+        if ($minutosTarde < 0) {
+            $minutosTarde = 0;
+        }
+    }
+
+    $neto = (int)floor(($tsSalidaReal - ($tsSalidaHorario + ($minutosTarde * 60))) / 60);
+
+    return [
+        'calculable' => true,
+        'minutos_extra' => $neto > 0 ? $neto : 0,
+        'minutos_faltantes' => $neto < 0 ? abs($neto) : 0,
+        'minutos_neto' => $neto,
+        'minutos_tarde' => $minutosTarde,
+    ];
+}
+
+/**
+ * Minutos netos del día respecto al horario (positivo = extra, negativo = faltante).
  */
 function sueldosCalcularMinutosDiaAsistencia(
     string $fecha,
@@ -107,36 +180,15 @@ function sueldosCalcularMinutosDiaAsistencia(
     ?string $horaEntradaHorario,
     ?string $horaSalidaHorario
 ): ?int {
-    $fecha = trim($fecha);
-    $horaSalidaReal = trim((string)$horaSalidaReal);
-    $horaSalidaHorario = trim((string)$horaSalidaHorario);
+    $balance = asistenciasCalcularBalanceDia(
+        $fecha,
+        $horaEntradaReal,
+        $horaSalidaReal,
+        $horaEntradaHorario,
+        $horaSalidaHorario
+    );
 
-    if ($fecha === '' || $horaSalidaReal === '' || $horaSalidaHorario === '') {
-        return null;
-    }
-
-    $tsSalidaReal = strtotime($fecha . ' ' . $horaSalidaReal);
-    $tsSalidaHorario = strtotime($fecha . ' ' . $horaSalidaHorario);
-    if ($tsSalidaReal === false || $tsSalidaHorario === false) {
-        return null;
-    }
-
-    $minutosTarde = 0;
-    $horaEntradaReal = trim((string)$horaEntradaReal);
-    $horaEntradaHorario = trim((string)$horaEntradaHorario);
-    if ($horaEntradaReal !== '' && $horaEntradaHorario !== '') {
-        $tsEntradaReal = strtotime($fecha . ' ' . $horaEntradaReal);
-        $tsEntradaHorario = strtotime($fecha . ' ' . $horaEntradaHorario);
-        if ($tsEntradaReal !== false && $tsEntradaHorario !== false) {
-            $minutosTarde = (int)floor(($tsEntradaReal - $tsEntradaHorario) / 60);
-            if ($minutosTarde < 0) {
-                $minutosTarde = 0; // llegada temprana no adelanta la salida
-            }
-        }
-    }
-
-    $tsSalidaEsperada = $tsSalidaHorario + ($minutosTarde * 60);
-    return (int)floor(($tsSalidaReal - $tsSalidaEsperada) / 60);
+    return $balance['calculable'] ? (int)$balance['minutos_neto'] : null;
 }
 
 /**
