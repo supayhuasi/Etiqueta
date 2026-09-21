@@ -204,6 +204,27 @@ function instalaciones_formatear_dinero($valor): string
     return '$' . number_format((float)$valor, 0, ',', '.');
 }
 
+function instalaciones_maps_query(array $item): string
+{
+    $parts = [];
+    foreach (['direccion', 'localidad', 'provincia'] as $campo) {
+        $valor = trim((string)($item[$campo] ?? ''));
+        if ($valor !== '' && !in_array($valor, $parts, true)) {
+            $parts[] = $valor;
+        }
+    }
+    return implode(', ', $parts);
+}
+
+function instalaciones_maps_url(array $item): string
+{
+    $query = instalaciones_maps_query($item);
+    if ($query === '') {
+        return '';
+    }
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($query);
+}
+
 function instalaciones_estado_op_label(string $estado): string
 {
     $map = [
@@ -875,6 +896,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'cambiar_estado_visita') {
+        ob_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        verificar_sesion_json();
+
+        $item_id = (int)($_POST['item_id'] ?? 0);
+        $estado = trim((string)($_POST['estado'] ?? ''));
+        if (!$tiene_visitas || $item_id <= 0 || !in_array($estado, $estados_visita_validos, true)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'Datos inválidos para cambiar el estado']);
+            exit;
+        }
+
+        try {
+            $stmt = $pdo->prepare("UPDATE ecommerce_visitas SET estado = ?" . fragmento_update_fecha_actualizacion($pdo, 'ecommerce_visitas') . " WHERE id = ?");
+            $stmt->execute([$estado, $item_id]);
+            echo json_encode(['ok' => true, 'data' => ['item_id' => $item_id, 'estado' => $estado]]);
+            exit;
+        } catch (Exception $e) {
+            error_log('cambiar_estado_visita: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'msg' => 'No se pudo cambiar el estado']);
+            exit;
+        }
+    }
+
     if ($action === 'guardar_texto_tarjeta') {
         ob_clean();
         header('Content-Type: application/json; charset=utf-8');
@@ -1300,7 +1347,7 @@ $qs_ventana_siguiente = http_build_query(array_filter([
     'incluir_entregados' => $incluir_entregados ? '1' : null,
 ]));
 
-function render_tarjeta_instalacion($item) {
+function render_tarjeta_instalacion($item, array $diasTablero = []) {
     $tipo = (string)($item['tipo'] ?? '');
     $itemId = (int)($item['item_id'] ?? 0);
     $titulo = (string)($item['titulo'] ?? '');
@@ -1310,6 +1357,8 @@ function render_tarjeta_instalacion($item) {
     $detalleUrl = (string)($item['detalle_url'] ?? '');
     $fechaCreacion = (string)($item['fecha_creacion'] ?? '');
     $textoTarjeta = (string)($item['texto_tarjeta'] ?? '');
+    $mapsUrl = instalaciones_maps_url($item);
+    $fechaActual = (string)($item['fecha_instalacion'] ?? '');
 
     $badgeClass = 'bg-secondary';
     $badgeText = 'Item';
@@ -1385,43 +1434,74 @@ function render_tarjeta_instalacion($item) {
         <?php if ($subtitulo !== ''): ?><div class="small inst-card-subtitle"><?= htmlspecialchars($subtitulo) ?></div><?php endif; ?>
         <?php if ($direccion !== ''): ?><div class="small text-muted inst-card-address"><?= htmlspecialchars($direccion) ?></div><?php endif; ?>
         <?php if ($localidad !== ''): ?><div class="small text-muted inst-card-locality"><?= htmlspecialchars($localidad) ?></div><?php endif; ?>
+        <?php if ($mapsUrl !== ''): ?>
+            <a class="btn btn-sm btn-outline-success inst-card-maps mt-1" href="<?= htmlspecialchars($mapsUrl) ?>" target="_blank" rel="noopener noreferrer">
+                📍 Ver en Maps
+            </a>
+        <?php endif; ?>
         <?php if ($tipo === 'orden' && (float)($item['saldo'] ?? 0) > 0.009): ?>
             <div class="small inst-card-saldo mt-1">Saldo: <?= htmlspecialchars(instalaciones_formatear_dinero($item['saldo'])) ?></div>
         <?php endif; ?>
 
-        <div class="mt-2">
-            <label class="form-label small mb-1">Texto tarjeta</label>
+        <?php if (!empty($diasTablero)): ?>
+            <div class="mt-2 inst-card-mover-wrap">
+                <label class="form-label small mb-1">Mover a</label>
+                <select class="form-select form-select-sm inst-card-mover">
+                    <option value="" <?= $fechaActual === '' ? 'selected' : '' ?>>Sin fecha</option>
+                    <?php foreach ($diasTablero as $diaOpt): ?>
+                        <option value="<?= htmlspecialchars($diaOpt) ?>" <?= $fechaActual === $diaOpt ? 'selected' : '' ?>>
+                            <?= htmlspecialchars(texto_dia($diaOpt)) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        <?php endif; ?>
+
+        <div class="inst-card-status mt-2">
+            <?php
+            $estadoOpBtn = strtolower((string)($item['estado_produccion'] ?? ''));
+            if ($tipo === 'orden' && !in_array($estadoOpBtn, ['entregado', 'cancelado'], true)):
+                $fechaEsteDia = $fechaActual !== '' ? $fechaActual : date('Y-m-d');
+                $fechaDiaSiguiente = date('Y-m-d', strtotime($fechaEsteDia . ' +1 day'));
+            ?>
+                <button type="button" class="btn btn-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaEsteDia) ?>">
+                    Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaEsteDia))) ?>
+                </button>
+                <button type="button" class="btn btn-outline-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaDiaSiguiente) ?>">
+                    Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaDiaSiguiente))) ?>
+                </button>
+            <?php elseif ($tipo === 'visita'): ?>
+                <?php $estadoVisita = (string)($item['estado_visita'] ?? 'pendiente'); ?>
+                <div class="inst-visita-estados">
+                    <?php foreach (['pendiente' => 'Pendiente', 'en_proceso' => 'En proceso', 'completada' => 'Completada'] as $estVal => $estLabel): ?>
+                        <button type="button" class="btn inst-btn-estado-visita <?= $estadoVisita === $estVal ? 'btn-warning' : 'btn-outline-secondary' ?>" data-estado="<?= $estVal ?>">
+                            <?= $estLabel ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <details class="inst-card-extra mt-2" open>
+            <summary class="small">Notas y más</summary>
+            <label class="form-label small mb-1 mt-2">Texto tarjeta</label>
             <textarea class="form-control form-control-sm inst-card-texto" rows="2" placeholder="Agregar texto..." data-original="<?= htmlspecialchars($textoTarjeta) ?>"><?= htmlspecialchars($textoTarjeta) ?></textarea>
-            <div class="d-flex gap-1 mt-1 flex-wrap">
+            <div class="d-flex gap-1 mt-1 flex-wrap inst-card-tools">
                 <button type="button" class="btn btn-sm btn-outline-dark inst-btn-editar">✎ Editar</button>
                 <button type="button" class="btn btn-sm btn-outline-primary inst-btn-guardar-texto">Guardar texto</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-subir" title="Subir">↑</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary inst-btn-bajar" title="Bajar">↓</button>
                 <button type="button" class="btn btn-sm btn-outline-danger inst-btn-eliminar" title="Eliminar">✕</button>
-                <?php
-                $estadoOpBtn = strtolower((string)($item['estado_produccion'] ?? ''));
-                if ($tipo === 'orden' && !in_array($estadoOpBtn, ['entregado', 'cancelado'], true)):
-                    $fechaEsteDia = !empty($item['fecha_instalacion']) ? (string)$item['fecha_instalacion'] : date('Y-m-d');
-                    $fechaDiaSiguiente = date('Y-m-d', strtotime($fechaEsteDia . ' +1 day'));
-                ?>
-                    <button type="button" class="btn btn-sm btn-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaEsteDia) ?>" title="Marcar entregado ese día">
-                        Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaEsteDia))) ?>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-success inst-btn-entregar" data-fecha="<?= htmlspecialchars($fechaDiaSiguiente) ?>" title="Marcar entregado al día siguiente">
-                        Entregar <?= htmlspecialchars(date('d/m', strtotime($fechaDiaSiguiente))) ?>
-                    </button>
-                <?php endif; ?>
             </div>
-        </div>
-
-        <div class="small mt-2 d-flex justify-content-between align-items-center">
-            <span><?= $fechaCreacion !== '' ? date('d/m', strtotime($fechaCreacion)) : '-' ?></span>
-            <div class="d-flex gap-1">
-                <?php if ($detalleUrl !== ''): ?>
-                    <a href="<?= htmlspecialchars($detalleUrl) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">Ver</a>
-                <?php endif; ?>
+            <div class="small mt-2 d-flex justify-content-between align-items-center">
+                <span><?= $fechaCreacion !== '' ? date('d/m', strtotime($fechaCreacion)) : '-' ?></span>
+                <div class="d-flex gap-1">
+                    <?php if ($detalleUrl !== ''): ?>
+                        <a href="<?= htmlspecialchars($detalleUrl) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">Ver</a>
+                    <?php endif; ?>
+                </div>
             </div>
-        </div>
+        </details>
     </div>
     <?php
     return (string)ob_get_clean();
@@ -1480,43 +1560,74 @@ function render_tarjeta_instalacion($item) {
     color: #b42318;
     font-weight: 700;
 }
+.inst-card-status {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+.inst-visita-estados {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+.inst-visita-estados .btn {
+    flex: 1 1 auto;
+}
+.inst-card-maps {
+    display: inline-flex;
+    align-items: center;
+}
+.inst-card-extra summary {
+    cursor: pointer;
+    font-weight: 600;
+}
 
 /* Mobile optimizations */
 @media (max-width: 768px) {
     .inst-dashboard-grid {
-        grid-template-columns: 1fr;
+        display: flex;
+        grid-template-columns: none;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
         gap: .75rem;
+        padding-bottom: .5rem;
+        -webkit-overflow-scrolling: touch;
     }
     .inst-col {
-        min-height: 200px;
+        flex: 0 0 min(88vw, 380px);
+        scroll-snap-align: start;
+        min-height: 62vh;
     }
     .inst-dropzone {
-        min-height: 150px;
-        max-height: 300px;
+        min-height: 42vh;
+        max-height: none;
     }
     .inst-card {
-        padding: .5rem;
-        margin-bottom: .35rem;
+        padding: .7rem;
+        margin-bottom: .55rem;
+        cursor: default;
+    }
+    .inst-card-status .btn {
+        width: 100%;
+        min-height: 46px;
+        font-size: 1rem;
+    }
+    .inst-card-mover {
+        min-height: 44px;
+        font-size: 1rem;
     }
     .inst-card-texto {
-        font-size: .85rem !important;
+        font-size: .9rem !important;
         min-height: 60px !important;
-    }
-    .btn-sm {
-        padding: .25rem .4rem;
-        font-size: .75rem;
     }
 }
 
-@media (max-width: 480px) {
-    .inst-card .d-flex {
-        flex-wrap: wrap;
+@media (min-width: 769px) {
+    .inst-card-extra {
+        display: block;
     }
-    .btn-sm {
-        flex: 0 0 calc(50% - .25rem);
-    }
-    .inst-dropzone {
-        max-height: 250px;
+    .inst-card-extra > summary {
+        display: none;
     }
 }
 
@@ -1799,6 +1910,7 @@ function render_tarjeta_instalacion($item) {
 <div class="card mb-4">
     <div class="card-header bg-light">
         <h5 class="mb-0">Dashboard por días</h5>
+        <div class="small text-muted d-md-none mt-1">Deslizá los días. El estado y Maps están adelante en cada tarjeta.</div>
     </div>
     <div class="card-body">
         <div class="inst-dashboard-grid">
@@ -1809,7 +1921,7 @@ function render_tarjeta_instalacion($item) {
                 </div>
                 <div class="inst-dropzone" data-fecha="" id="drop-sin-fecha">
                     <?php foreach ($items_por_columna['sin_fecha'] as $item): ?>
-                        <?= render_tarjeta_instalacion($item) ?>
+                        <?= render_tarjeta_instalacion($item, $dias_tablero) ?>
                     <?php endforeach; ?>
                 </div>
             </div>
@@ -1825,7 +1937,7 @@ function render_tarjeta_instalacion($item) {
                     </div>
                     <div class="inst-dropzone" data-fecha="<?= htmlspecialchars($fecha_col) ?>" id="drop-<?= htmlspecialchars($fecha_col) ?>">
                         <?php foreach ($items_por_columna[$fecha_col] as $item): ?>
-                            <?= render_tarjeta_instalacion($item) ?>
+                            <?= render_tarjeta_instalacion($item, $dias_tablero) ?>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -1871,7 +1983,13 @@ function render_tarjeta_instalacion($item) {
                                     <div class="small text-danger fw-semibold">Saldo <?= htmlspecialchars(instalaciones_formatear_dinero($item['saldo'])) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td class="cell-direccion"><?= htmlspecialchars($item['direccion'] ?: '-') ?></td>
+                            <td class="cell-direccion">
+                                <?= htmlspecialchars($item['direccion'] ?: '-') ?>
+                                <?php $mapsListado = instalaciones_maps_url($item); ?>
+                                <?php if ($mapsListado !== ''): ?>
+                                    <div><a href="<?= htmlspecialchars($mapsListado) ?>" target="_blank" rel="noopener noreferrer">Ver en Maps</a></div>
+                                <?php endif; ?>
+                            </td>
                             <td class="cell-localidad"><?= htmlspecialchars($item['localidad'] ?: '-') ?></td>
                             <td class="cell-fecha" data-fecha="<?= htmlspecialchars($item['fecha_instalacion'] ?: '') ?>"><?= $item['fecha_instalacion'] ? htmlspecialchars(date('d/m/Y', strtotime($item['fecha_instalacion']))) : '-' ?></td>
                             <td>
@@ -2126,6 +2244,11 @@ function limpiarSelectorClienteInst(selectId, idInputId, buscarSelector) {
 
 document.addEventListener('DOMContentLoaded', function () {
     inicializarSelectoresClienteInst(document);
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        document.querySelectorAll('.inst-card-extra').forEach(function (el) {
+            el.open = false;
+        });
+    }
 
     var draggedCard = null;
     var dropZones = Array.prototype.slice.call(document.querySelectorAll('.inst-dropzone'));
@@ -2366,6 +2489,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 card.setAttribute('data-orden-fecha', fechaDestino || '');
                 actualizarBotonesEntrega(card, fechaDestino || '');
             }
+            var moverSel = card.querySelector('.inst-card-mover');
+            if (moverSel) {
+                moverSel.value = fechaDestino || '';
+            }
 
             var zona = card.closest('.inst-dropzone');
             guardarOrdenColumna(zona);
@@ -2403,6 +2530,33 @@ document.addEventListener('DOMContentLoaded', function () {
         botones[0].textContent = 'Entregar ' + fmtDiaMes(base);
         botones[1].setAttribute('data-fecha', siguiente);
         botones[1].textContent = 'Entregar ' + fmtDiaMes(siguiente);
+    }
+
+    function actualizarLinkMaps(card, direccion, localidad) {
+        if (!card) return;
+        var partes = [];
+        if (direccion) partes.push(direccion);
+        if (localidad) partes.push(localidad);
+        var wrap = card.querySelector('.inst-card-maps');
+        if (partes.length === 0) {
+            if (wrap) wrap.remove();
+            return;
+        }
+        var href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(partes.join(', '));
+        if (!wrap) {
+            wrap = document.createElement('a');
+            wrap.className = 'btn btn-sm btn-outline-success inst-card-maps mt-1';
+            wrap.target = '_blank';
+            wrap.rel = 'noopener noreferrer';
+            wrap.textContent = '📍 Ver en Maps';
+            var loc = card.querySelector('.inst-card-locality') || card.querySelector('.inst-card-address');
+            if (loc && loc.parentNode) {
+                loc.insertAdjacentElement('afterend', wrap);
+            } else {
+                card.insertBefore(wrap, card.querySelector('.inst-card-status'));
+            }
+        }
+        wrap.href = href;
     }
 
     function setOrCreateText(card, selector, text, muted) {
@@ -2469,6 +2623,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setOrCreateText(card, '.inst-card-subtitle', data.cliente || '', false);
             setOrCreateText(card, '.inst-card-address', data.direccion || '', true);
             setOrCreateText(card, '.inst-card-locality', localCompuesta, true);
+            actualizarLinkMaps(card, data.direccion || '', localCompuesta);
             var ta = card.querySelector('.inst-card-texto');
             if (ta) {
                 ta.value = data.notas || '';
@@ -2564,6 +2719,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (titleEl) titleEl.textContent = data.titulo || '';
             setOrCreateText(card, '.inst-card-subtitle', data.cliente_nombre || '', false);
             setOrCreateText(card, '.inst-card-address',  data.direccion || '', true);
+            actualizarLinkMaps(card, data.direccion || '', '');
             var ta = card.querySelector('.inst-card-texto');
             if (ta) {
                 ta.value = data.descripcion || '';
@@ -3032,6 +3188,65 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         marcarOrdenEntregada(itemId, fecha, card);
+    });
+
+    document.addEventListener('change', function (e) {
+        var sel = e.target.closest('.inst-card-mover');
+        if (!sel) return;
+        var card = sel.closest('.inst-card');
+        if (!card) return;
+        var fechaDestino = sel.value || '';
+        var destino = document.querySelector('.inst-dropzone[data-fecha="' + fechaDestino + '"]');
+        var origen = card.parentNode;
+        if (destino && origen && destino !== origen) {
+            destino.appendChild(card);
+            actualizarBadgeColumna(origen);
+            actualizarBadgeColumna(destino);
+        }
+        moverEnServidor(card, fechaDestino, function () {
+            if (origen) {
+                origen.appendChild(card);
+                actualizarBadgesTodas();
+                sel.value = origen.getAttribute('data-fecha') || '';
+            }
+        });
+    });
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.inst-btn-estado-visita');
+        if (!btn) return;
+        var card = btn.closest('.inst-card');
+        if (!card || card.getAttribute('data-tipo') !== 'visita') return;
+        e.preventDefault();
+        e.stopPropagation();
+        var estado = btn.getAttribute('data-estado') || '';
+        var fd = new FormData();
+        fd.append('action', 'cambiar_estado_visita');
+        fd.append('item_id', card.getAttribute('data-id'));
+        fd.append('estado', estado);
+        fetch('instalaciones.php?<?= htmlspecialchars($qs) ?>', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res || !res.ok) {
+                throw new Error((res && res.msg) ? res.msg : 'No se pudo cambiar el estado');
+            }
+            card.setAttribute('data-visita-estado', estado);
+            card.querySelectorAll('.inst-btn-estado-visita').forEach(function (b) {
+                var activo = b.getAttribute('data-estado') === estado;
+                b.className = 'btn inst-btn-estado-visita ' + (activo ? 'btn-warning' : 'btn-outline-secondary');
+            });
+            var estadoTxt = card.querySelector('.small.text-muted.mb-1');
+            if (estadoTxt && estadoTxt.textContent.indexOf('Estado') === 0) {
+                estadoTxt.textContent = 'Estado: ' + estado.replace('_', ' ');
+            }
+        })
+        .catch(function (err) {
+            alert(err.message || 'No se pudo cambiar el estado');
+        });
     });
 
     if (btnEntregarHoy) {
