@@ -18,6 +18,7 @@ require_once 'includes/cuentas_helper.php';
 ensureCuentasSchema($pdo);
 
 $cuentas = cuentas_listar($pdo);
+$repartoDefault = cuentas_reparto_listar($pdo);
 
 $error = '';
 $exito = '';
@@ -55,8 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $referencia = $_POST['referencia'] ?? '';
         $id_referencia = intval($_POST['id_referencia'] ?? 0);
         $observaciones = $_POST['observaciones'] ?? '';
-        $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
-
         if (!$categoria) {
             throw new Exception('La categoría es requerida');
         }
@@ -64,25 +63,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('El monto debe ser mayor a 0');
         }
 
-        $stmt = $pdo->prepare("
-            INSERT INTO flujo_caja
-            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
-            VALUES (?, 'ingreso', ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+        $partes = cuentas_reparto_partir_monto($monto, cuentas_reparto_desde_post($_POST));
+        cuentas_reparto_insertar_ingresos($pdo, [
+            'fecha' => $fecha,
+            'categoria' => $categoria,
+            'descripcion' => $descripcion,
+            'referencia' => $referencia,
+            'id_referencia' => $id_referencia,
+            'usuario_id' => $_SESSION['user']['id'] ?? null,
+            'observaciones' => $observaciones,
+        ], $partes);
 
-        $stmt->execute([
-            $fecha,
-            $categoria,
-            $descripcion,
-            $monto,
-            $referencia,
-            $id_referencia > 0 ? $id_referencia : null,
-            $cuenta_id,
-            $_SESSION['user']['id'] ?? null,
-            $observaciones
-        ]);
-
-        $exito = 'Ingreso registrado correctamente';
+        $exito = count($partes) > 1
+            ? 'Ingreso registrado y repartido en ' . count($partes) . ' cajas'
+            : 'Ingreso registrado correctamente';
 
         // Limpiar formulario
         $_POST = [];
@@ -143,15 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label for="cuenta_id" class="form-label">Cuenta *</label>
-                    <select id="cuenta_id" name="cuenta_id" class="form-select" required>
-                        <option value="">Seleccionar...</option>
-                        <?php foreach ($cuentas as $c): ?>
-                            <option value="<?= (int)$c['id'] ?>" <?= (string)($_POST['cuenta_id'] ?? '') === (string)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <?php cuentas_reparto_render_campos($cuentas, $repartoDefault, ['required' => true, 'monto_selector' => '#monto']); ?>
 
                 <div class="mb-3">
                     <label for="descripcion" class="form-label">Descripción</label>

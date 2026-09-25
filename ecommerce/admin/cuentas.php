@@ -15,8 +15,10 @@ require_once 'includes/cuentas_helper.php';
 ensureCuentasSchema($pdo);
 
 $cuentas = cuentas_listar($pdo, false);
+$reparto = cuentas_reparto_listar($pdo);
 foreach ($cuentas as &$c) {
     $c['saldo'] = cuentas_saldo_total($pdo, (int)$c['id']);
+    $c['porcentaje_reparto'] = (float)($reparto[(int)$c['id']] ?? 0);
 }
 unset($c);
 
@@ -41,6 +43,9 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
         <div class="col-md-6 text-end">
             <a href="flujo_caja.php" class="btn btn-account-secondary me-2">
                 <i class="bi bi-arrow-left-circle me-1"></i> Flujo de Caja
+            </a>
+            <a href="cuentas_reparto.php" class="btn btn-account-secondary me-2">
+                <i class="bi bi-percent me-1"></i> % por caja
             </a>
             <a href="cuentas_crear.php" class="btn btn-account-primary">
                 <i class="bi bi-plus-circle me-1"></i> Nueva Cuenta
@@ -70,6 +75,7 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
                                 <th>Tipo</th>
                                 <th>Descripción</th>
                                 <th class="text-end">Saldo actual</th>
+                                <th class="text-end">% pagos</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
                             </tr>
@@ -84,6 +90,13 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
                                         <strong style="color: <?= $c['saldo'] >= 0 ? '#28A745' : '#DC3545' ?>">
                                             $<?= number_format($c['saldo'], 2, ',', '.') ?>
                                         </strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <?php if ((float)($c['porcentaje_reparto'] ?? 0) > 0): ?>
+                                            <span class="badge bg-info text-dark"><?= number_format((float)$c['porcentaje_reparto'], 2, ',', '.') ?>%</span>
+                                        <?php else: ?>
+                                            <small class="text-muted">—</small>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php if ((int)$c['activo'] === 1): ?>

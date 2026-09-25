@@ -12,6 +12,7 @@ if (!($pdo instanceof PDO)) {
 
 ensureCuentasSchema($pdo);
 $cuentas = cuentas_listar($pdo);
+$repartoDefault = cuentas_reparto_listar($pdo);
 
 $es_revendedor = (($role ?? '') === 'revendedor');
 $es_operario = (($role ?? '') === 'operario');
@@ -383,11 +384,10 @@ if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
             $metodo = trim($_POST['metodo'] ?? '');
             $referencia = trim($_POST['referencia'] ?? '');
             $notas = trim($_POST['notas'] ?? '');
-            $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
-
             if ($monto <= 0) {
                 throw new Exception('El monto debe ser mayor a 0');
             }
+            $partesPago = cuentas_reparto_partir_monto($monto, cuentas_reparto_desde_post($_POST));
             // Allow small floating-point tolerance by comparing rounded cents
             $saldo_cmp = round($saldo, 2);
             if ($monto > $saldo_cmp) {
@@ -425,22 +425,15 @@ if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
                 if (!$fc_existe) {
                     $descripcion_fc = 'Pago pedido ' . $pedido['numero_pedido'] . ' (' . $metodo . ')';
                     $referencia_fc = $referencia ?: $pedido['numero_pedido'];
-
-                    $stmt_fc = $pdo->prepare("
-                        INSERT INTO flujo_caja
-                        (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
-                        VALUES (?, 'ingreso', 'Pago Pedido', ?, ?, ?, ?, ?, ?, ?)
-                    ");
-                    $stmt_fc->execute([
-                        date('Y-m-d'),
-                        $descripcion_fc,
-                        $monto,
-                        $referencia_fc,
-                        $pago_id,
-                        $cuenta_id,
-                        $_SESSION['user']['id'] ?? null,
-                        $notas ?: 'Registrado desde pedido'
-                    ]);
+                    cuentas_reparto_insertar_ingresos($pdo, [
+                        'fecha' => date('Y-m-d'),
+                        'categoria' => 'Pago Pedido',
+                        'descripcion' => $descripcion_fc,
+                        'referencia' => $referencia_fc,
+                        'id_referencia' => $pago_id,
+                        'usuario_id' => $_SESSION['user']['id'] ?? null,
+                        'observaciones' => $notas ?: 'Registrado desde pedido',
+                    ], $partesPago);
                 }
             } catch (Exception $e) {
                 // Si falla el flujo de caja, no afecta el registro del pago
@@ -733,14 +726,8 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <label class="form-label">Notas</label>
                 <input type="text" class="form-control" name="notas">
             </div>
-            <div class="col-md-3">
-                <label class="form-label">Cuenta</label>
-                <select class="form-select" name="cuenta_id" required>
-                    <option value="">Seleccionar...</option>
-                    <?php foreach ($cuentas as $c): ?>
-                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+            <div class="col-md-12">
+                <?php cuentas_reparto_render_campos($cuentas, $repartoDefault, ['required' => true, 'monto_selector' => 'input[name="monto"]']); ?>
             </div>
             <div class="col-md-12">
                 <button type="submit" class="btn btn-primary">Registrar Pago</button>
