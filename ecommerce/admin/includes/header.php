@@ -1324,8 +1324,14 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
             document.documentElement.setAttribute('data-admin-theme', theme);
             document.documentElement.setAttribute('data-bs-theme', theme);
 
-            const storedSidebar = localStorage.getItem('admin-sidebar-collapsed');
-            document.documentElement.setAttribute('data-admin-sidebar', storedSidebar === '1' ? 'collapsed' : 'expanded');
+            const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
+            if (isMobile) {
+                document.documentElement.classList.add('admin-is-mobile');
+                document.documentElement.setAttribute('data-admin-sidebar', 'expanded');
+            } else {
+                const storedSidebar = localStorage.getItem('admin-sidebar-collapsed');
+                document.documentElement.setAttribute('data-admin-sidebar', storedSidebar === '1' ? 'collapsed' : 'expanded');
+            }
         })();
     </script>
     <style>
@@ -1542,6 +1548,13 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
             font-weight: 700;
             letter-spacing: .02em;
         }
+        .top-navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            flex: 1;
+        }
         .top-navbar-right {
             display: flex;
             align-items: center;
@@ -1748,7 +1761,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
             font-weight: 600;
         }
 
-        /* ===== Sidebar colapsado (rail de iconos) ===== */
+        /* ===== Sidebar colapsado (rail de iconos, solo escritorio) ===== */
         .sidebar,
         .main-content {
             transition: width .25s ease, max-width .25s ease, flex-basis .25s ease, padding .25s ease;
@@ -1756,6 +1769,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
         #sidebarToggleBtn i {
             transition: transform .25s ease;
         }
+        @media (min-width: 992px) {
         html[data-admin-sidebar="collapsed"] .sidebar {
             width: 72px !important;
             max-width: 72px !important;
@@ -1851,15 +1865,116 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
             align-items: center;
             justify-content: center;
         }
-        @media (max-width: 992px) {
+        }
+        @media (max-width: 991.98px) {
+            html, body {
+                overflow-x: hidden;
+                max-width: 100%;
+            }
+            .container-fluid > .row {
+                display: block;
+                margin: 0;
+            }
             .top-navbar {
-                padding: 12px 16px;
+                padding: 10px 12px;
+                gap: 8px;
+                position: sticky;
+                top: 0;
+                z-index: 1085;
+            }
+            .top-navbar h5 {
+                font-size: .95rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+                flex: 1;
+            }
+            .top-navbar h5 .admin-title-full { display: none; }
+            .top-navbar-right {
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            html[data-admin-sidebar-mobile="open"],
+            html[data-admin-sidebar-mobile="open"] body {
+                overflow: hidden;
             }
             .main-content {
-                padding: 16px;
+                width: 100% !important;
+                max-width: 100% !important;
+                flex: none !important;
+                padding: 12px;
+                min-width: 0;
+            }
+            html[data-admin-sidebar="collapsed"] .main-content {
+                width: 100% !important;
+                max-width: 100% !important;
+                flex: none !important;
             }
             .sidebar {
-                min-height: auto;
+                position: fixed;
+                top: 56px;
+                left: 0;
+                width: min(320px, 88vw) !important;
+                max-width: min(320px, 88vw) !important;
+                flex: none !important;
+                height: calc(100vh - 56px);
+                max-height: calc(100vh - 56px);
+                min-height: calc(100vh - 56px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                z-index: 1080;
+                transform: translateX(-105%);
+                transition: transform .25s ease;
+                box-shadow: none;
+            }
+            html[data-admin-sidebar="collapsed"] .sidebar {
+                width: min(320px, 88vw) !important;
+                max-width: min(320px, 88vw) !important;
+                flex: none !important;
+                overflow-y: auto;
+            }
+            html[data-admin-sidebar-mobile="open"] .sidebar {
+                transform: translateX(0);
+                box-shadow: 12px 0 32px rgba(15, 23, 42, .28);
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .sidebar .logo-section img,
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .sidebar .logo-section h4,
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-label,
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-header .bi-chevron-down {
+                display: revert;
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .sidebar .logo-section::after {
+                display: none;
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-header {
+                justify-content: space-between;
+                padding: 12px 15px;
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-header span i {
+                margin-right: 8px;
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-header[data-bs-toggle="collapse"] {
+                pointer-events: auto;
+            }
+            html.admin-is-mobile[data-admin-sidebar="collapsed"] .menu-items {
+                display: block !important;
+                position: static;
+                width: auto;
+                box-shadow: none;
+                border: 0;
+                background: transparent;
+            }
+            .admin-sidebar-backdrop {
+                display: none;
+                position: fixed;
+                inset: 0;
+                top: 56px;
+                background: rgba(15, 23, 42, .45);
+                z-index: 1075;
+            }
+            html[data-admin-sidebar-mobile="open"] .admin-sidebar-backdrop {
+                display: block;
             }
             .sidebar .logo-section {
                 padding: 14px;
@@ -1868,10 +1983,7 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
                 padding: 10px 12px;
             }
             .menu-items a {
-                padding: 8px 10px 8px 28px;
-            }
-            .btn {
-                padding: .45rem .7rem;
+                padding: 10px 10px 10px 28px;
             }
             .theme-toggle {
                 min-width: auto;
@@ -1879,17 +1991,95 @@ if ($notificaciones_permiso_produccion || $notificaciones_permiso_admin || $noti
             .theme-toggle .theme-toggle-label {
                 display: none;
             }
+            h1, .h1 { font-size: 1.4rem; }
+            h2, .h2 { font-size: 1.2rem; }
+            .card-header {
+                flex-wrap: wrap;
+                gap: .5rem;
+            }
+            .table-responsive {
+                -webkit-overflow-scrolling: touch;
+            }
+            .main-content .table {
+                font-size: .9rem;
+            }
+            input.form-control,
+            select.form-select,
+            textarea.form-control {
+                font-size: 16px !important;
+            }
+            .modal-dialog {
+                margin: .4rem;
+            }
+            .main-content > .d-flex.justify-content-between,
+            .main-content .d-flex.justify-content-between.align-items-center.mb-4,
+            .main-content .d-flex.justify-content-between.mb-3,
+            .main-content .d-flex.justify-content-between.mb-4 {
+                flex-wrap: wrap;
+                gap: .75rem;
+            }
+            .main-content .btn-group {
+                flex-wrap: wrap;
+            }
+            .main-content .text-center > .btn-lg {
+                width: 100%;
+                margin-left: 0 !important;
+                margin-bottom: .5rem;
+            }
+            .modal-footer {
+                flex-wrap: wrap;
+                gap: .5rem;
+            }
+            .modal-footer .btn {
+                flex: 1 1 auto;
+            }
+            .cotizacion-mobile-bar {
+                position: sticky;
+                bottom: 0;
+                z-index: 30;
+                display: flex;
+                gap: 8px;
+                padding: 10px 76px 12px 0;
+                background: linear-gradient(180deg, transparent, var(--admin-bg) 28%);
+            }
+            .cotizacion-mobile-bar .btn {
+                flex: 1 1 0;
+            }
+            .main-content .row > * {
+                min-width: 0;
+            }
+            form.row.g-3 .d-flex.align-items-end {
+                flex-wrap: wrap;
+                gap: .5rem;
+            }
+            form.row.g-3 .d-flex.align-items-end .btn {
+                flex: 1 1 auto;
+            }
+        }
+        @media (max-width: 576px) {
+            .modal-fullscreen-sm-down {
+                width: 100vw;
+                max-width: 100%;
+                margin: 0;
+                min-height: 100%;
+            }
+            .modal-fullscreen-sm-down .modal-content {
+                min-height: 100vh;
+                border-radius: 0;
+            }
         }
     </style>
 </head>
 <body>
 
 <div class="top-navbar">
-    <h5 style="margin: 0; color: var(--admin-title);"><i class="bi bi-speedometer2"></i> Panel de Administración</h5>
-    <div class="top-navbar-right">
+    <div class="top-navbar-left">
         <button class="btn btn-outline-primary btn-sm" type="button" id="sidebarToggleBtn" title="Mostrar/ocultar menú" aria-label="Mostrar u ocultar el menú">
-            <i class="bi bi-arrow-bar-left" id="sidebarToggleIcon"></i>
+            <i class="bi bi-list" id="sidebarToggleIcon"></i>
         </button>
+        <h5 style="margin: 0; color: var(--admin-title);"><i class="bi bi-speedometer2"></i> <span class="admin-title-full">Panel de Administración</span><span class="d-lg-none">Admin</span></h5>
+    </div>
+    <div class="top-navbar-right">
         <button class="btn btn-outline-primary btn-sm theme-toggle" type="button" id="themeToggleBtn" aria-label="Cambiar tema del panel">
             <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
             <span class="theme-toggle-label" id="themeToggleLabel">Modo oscuro</span>
@@ -2260,10 +2450,11 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
     </div>
 <?php endif; ?>
 
+<div class="admin-sidebar-backdrop" id="adminSidebarBackdrop" hidden></div>
 <div class="container-fluid">
     <div class="row">
         <!-- Sidebar -->
-        <div class="col-md-2 sidebar">
+        <div class="col-lg-2 sidebar">
             <div class="logo-section">
                 <?php
                 // Obtener logo de la empresa
@@ -2578,9 +2769,9 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
         </div>
 
         <!-- Main Content -->
-        <div class="col-md-10 main-content">
+        <div class="col-lg-10 main-content">
 
-<script src="<?= $admin_url ?>assets/js/admin-sidebar-theme.js?v=1"></script>
+<script src="<?= $admin_url ?>assets/js/admin-sidebar-theme.js?v=2"></script>
 <script>
     (function () {
         var btn = document.getElementById('btnMarcarNotifLeidas');

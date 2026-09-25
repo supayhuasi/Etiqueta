@@ -63,10 +63,10 @@ $stmt = $pdo->query("
 $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <div>
         <h1>💼 Cotizaciones</h1>
-        <p class="text-muted">Gestiona solicitudes de cotización y presupuestos</p>
+        <p class="text-muted mb-0">Gestiona solicitudes de cotización y presupuestos</p>
     </div>
     <div>
         <?php if (!$es_revendedor): ?>
@@ -76,42 +76,42 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 </div>
 
 <!-- Estadísticas -->
-<div class="row mb-4">
-    <div class="col-md-2">
+<div class="row g-2 mb-4">
+    <div class="col-6 col-md-2">
         <div class="card bg-primary text-white">
-            <div class="card-body text-center">
+            <div class="card-body text-center py-3">
                 <h6>Total</h6>
                 <h3><?= $stats['total'] ?></h3>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
         <div class="card bg-warning text-dark">
-            <div class="card-body text-center">
+            <div class="card-body text-center py-3">
                 <h6>Pendientes</h6>
                 <h3><?= $stats['pendientes'] ?></h3>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
         <div class="card bg-info text-white">
-            <div class="card-body text-center">
+            <div class="card-body text-center py-3">
                 <h6>Enviadas</h6>
                 <h3><?= $stats['enviadas'] ?></h3>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
         <div class="card bg-success text-white">
-            <div class="card-body text-center">
+            <div class="card-body text-center py-3">
                 <h6>Aceptadas</h6>
                 <h3><?= $stats['aceptadas'] ?></h3>
             </div>
         </div>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
         <div class="card bg-secondary text-white">
-            <div class="card-body text-center">
+            <div class="card-body text-center py-3">
                 <h6>Convertidas</h6>
                 <h3><?= $stats['convertidas'] ?></h3>
             </div>

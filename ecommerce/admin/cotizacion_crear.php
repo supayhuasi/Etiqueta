@@ -758,10 +758,10 @@ foreach ($lista_cat_rows as $row) {
 }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <div>
         <h1>➕ Nueva Cotización</h1>
-        <p class="text-muted">Crear una cotización/presupuesto para un cliente</p>
+        <p class="text-muted mb-0">Crear una cotización/presupuesto para un cliente</p>
     </div>
     <a href="cotizaciones.php" class="btn btn-secondary">← Volver</a>
 </div>
@@ -810,6 +810,29 @@ foreach ($lista_cat_rows as $row) {
         }
         .item-resumen-attrs .badge {
             font-weight: 500;
+        }
+        @media (max-width: 767.98px) {
+            .cotizacion-items-header {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: .6rem;
+            }
+            .cotizacion-items-header .btn {
+                width: 100%;
+            }
+            .item-row .text-end {
+                text-align: left !important;
+                width: 100%;
+            }
+            .item-row .input-group {
+                max-width: 100% !important;
+                margin-left: 0 !important;
+            }
+            #itemModal .modal-header,
+            #itemModal .modal-body,
+            #itemModal .modal-footer {
+                padding: 1rem !important;
+            }
         }
     </style>
     <div class="row">
@@ -916,7 +939,7 @@ foreach ($lista_cat_rows as $row) {
     
     <!-- Items -->
     <div class="card mb-4">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center cotizacion-items-header">
             <h5 class="mb-0">📦 Items de la Cotización</h5>
             <button type="button" class="btn btn-light btn-sm" onclick="agregarItem()">➕ Agregar Item</button>
         </div>
@@ -926,8 +949,8 @@ foreach ($lista_cat_rows as $row) {
             </div>
             
             <div class="row mt-4">
-                <div class="col-md-8"></div>
-                <div class="col-md-4">
+                <div class="col-lg-7 d-none d-lg-block"></div>
+                <div class="col-12 col-lg-5">
                     <table class="table">
                         <tr>
                             <th>Subtotal:</th>
@@ -992,7 +1015,7 @@ foreach ($lista_cat_rows as $row) {
 
     <!-- Modal Agregar/Editar Item -->
     <div class="modal fade" id="itemModal" tabindex="-1" aria-labelledby="itemModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header px-4 py-3">
                     <h5 class="modal-title" id="itemModalLabel">Agregar item</h5>
@@ -1066,9 +1089,13 @@ foreach ($lista_cat_rows as $row) {
         </div>
     </div>
     
-    <div class="text-center">
+    <div class="text-center d-none d-lg-block">
         <button type="submit" class="btn btn-primary btn-lg">💾 Crear Cotización</button>
         <a href="cotizaciones.php" class="btn btn-secondary btn-lg">Cancelar</a>
+    </div>
+    <div class="cotizacion-mobile-bar d-lg-none">
+        <button type="button" class="btn btn-success" onclick="agregarItem()">➕ Item</button>
+        <button type="submit" class="btn btn-primary">💾 Crear</button>
     </div>
 </form>
 

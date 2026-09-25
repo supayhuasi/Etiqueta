@@ -611,7 +611,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
         <h1>💼 Cotización <?= htmlspecialchars($cotizacion['numero_cotizacion']) ?></h1>
         <p class="text-muted">
@@ -635,7 +635,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($audits)):
         ?>
         <div class="card">
-            <div class="card-body p-2" style="min-width:280px;">
+            <div class="card-body p-2" style="min-width:min(280px, 100%);">
                 <strong>Historial</strong>
                 <ul class="list-unstyled small mb-0">
                     <?php foreach ($audits as $a):
@@ -658,7 +658,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <?php endif; ?>
     </div>
-    <div>
+    <div class="d-flex flex-wrap gap-2">
         <a href="cotizacion_pdf.php?id=<?= $id ?>" class="btn btn-info" target="_blank">📄 Descargar PDF</a>
         <a href="cotizacion_editar.php?id=<?= $id ?>" class="btn btn-warning">✏️ Editar</a>
         <a href="cotizaciones.php" class="btn btn-secondary">← Volver</a>
