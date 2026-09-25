@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+try { $pdo->query("ALTER TABLE `ecommerce_productos` ADD COLUMN `es_bien_uso` TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
 
 $categoria_filter = $_GET['categoria'] ?? '';
 $tipo_filter = $_GET['tipo'] ?? '';
@@ -71,6 +72,9 @@ if (!empty($estado_filter)) {
     } elseif ($estado_filter === 'oculto') {
         $query .= " AND p.mostrar_ecommerce = 0";
         $count_query .= " AND p.mostrar_ecommerce = 0";
+    } elseif ($estado_filter === 'bien_uso') {
+        $query .= " AND COALESCE(p.es_bien_uso, 0) = 1";
+        $count_query .= " AND COALESCE(p.es_bien_uso, 0) = 1";
     }
 }
 
@@ -148,6 +152,7 @@ $filter_url = !empty($filter_params) ? '&' . http_build_query($filter_params) : 
                     <option value="inactivo" <?= $estado_filter === 'inactivo' ? 'selected' : '' ?>>Inactivo</option>
                     <option value="visible" <?= $estado_filter === 'visible' ? 'selected' : '' ?>>Visible Ecommerce</option>
                     <option value="oculto" <?= $estado_filter === 'oculto' ? 'selected' : '' ?>>Oculto Ecommerce</option>
+                    <option value="bien_uso" <?= $estado_filter === 'bien_uso' ? 'selected' : '' ?>>Bienes de uso</option>
                 </select>
             </div>
 
@@ -198,7 +203,12 @@ $filter_url = !empty($filter_params) ? '&' . http_build_query($filter_params) : 
                 <?php foreach ($productos as $prod): ?>
                     <tr>
                         <td><small><?= htmlspecialchars($prod['codigo']) ?></small></td>
-                        <td><?= htmlspecialchars($prod['nombre']) ?></td>
+                        <td>
+                            <?= htmlspecialchars($prod['nombre']) ?>
+                            <?php if (!empty($prod['es_bien_uso'])): ?>
+                                <span class="badge bg-dark">Bien de uso</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($prod['categoria_nombre']) ?></td>
                         <td>$<?= number_format($prod['precio_base'], 2, ',', '.') ?></td>
                         <td>

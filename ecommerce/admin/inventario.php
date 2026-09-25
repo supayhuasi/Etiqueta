@@ -126,6 +126,9 @@ if ($origen_filtro !== 'todos' && in_array('tipo_origen', $cols_productos, true)
     $where_productos[] = "tipo_origen = ?";
     $params_productos[] = $origen_filtro;
 }
+if (in_array('es_bien_uso', $cols_productos, true)) {
+    $where_productos[] = "COALESCE(es_bien_uso, 0) = 0";
+}
 
 $sql_productos = "
     SELECT 

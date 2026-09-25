@@ -21,8 +21,9 @@ $categorias = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_proveedores WHERE activo = 1 ORDER BY nombre");
 $proveedores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Auto-migración ubicacion
+// Auto-migración ubicacion / bien de uso
 try { $pdo->query("ALTER TABLE `ecommerce_productos` ADD COLUMN `ubicacion` VARCHAR(120) NULL DEFAULT NULL"); } catch (Throwable $e) {}
+try { $pdo->query("ALTER TABLE `ecommerce_productos` ADD COLUMN `es_bien_uso` TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
 
 // Ubicaciones existentes para autocomplete
 $ubicaciones_productos = [];
@@ -41,13 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $activo = isset($_POST['activo']) ? 1 : 0;
     $mostrar_ecommerce = isset($_POST['mostrar_ecommerce']) ? 1 : 0;
     $es_material = isset($_POST['es_material']) ? 1 : 0;
+    $es_bien_uso = isset($_POST['es_bien_uso']) ? 1 : 0;
     $usa_receta = isset($_POST['usa_receta']) ? 1 : 0;
     $tipo_origen = $_POST['tipo_origen'] ?? 'fabricacion_propia';
     $stock_minimo = floatval($_POST['stock_minimo'] ?? 0);
     $proveedor_habitual_id = !empty($_POST['proveedor_habitual_id']) ? intval($_POST['proveedor_habitual_id']) : null;
     $ubicacion = trim($_POST['ubicacion'] ?? '');
     
-    if (empty($nombre) || empty($codigo) || $categoria_id <= 0 || ($precio_base <= 0 && !$es_material)) {
+    if ($es_bien_uso) {
+        $es_material = 0;
+        $usa_receta = 0;
+        $mostrar_ecommerce = 0;
+    }
+
+    if (empty($nombre) || empty($codigo) || $categoria_id <= 0 || ($precio_base <= 0 && !$es_material && !$es_bien_uso)) {
         $error = "Falta completar campos obligatorios";
     } else {
         try {
@@ -55,18 +63,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     UPDATE ecommerce_productos 
                     SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, 
-                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?, usa_receta = ?,
+                        precio_base = ?, tipo_precio = ?, orden = ?, activo = ?, mostrar_ecommerce = ?, es_material = ?, es_bien_uso = ?, usa_receta = ?,
                         tipo_origen = ?, stock_minimo = ?, proveedor_habitual_id = ?, ubicacion = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null, $id]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $es_bien_uso, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null, $id]);
                 $mensaje = "Producto actualizado";
             } else {
                 $stmt = $pdo->prepare("
-                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, usa_receta, tipo_origen, stock_minimo, proveedor_habitual_id, ubicacion)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ecommerce_productos (codigo, nombre, descripcion, categoria_id, precio_base, tipo_precio, orden, activo, mostrar_ecommerce, es_material, es_bien_uso, usa_receta, tipo_origen, stock_minimo, proveedor_habitual_id, ubicacion)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null]);
+                $stmt->execute([$codigo, $nombre, $descripcion, $categoria_id, $precio_base, $tipo_precio, $orden, $activo, $mostrar_ecommerce, $es_material, $es_bien_uso, $usa_receta, $tipo_origen, $stock_minimo, $proveedor_habitual_id, $ubicacion ?: null]);
                 $producto_id = $pdo->lastInsertId();
                 $mensaje = "Producto creado";
             }
@@ -191,6 +199,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="es_bien_uso" id="es_bien_uso" <?= !empty($producto['es_bien_uso']) ? 'checked' : '' ?>>
+                <label class="form-check-label" for="es_bien_uso">Es bien de uso</label>
+                <div class="form-text">Máquinas, herramientas, muebles u otros bienes que no se venden. No aparece en la tienda ni en el stock de mercadería.</div>
+            </div>
+
+            <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" name="usa_receta" id="usa_receta" <?= !empty($producto['usa_receta']) ? 'checked' : '' ?>>
                 <label class="form-check-label" for="usa_receta">Usa receta de materiales</label>
             </div>
@@ -224,6 +238,19 @@ function toggleProveedorProducto() {
     cont.style.display = (tipoOrigen === 'compra') ? 'block' : 'none';
 }
 toggleProveedorProducto();
+
+const chkBienUso = document.getElementById('es_bien_uso');
+const chkMaterial = document.getElementById('es_material');
+const chkReceta = document.getElementById('usa_receta');
+const chkEcommerce = document.getElementById('mostrar_ecommerce');
+if (chkBienUso) {
+    chkBienUso.addEventListener('change', function () {
+        if (!chkBienUso.checked) return;
+        if (chkMaterial) chkMaterial.checked = false;
+        if (chkReceta) chkReceta.checked = false;
+        if (chkEcommerce) chkEcommerce.checked = false;
+    });
+}
 </script>
 
 <?php require 'includes/footer.php'; ?>
