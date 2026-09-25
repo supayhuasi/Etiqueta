@@ -135,6 +135,16 @@ if (!function_exists('ensureCuentasSchema')) {
         } catch (Throwable $e) {
             error_log('cuentas_helper: no se pudo crear cuentas_reparto: ' . $e->getMessage());
         }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS cuentas_config (
+                clave VARCHAR(80) NOT NULL,
+                valor VARCHAR(255) NOT NULL DEFAULT '',
+                PRIMARY KEY (clave)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (Throwable $e) {
+            error_log('cuentas_helper: no se pudo crear cuentas_config: ' . $e->getMessage());
+        }
     }
 }
 
@@ -155,6 +165,53 @@ if (!function_exists('cuentas_get_default_id')) {
             error_log('cuentas_helper: cuentas_get_default_id falló: ' . $e->getMessage());
             return 0;
         }
+    }
+}
+
+if (!function_exists('cuentas_config_get')) {
+    function cuentas_config_get(PDO $pdo, string $clave, string $default = ''): string
+    {
+        try {
+            if (!admin_table_exists($pdo, 'cuentas_config')) {
+                return $default;
+            }
+            $stmt = $pdo->prepare("SELECT valor FROM cuentas_config WHERE clave = ? LIMIT 1");
+            $stmt->execute([$clave]);
+            $valor = $stmt->fetchColumn();
+            return $valor === false ? $default : (string)$valor;
+        } catch (Throwable $e) {
+            return $default;
+        }
+    }
+}
+
+if (!function_exists('cuentas_config_set')) {
+    function cuentas_config_set(PDO $pdo, string $clave, string $valor): void
+    {
+        $stmt = $pdo->prepare("
+            INSERT INTO cuentas_config (clave, valor) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+        ");
+        $stmt->execute([$clave, $valor]);
+    }
+}
+
+if (!function_exists('cuentas_gastos_id')) {
+    function cuentas_gastos_id(PDO $pdo): int
+    {
+        $id = (int)cuentas_config_get($pdo, 'gastos_cuenta_id', '0');
+        if ($id > 0 && cuentas_get($pdo, $id)) {
+            return $id;
+        }
+        return cuentas_get_default_id($pdo);
+    }
+}
+
+if (!function_exists('cuentas_gastos_nombre')) {
+    function cuentas_gastos_nombre(PDO $pdo): string
+    {
+        $cuenta = cuentas_get($pdo, cuentas_gastos_id($pdo));
+        return $cuenta ? (string)$cuenta['nombre'] : 'Caja / Operativa';
     }
 }
 

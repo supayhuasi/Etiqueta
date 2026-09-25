@@ -15,7 +15,8 @@ if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
 
-$cuentas = cuentas_listar($pdo);
+$cuenta_id = cuentas_gastos_id($pdo);
+$caja_gastos_nombre = cuentas_gastos_nombre($pdo);
 
 // Obtener tipos y estados
 $stmt_tipos = $pdo->query("SELECT id, nombre, color, presupuesto_mensual, porcentaje_alerta, bloquear_exceso FROM tipos_gastos WHERE activo = 1 ORDER BY nombre");
@@ -41,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monto = floatval($_POST['monto'] ?? 0);
     $empleado_id = $_POST['empleado_id'] ?? null;
     $observaciones = $_POST['observaciones'] ?? '';
-    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+    $cuenta_id = cuentas_gastos_id($pdo);
 
     $errores = [];
     
@@ -246,13 +247,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="cuenta_id" class="form-label">Cuenta</label>
-                                <select class="form-select" id="cuenta_id" name="cuenta_id">
-                                    <?php foreach ($cuentas as $c): ?>
-                                        <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <small class="text-muted">De dónde sale el pago si el estado es (o pasa a ser) Pagado.</small>
+                                <label class="form-label">Caja</label>
+                                <div class="form-control bg-light"><?= htmlspecialchars($caja_gastos_nombre) ?></div>
+                                <small class="text-muted">Los gastos pagados se descuentan de esta caja. Se cambia en Cuentas.</small>
                             </div>
                             <div class="col-12">
                                 <div id="budgetAlertBox" class="alert d-none mb-3"></div>

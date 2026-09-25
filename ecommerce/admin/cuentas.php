@@ -37,6 +37,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'trans
 if (isset($_GET['ok']) && (string)$_GET['ok'] === 'transferido') {
     $mensaje = 'El saldo se movió correctamente de una caja a la otra.';
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'config_gastos') {
+    try {
+        admin_require_csrf_post();
+        $cajaGastosId = (int)($_POST['gastos_cuenta_id'] ?? 0);
+        if ($cajaGastosId <= 0 || !cuentas_get($pdo, $cajaGastosId)) {
+            throw new Exception('Elegí una caja válida para los gastos.');
+        }
+        cuentas_config_set($pdo, 'gastos_cuenta_id', (string)$cajaGastosId);
+        header('Location: cuentas.php?ok=caja_gastos');
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
+    }
+}
+if (isset($_GET['ok']) && (string)$_GET['ok'] === 'caja_gastos') {
+    $mensaje = 'La caja de gastos quedó configurada. Los gastos pagados se descuentan de ahí.';
+}
 
 $cuentas = cuentas_listar($pdo, false);
 $reparto = cuentas_reparto_listar($pdo);
@@ -47,6 +64,8 @@ foreach ($cuentas as &$c) {
 unset($c);
 
 $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
+$caja_gastos_id = cuentas_gastos_id($pdo);
+$cuentas_activas = array_values(array_filter($cuentas, static fn($c) => (int)($c['activo'] ?? 0) === 1));
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -86,6 +105,29 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
     <?php if ($mensaje): ?>
         <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
     <?php endif; ?>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="POST" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                <input type="hidden" name="accion" value="config_gastos">
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold" for="gastos_cuenta_id">Caja de gastos</label>
+                    <select class="form-select" id="gastos_cuenta_id" name="gastos_cuenta_id" required>
+                        <?php foreach ($cuentas_activas as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" <?= (int)$c['id'] === $caja_gastos_id ? 'selected' : '' ?>>
+                                <?= htmlspecialchars((string)$c['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted">Todos los gastos pagados se descuentan de esta caja.</small>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-account-primary w-100">Guardar caja de gastos</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div class="card mb-4">
         <div class="card-body">

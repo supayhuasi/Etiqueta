@@ -13,7 +13,7 @@ if (!isset($can_access) || !$can_access('gastos')) {
     die("Acceso denegado.");
 }
 
-$cuentas = cuentas_listar($pdo);
+$caja_gastos_nombre = cuentas_gastos_nombre($pdo);
 
 $id = $_GET['id'] ?? 0;
 
@@ -40,7 +40,7 @@ $estados = $stmt_estados->fetchAll(PDO::FETCH_ASSOC);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado_nuevo_id = $_POST['estado_gasto_id'] ?? 0;
     $observaciones = $_POST['observaciones'] ?? '';
-    $cuenta_id = intval($_POST['cuenta_id'] ?? 0) ?: cuentas_get_default_id($pdo);
+    $cuenta_id = cuentas_gastos_id($pdo);
 
     if ($estado_nuevo_id <= 0) {
         $error = "Debe seleccionar un estado";
@@ -199,12 +199,9 @@ $historial = $stmt_historial->fetchAll(PDO::FETCH_ASSOC);
                         </div>
 
                         <div class="mb-3">
-                            <label for="cuenta_id" class="form-label">Cuenta (para el movimiento de caja si el estado pasa a Pagado)</label>
-                            <select class="form-select" id="cuenta_id" name="cuenta_id">
-                                <?php foreach ($cuentas as $c): ?>
-                                    <option value="<?= (int)$c['id'] ?>" <?= (int)($gasto['cuenta_id'] ?? 0) === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label class="form-label">Caja</label>
+                            <div class="form-control bg-light"><?= htmlspecialchars($caja_gastos_nombre) ?></div>
+                            <small class="text-muted">Al pasar a Pagado se descuenta de esta caja. Se cambia en Cuentas.</small>
                         </div>
 
                         <div class="mb-3">

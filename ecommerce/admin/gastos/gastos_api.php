@@ -119,8 +119,7 @@ try {
     $empleadoRaw = $pickValue($data, ['empleado_id', 'beneficiario_id', 'employee_id']);
     $empleado_id = ($empleadoRaw !== null && $empleadoRaw !== '' ? intval($empleadoRaw) : null);
     $observaciones = trim((string)($pickValue($data, ['observaciones', 'observacion', 'notes'], '') ?? ''));
-    $cuentaRaw = $pickValue($data, ['cuenta_id', 'cuenta', 'account_id']);
-    $cuenta_id = $resolveIdByName($pdo, 'cuentas', $cuentaRaw) ?: cuentas_get_default_id($pdo);
+    $cuenta_id = cuentas_gastos_id($pdo);
 
     $errores = [];
     if (empty($fecha)) $errores[] = 'La fecha es obligatoria';

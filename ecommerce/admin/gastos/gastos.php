@@ -2,6 +2,9 @@
 require '../includes/header.php';
 require_once __DIR__ . '/gastos_budget_helper.php';
 ensureGastosBudgetSchema($pdo);
+require_once __DIR__ . '/../includes/cuentas_helper.php';
+ensureCuentasSchema($pdo);
+$caja_gastos_nombre = cuentas_gastos_nombre($pdo);
 
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -90,7 +93,7 @@ $gastos_por_tipo = $stmt_por_tipo->fetchAll(PDO::FETCH_ASSOC);
     <div class="row mb-4">
         <div class="col-md-6">
             <h2 class="mb-1">💸 Administración de Gastos</h2>
-            <p class="text-muted mb-0">Seguimiento mensual de gastos y estado de pago</p>
+            <p class="text-muted mb-0">Seguimiento mensual de gastos y estado de pago. Al pagar se descuentan de <strong><?= htmlspecialchars($caja_gastos_nombre) ?></strong>.</p>
         </div>
         <div class="col-md-6 text-md-end mt-3 mt-md-0">
             <a href="tipos_gastos.php" class="btn btn-outline-secondary">⚙️ Tipos de Gasto</a>
