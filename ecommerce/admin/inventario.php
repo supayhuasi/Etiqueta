@@ -1,5 +1,6 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/inventario_helper.php';
 
 // Acción: resetear todo el stock a 0
 $mensaje_reset = '';
@@ -159,6 +160,18 @@ if (in_array($tipo_filtro, ['todos', 'productos'])) {
     $inventario = array_merge($inventario, $productos);
 }
 
+$entradas = inventario_entradas_pendientes($pdo);
+foreach ($inventario as &$item) {
+    $entrada = 0.0;
+    if (($item['tipo_item'] ?? '') === 'producto') {
+        $entrada = (float)($entradas['productos'][(int)$item['id']] ?? 0);
+    }
+    $item['stock_entrada'] = $entrada;
+    $item['stock_futuro'] = (float)$item['stock'] + $entrada;
+    $item['estado_alerta_futuro'] = inventario_alerta_stock((float)$item['stock_futuro'], (float)$item['stock_minimo']);
+}
+unset($item);
+
 // Aplicar filtro de alertas
 if ($alerta_filtro !== 'todos') {
     $inventario = array_filter($inventario, function($item) use ($alerta_filtro) {
@@ -168,6 +181,10 @@ if ($alerta_filtro !== 'todos') {
             return $item['estado_alerta'] === 'negativo';
         } elseif ($alerta_filtro === 'sin_alerta') {
             return $item['estado_alerta'] === 'normal';
+        } elseif ($alerta_filtro === 'en_camino') {
+            return (float)($item['stock_entrada'] ?? 0) > 0;
+        } elseif ($alerta_filtro === 'futuro_bajo') {
+            return in_array($item['estado_alerta_futuro'] ?? '', ['negativo', 'sin_stock', 'bajo_minimo'], true);
         }
         return true;
     });
@@ -227,6 +244,12 @@ if ($ver_colores && $tiene_opciones && in_array('stock', $cols_opciones, true)) 
     $stmt = $pdo->prepare($sql_colores);
     $stmt->execute($params_colores);
     $opciones_color = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($opciones_color as &$opc) {
+        $entradaColor = (float)($entradas['colores'][(int)$opc['opcion_id']] ?? 0);
+        $opc['stock_entrada'] = $entradaColor;
+        $opc['stock_futuro'] = (float)$opc['stock'] + $entradaColor;
+    }
+    unset($opc);
 }
 
 // Estadísticas
@@ -234,6 +257,7 @@ $total_items = count($inventario);
 $items_negativo = count(array_filter($inventario, fn($i) => $i['estado_alerta'] === 'negativo'));
 $items_bajo_minimo = count(array_filter($inventario, fn($i) => $i['estado_alerta'] === 'bajo_minimo'));
 $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta'] === 'sin_stock'));
+$items_en_camino = count(array_filter($inventario, fn($i) => (float)($i['stock_entrada'] ?? 0) > 0));
 ?>
 
 <?php if (!empty($faltantes)): ?>
@@ -262,7 +286,8 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h1>📦 Inventario</h1>
-                <p class="text-muted">Gestión de stock de materiales y productos</p>
+                <p class="text-muted mb-1">Gestión de stock de materiales y productos</p>
+                <small class="text-muted">Stock a futuro = stock actual + compras aprobadas o pendientes que todavía no se recibieron.</small>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 <a href="inventario_reporte_productos.php" class="btn btn-info">📋 Reporte de Productos</a>
@@ -306,7 +331,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
 
 <!-- Estadísticas -->
 <div class="row mb-4">
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card bg-primary text-white">
             <div class="card-body text-center">
                 <h6>Total Items</h6>
@@ -314,7 +339,7 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card bg-danger text-white">
             <div class="card-body text-center">
                 <h6>Stock Negativo</h6>
@@ -330,11 +355,19 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card bg-secondary text-white">
             <div class="card-body text-center">
                 <h6>Sin Stock</h6>
                 <h3><?= $items_sin_stock ?></h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h6>Con stock en camino</h6>
+                <h3><?= $items_en_camino ?></h3>
             </div>
         </div>
     </div>
@@ -363,6 +396,8 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                     <option value="negativo" <?= $alerta_filtro === 'negativo' ? 'selected' : '' ?>>Stock Negativo</option>
                     <option value="bajo_minimo" <?= $alerta_filtro === 'bajo_minimo' ? 'selected' : '' ?>>Bajo Mínimo</option>
                     <option value="sin_alerta" <?= $alerta_filtro === 'sin_alerta' ? 'selected' : '' ?>>Sin Alertas</option>
+                    <option value="en_camino" <?= $alerta_filtro === 'en_camino' ? 'selected' : '' ?>>En camino</option>
+                    <option value="futuro_bajo" <?= $alerta_filtro === 'futuro_bajo' ? 'selected' : '' ?>>Futuro bajo / sin stock</option>
                 </select>
             </div>
             <div class="col-md-2">
@@ -412,8 +447,10 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                             <th>Tipo</th>
                             <th>Nombre</th>
                             <th>Ubicación</th>
-                            <th>Stock Actual</th>
-                            <th>Stock Mínimo</th>
+                            <th>Stock actual</th>
+                            <th>En camino</th>
+                            <th>Stock a futuro</th>
+                            <th>Stock mínimo</th>
                             <th>Estado</th>
                             <th>Origen</th>
                             <th>Proveedor Habitual</th>
@@ -443,6 +480,23 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                         <?= number_format($item['stock'], 2) ?> <?= htmlspecialchars($item['unidad_medida']) ?>
                                     </strong>
                                 </td>
+                                <td>
+                                    <?php if ((float)($item['stock_entrada'] ?? 0) > 0): ?>
+                                        <span class="badge bg-info text-dark">+<?= number_format((float)$item['stock_entrada'], 2) ?></span>
+                                    <?php else: ?>
+                                        <small class="text-muted">—</small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php
+                                    $futuro = (float)($item['stock_futuro'] ?? $item['stock']);
+                                    $alertaFuturo = $item['estado_alerta_futuro'] ?? 'normal';
+                                    $claseFuturo = $alertaFuturo === 'negativo' ? 'text-danger' : ($alertaFuturo === 'sin_stock' ? 'text-secondary' : ($alertaFuturo === 'bajo_minimo' ? 'text-warning' : 'text-success'));
+                                    ?>
+                                    <strong class="<?= $claseFuturo ?>">
+                                        <?= number_format($futuro, 2) ?> <?= htmlspecialchars($item['unidad_medida']) ?>
+                                    </strong>
+                                </td>
                                 <td><?= number_format($item['stock_minimo'], 2) ?> <?= htmlspecialchars($item['unidad_medida']) ?></td>
                                 <td>
                                     <?php if ($item['estado_alerta'] === 'negativo'): ?>
@@ -453,6 +507,9 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                         <span class="badge bg-warning text-dark">⚠️ Bajo Mínimo</span>
                                     <?php else: ?>
                                         <span class="badge bg-success">✓ Normal</span>
+                                    <?php endif; ?>
+                                    <?php if ((float)($item['stock_entrada'] ?? 0) > 0 && ($item['estado_alerta_futuro'] ?? '') === 'normal' && $item['estado_alerta'] !== 'normal'): ?>
+                                        <div class="small text-info mt-1">Futuro: ok</div>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -503,7 +560,9 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                             <tr>
                                 <th>Material</th>
                                 <th>Color</th>
-                                <th>Stock</th>
+                                <th>Stock actual</th>
+                                <th>En camino</th>
+                                <th>Stock a futuro</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -522,6 +581,18 @@ $items_sin_stock = count(array_filter($inventario, fn($i) => $i['estado_alerta']
                                     <td>
                                         <strong class="<?= (float)$opc['stock'] <= 0 ? 'text-danger' : 'text-secondary' ?>">
                                             <?= number_format((float)$opc['stock'], 2, ',', '.') ?>
+                                        </strong>
+                                    </td>
+                                    <td>
+                                        <?php if ((float)($opc['stock_entrada'] ?? 0) > 0): ?>
+                                            <span class="badge bg-info text-dark">+<?= number_format((float)$opc['stock_entrada'], 2, ',', '.') ?></span>
+                                        <?php else: ?>
+                                            <small class="text-muted">—</small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <strong class="<?= (float)($opc['stock_futuro'] ?? $opc['stock']) <= 0 ? 'text-danger' : 'text-success' ?>">
+                                            <?= number_format((float)($opc['stock_futuro'] ?? $opc['stock']), 2, ',', '.') ?>
                                         </strong>
                                     </td>
                                 </tr>
