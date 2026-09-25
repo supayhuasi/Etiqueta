@@ -14,6 +14,30 @@ require 'includes/header.php';
 require_once 'includes/cuentas_helper.php';
 ensureCuentasSchema($pdo);
 
+$mensaje = '';
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'transferir') {
+    try {
+        admin_require_csrf_post();
+        cuentas_transferir(
+            $pdo,
+            (int)($_POST['origen_id'] ?? 0),
+            (int)($_POST['destino_id'] ?? 0),
+            (float)str_replace(',', '.', (string)($_POST['monto'] ?? '0')),
+            trim((string)($_POST['fecha'] ?? date('Y-m-d'))),
+            trim((string)($_POST['nota'] ?? '')),
+            (int)($_SESSION['user']['id'] ?? 0) ?: null
+        );
+        header('Location: cuentas.php?ok=transferido');
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
+    }
+}
+if (isset($_GET['ok']) && (string)$_GET['ok'] === 'transferido') {
+    $mensaje = 'El saldo se movió correctamente de una caja a la otra.';
+}
+
 $cuentas = cuentas_listar($pdo, false);
 $reparto = cuentas_reparto_listar($pdo);
 foreach ($cuentas as &$c) {
@@ -44,6 +68,9 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
             <a href="flujo_caja.php" class="btn btn-account-secondary me-2">
                 <i class="bi bi-arrow-left-circle me-1"></i> Flujo de Caja
             </a>
+            <button type="button" class="btn btn-account-secondary me-2" data-bs-toggle="modal" data-bs-target="#modalTransferir">
+                <i class="bi bi-arrow-left-right me-1"></i> Mover saldo
+            </button>
             <a href="cuentas_reparto.php" class="btn btn-account-secondary me-2">
                 <i class="bi bi-percent me-1"></i> % por caja
             </a>
@@ -52,6 +79,13 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
             </a>
         </div>
     </div>
+
+    <?php if ($error): ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+    <?php if ($mensaje): ?>
+        <div class="alert alert-success"><?= htmlspecialchars($mensaje) ?></div>
+    <?php endif; ?>
 
     <div class="card mb-4">
         <div class="card-body">
@@ -106,6 +140,11 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
                                         <?php endif; ?>
                                     </td>
                                     <td>
+                                        <?php if ((int)$c['activo'] === 1): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary js-mover-desde" data-origen="<?= (int)$c['id'] ?>">
+                                                Mover
+                                            </button>
+                                        <?php endif; ?>
                                         <a href="cuentas_crear.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-account-primary">
                                             <i class="bi bi-pencil-square me-1"></i> Editar
                                         </a>
@@ -129,4 +168,99 @@ $saldo_total_general = array_sum(array_column($cuentas, 'saldo'));
     </div>
 </div>
 
+<div class="modal fade" id="modalTransferir" tabindex="-1" aria-labelledby="modalTransferirLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                <input type="hidden" name="accion" value="transferir">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTransferirLabel">Mover saldo entre cajas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Sale de una caja y entra en la otra. El total general no cambia.</p>
+                    <div class="mb-3">
+                        <label class="form-label" for="origen_id">Desde</label>
+                        <select class="form-select" id="origen_id" name="origen_id" required>
+                            <option value="">Seleccionar...</option>
+                            <?php foreach ($cuentas as $c): ?>
+                                <option value="<?= (int)$c['id'] ?>" data-saldo="<?= htmlspecialchars((string)$c['saldo']) ?>">
+                                    <?= htmlspecialchars((string)$c['nombre']) ?> ($<?= number_format((float)$c['saldo'], 2, ',', '.') ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="destino_id">Hacia</label>
+                        <select class="form-select" id="destino_id" name="destino_id" required>
+                            <option value="">Seleccionar...</option>
+                            <?php foreach ($cuentas as $c): ?>
+                                <?php if ((int)$c['activo'] === 1): ?>
+                                    <option value="<?= (int)$c['id'] ?>">
+                                        <?= htmlspecialchars((string)$c['nombre']) ?> ($<?= number_format((float)$c['saldo'], 2, ',', '.') ?>)
+                                    </option>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="monto_transferencia">Monto</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" min="0.01" class="form-control" id="monto_transferencia" name="monto" required>
+                        </div>
+                        <small class="text-muted">Disponible en origen: $<span id="saldoOrigenLabel">—</span></small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="fecha_transferencia">Fecha</label>
+                        <input type="date" class="form-control" id="fecha_transferencia" name="fecha" value="<?= date('Y-m-d') ?>" required>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label" for="nota_transferencia">Nota (opcional)</label>
+                        <input type="text" class="form-control" id="nota_transferencia" name="nota" placeholder="Ej: pasar efectivo a banco">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-account-primary">Mover saldo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    const modalEl = document.getElementById('modalTransferir');
+    const origen = document.getElementById('origen_id');
+    const destino = document.getElementById('destino_id');
+    const saldoLabel = document.getElementById('saldoOrigenLabel');
+    if (!modalEl || !origen) return;
+
+    function actualizarSaldo() {
+        const opt = origen.options[origen.selectedIndex];
+        const saldo = opt && opt.dataset.saldo ? parseFloat(opt.dataset.saldo) : NaN;
+        saldoLabel.textContent = isNaN(saldo) ? '—' : saldo.toFixed(2).replace('.', ',');
+    }
+    origen.addEventListener('change', actualizarSaldo);
+
+    document.querySelectorAll('.js-mover-desde').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            origen.value = btn.getAttribute('data-origen') || '';
+            actualizarSaldo();
+            if (window.bootstrap && bootstrap.Modal) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            }
+        });
+    });
+    modalEl.addEventListener('shown.bs.modal', actualizarSaldo);
+
+    document.querySelector('#modalTransferir form').addEventListener('submit', function (ev) {
+        if (origen.value && destino.value && origen.value === destino.value) {
+            ev.preventDefault();
+            alert('Elegí dos cajas distintas.');
+        }
+    });
+})();
+</script>
 <?php require 'includes/footer.php'; ?>

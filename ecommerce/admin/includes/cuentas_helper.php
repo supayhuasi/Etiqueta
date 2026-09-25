@@ -594,3 +594,87 @@ if (!function_exists('cuentas_reparto_render_campos')) {
         <?php
     }
 }
+
+if (!function_exists('cuentas_transferir')) {
+    function cuentas_transferir(
+        PDO $pdo,
+        int $origenId,
+        int $destinoId,
+        float $monto,
+        string $fecha,
+        string $nota = '',
+        ?int $usuarioId = null
+    ): string {
+        $monto = round($monto, 2);
+        if ($origenId <= 0 || $destinoId <= 0 || $origenId === $destinoId) {
+            throw new Exception('Elegí dos cajas distintas.');
+        }
+        if ($monto <= 0) {
+            throw new Exception('El monto debe ser mayor a 0.');
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            throw new Exception('La fecha no es válida.');
+        }
+
+        $origen = cuentas_get($pdo, $origenId);
+        $destino = cuentas_get($pdo, $destinoId);
+        if (!$origen || !$destino) {
+            throw new Exception('No se encontró alguna de las cajas.');
+        }
+
+        $saldoOrigen = cuentas_saldo_total($pdo, $origenId);
+        if ($saldoOrigen + 0.009 < $monto) {
+            throw new Exception('El saldo de ' . $origen['nombre'] . ' no alcanza ($' . number_format($saldoOrigen, 2, ',', '.') . ').');
+        }
+
+        $ref = 'TRF-' . date('YmdHis') . '-' . $origenId . '-' . $destinoId;
+        $obs = trim($nota);
+        $descEgreso = 'Transferencia a ' . (string)$destino['nombre'];
+        $descIngreso = 'Transferencia desde ' . (string)$origen['nombre'];
+
+        $stmt = $pdo->prepare("
+            INSERT INTO flujo_caja
+            (fecha, tipo, categoria, descripcion, monto, referencia, id_referencia, cuenta_id, usuario_id, observaciones)
+            VALUES (?, ?, 'Transferencia', ?, ?, ?, NULL, ?, ?, ?)
+        ");
+
+        $pdo->beginTransaction();
+        try {
+            $stmt->execute([
+                $fecha,
+                'egreso',
+                $descEgreso,
+                $monto,
+                $ref,
+                $origenId,
+                $usuarioId,
+                $obs !== '' ? $obs : null,
+            ]);
+            $egresoId = (int)$pdo->lastInsertId();
+
+            $stmt->execute([
+                $fecha,
+                'ingreso',
+                $descIngreso,
+                $monto,
+                $ref,
+                $destinoId,
+                $usuarioId,
+                $obs !== '' ? $obs : null,
+            ]);
+            $ingresoId = (int)$pdo->lastInsertId();
+
+            $upd = $pdo->prepare("UPDATE flujo_caja SET id_referencia = ? WHERE id IN (?, ?)");
+            $upd->execute([$egresoId, $egresoId, $ingresoId]);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        return $ref;
+    }
+}
