@@ -6,80 +6,27 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
     die('Error: No hay conexión a la base de datos');
 }
 
-function utilidad_fmt_money(float $valor): string
-{
-    return '$' . number_format($valor, 2, ',', '.');
-}
-
-$hoy = new DateTime('today');
-$desdeDefault = (clone $hoy)->modify('first day of this month')->format('Y-m-d');
-$hastaDefault = $hoy->format('Y-m-d');
-
-$preset = trim((string)($_GET['preset'] ?? ''));
-$desde = trim((string)($_GET['desde'] ?? ''));
-$hasta = trim((string)($_GET['hasta'] ?? ''));
-$categoriaFiltro = (int)($_GET['categoria_id'] ?? 0);
-
-if ($preset === 'mes') {
-    $desde = (clone $hoy)->modify('first day of this month')->format('Y-m-d');
-    $hasta = $hoy->format('Y-m-d');
-} elseif ($preset === 'mes_ant') {
-    $desde = (clone $hoy)->modify('first day of last month')->format('Y-m-d');
-    $hasta = (clone $hoy)->modify('last day of last month')->format('Y-m-d');
-} elseif ($preset === '30') {
-    $desde = (clone $hoy)->modify('-29 days')->format('Y-m-d');
-    $hasta = $hoy->format('Y-m-d');
-} elseif ($preset === '90') {
-    $desde = (clone $hoy)->modify('-89 days')->format('Y-m-d');
-    $hasta = $hoy->format('Y-m-d');
-} elseif ($preset === 'anio') {
-    $desde = $hoy->format('Y-01-01');
-    $hasta = $hoy->format('Y-m-d');
-}
-
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) {
-    $desde = $desdeDefault;
-}
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) {
-    $hasta = $hastaDefault;
-}
-if ($desde > $hasta) {
-    [$desde, $hasta] = [$hasta, $desde];
-}
+$periodo = utilidad_resolver_periodo($_GET);
+$desde = $periodo['desde'];
+$hasta = $periodo['hasta'];
+$categoriaFiltro = $periodo['categoria_id'];
+$labelRango = $periodo['label'];
 
 $reporte = utilidad_reporte_rango($pdo, $desde . ' 00:00:00', $hasta . ' 23:59:59');
+$reporte = utilidad_aplicar_filtro_categoria($reporte, $categoriaFiltro);
 $categorias = $reporte['categorias'];
 $totales = $reporte['totales'];
 $sinCosto = (int)$reporte['sin_costo'];
-
-if ($categoriaFiltro > 0) {
-    $categorias = array_values(array_filter($categorias, static function ($cat) use ($categoriaFiltro) {
-        return (int)$cat['categoria_id'] === $categoriaFiltro;
-    }));
-    $totales = [
-        'cantidad' => 0.0,
-        'venta' => 0.0,
-        'costo' => 0.0,
-        'utilidad' => 0.0,
-        'margen_pct' => 0.0,
-        'pedidos' => 0,
-        'productos' => 0,
-    ];
-    $pedidosFiltro = 0;
-    foreach ($categorias as $cat) {
-        $totales['cantidad'] += (float)$cat['cantidad'];
-        $totales['venta'] += (float)$cat['venta'];
-        $totales['costo'] += (float)$cat['costo'];
-        $totales['utilidad'] += (float)$cat['utilidad'];
-        $totales['productos'] += count($cat['productos']);
-        $pedidosFiltro += (int)$cat['pedidos'];
-    }
-    $totales['pedidos'] = $pedidosFiltro;
-    $totales['venta'] = round((float)$totales['venta'], 2);
-    $totales['costo'] = round((float)$totales['costo'], 2);
-    $totales['utilidad'] = round((float)$totales['utilidad'], 2);
-    $totales['margen_pct'] = $totales['venta'] > 0 ? round(($totales['utilidad'] / $totales['venta']) * 100, 1) : 0.0;
-}
+$contexto = utilidad_contexto_periodo($pdo, $desde . ' 00:00:00', $hasta . ' 23:59:59', (float)$totales['utilidad']);
+$gastosCtx = $contexto['gastos'];
+$comprasCtx = $contexto['compras'];
+$decision = $contexto['decision'];
+$reporteQs = http_build_query([
+    'desde' => $desde,
+    'hasta' => $hasta,
+    'categoria_id' => $categoriaFiltro > 0 ? $categoriaFiltro : null,
+    'print' => 1,
+]);
 
 $categoriasSelect = [];
 try {
@@ -95,8 +42,6 @@ foreach ($categorias as $cat) {
     $maxUtilidad = max($maxUtilidad, abs((float)$cat['utilidad']));
 }
 $maxUtilidad = max(1.0, $maxUtilidad);
-
-$labelRango = date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtotime($hasta));
 ?>
 <style>
 .utilidad-card .value { font-size: 1.45rem; font-weight: 700; }
@@ -104,11 +49,6 @@ $labelRango = date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtoti
 .utilidad-pos { color: #15803d; }
 .utilidad-cat + .utilidad-prod { background: #f8fafc; }
 .utilidad-prod td { font-size: .92rem; }
-@media print {
-    .top-navbar, .sidebar, .admin-sidebar-backdrop, .cotizacion-mobile-bar,
-    .utilidad-filtros, .utilidad-acciones, #chatWidgetBtn, #chatWidgetPanel { display: none !important; }
-    .main-content { width: 100% !important; padding: 0 !important; }
-}
 </style>
 
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
@@ -117,7 +57,7 @@ $labelRango = date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtoti
         <p class="text-muted mb-0">Venta menos costo, por producto y agrupado por categoría. <?= htmlspecialchars($labelRango) ?></p>
     </div>
     <div class="utilidad-acciones d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Imprimir</button>
+        <a class="btn btn-outline-primary" href="utilidad_productos_reporte.php?<?= htmlspecialchars($reporteQs) ?>" target="_blank">Imprimir reporte</a>
         <a href="ventas_reportes.php" class="btn btn-outline-secondary">Reporte de ventas</a>
     </div>
 </div>
@@ -154,6 +94,7 @@ $labelRango = date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtoti
         <div class="small text-muted mt-3 mb-0">
             El costo sale de la receta de materiales o, si no hay receta, de la última compra del producto.
             Los descuentos del pedido se prorratean. El envío no entra en este cálculo.
+            Gastos y compras del período se muestran aparte, para decidir: no se restan del margen de cada producto.
         </div>
     </div>
 </div>
@@ -196,6 +137,109 @@ $labelRango = date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtoti
                     <?= number_format((float)$totales['margen_pct'], 1, ',', '.') ?>%
                 </div>
                 <div class="small text-muted">Sobre la venta</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-transparent">
+        <h5 class="mb-0">Contexto para decidir</h5>
+        <div class="small text-muted">Gastos y compras del mismo rango. No modifican la utilidad por producto.</div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Después de gastos</div>
+                <div class="fs-4 fw-bold <?= (float)$decision['despues_gastos'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
+                    <?= utilidad_fmt_money((float)$decision['despues_gastos']) ?>
+                </div>
+                <div class="small text-muted">Utilidad de productos − gastos</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Gastos del período</div>
+                <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$gastosCtx['total']) ?></div>
+                <div class="small text-muted"><?= (int)$gastosCtx['cantidad'] ?> gastos · pagado <?= utilidad_fmt_money((float)$gastosCtx['pagado']) ?></div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Compras del período</div>
+                <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$comprasCtx['total']) ?></div>
+                <div class="small text-muted"><?= (int)$comprasCtx['cantidad'] ?> órdenes · reposición de stock</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Salida de caja</div>
+                <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$decision['salida_caja']) ?></div>
+                <div class="small text-muted">Gastos + compras (efectivo que salió)</div>
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <h6 class="mb-2">Gastos por tipo</h6>
+                <?php if (empty($gastosCtx['tipos'])): ?>
+                    <div class="text-muted small">No hay gastos en este rango.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($gastosCtx['tipos'] as $tipo): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars((string)$tipo['nombre']) ?></td>
+                                        <td class="text-end"><?= (int)$tipo['cantidad'] ?></td>
+                                        <td class="text-end"><?= utilidad_fmt_money((float)$tipo['total']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Pendiente de pagar</th>
+                                    <th></th>
+                                    <th class="text-end"><?= utilidad_fmt_money((float)$gastosCtx['pendiente']) ?></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="col-lg-6">
+                <h6 class="mb-2">Compras por proveedor</h6>
+                <?php if (empty($comprasCtx['proveedores']) && empty($comprasCtx['estados'])): ?>
+                    <div class="text-muted small">No hay compras en este rango.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Proveedor</th>
+                                    <th class="text-end">Órdenes</th>
+                                    <th class="text-end">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($comprasCtx['proveedores'] as $prov): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars((string)$prov['nombre']) ?></td>
+                                        <td class="text-end"><?= (int)$prov['cantidad'] ?></td>
+                                        <td class="text-end"><?= utilidad_fmt_money((float)$prov['total']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php if (!empty($comprasCtx['estados'])): ?>
+                        <div class="small text-muted mt-2">
+                            <?php foreach ($comprasCtx['estados'] as $est): ?>
+                                <span class="me-2"><?= htmlspecialchars((string)$est['nombre']) ?>: <?= utilidad_fmt_money((float)$est['total']) ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>

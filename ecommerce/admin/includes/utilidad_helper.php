@@ -323,3 +323,317 @@ if (!function_exists('utilidad_reporte_rango')) {
         ];
     }
 }
+
+if (!function_exists('utilidad_fmt_money')) {
+    function utilidad_fmt_money(float $valor): string
+    {
+        return '$' . number_format($valor, 2, ',', '.');
+    }
+}
+
+if (!function_exists('utilidad_resolver_periodo')) {
+    /**
+     * @param array<string, mixed> $get
+     * @return array{desde:string,hasta:string,categoria_id:int,label:string}
+     */
+    function utilidad_resolver_periodo(array $get): array
+    {
+        $hoy = new DateTime('today');
+        $desde = trim((string)($get['desde'] ?? ''));
+        $hasta = trim((string)($get['hasta'] ?? ''));
+        $preset = trim((string)($get['preset'] ?? ''));
+        $categoriaId = (int)($get['categoria_id'] ?? 0);
+
+        if ($preset === 'mes') {
+            $desde = (clone $hoy)->modify('first day of this month')->format('Y-m-d');
+            $hasta = $hoy->format('Y-m-d');
+        } elseif ($preset === 'mes_ant') {
+            $desde = (clone $hoy)->modify('first day of last month')->format('Y-m-d');
+            $hasta = (clone $hoy)->modify('last day of last month')->format('Y-m-d');
+        } elseif ($preset === '30') {
+            $desde = (clone $hoy)->modify('-29 days')->format('Y-m-d');
+            $hasta = $hoy->format('Y-m-d');
+        } elseif ($preset === '90') {
+            $desde = (clone $hoy)->modify('-89 days')->format('Y-m-d');
+            $hasta = $hoy->format('Y-m-d');
+        } elseif ($preset === 'anio') {
+            $desde = $hoy->format('Y-01-01');
+            $hasta = $hoy->format('Y-m-d');
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) {
+            $desde = (clone $hoy)->modify('first day of this month')->format('Y-m-d');
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) {
+            $hasta = $hoy->format('Y-m-d');
+        }
+        if ($desde > $hasta) {
+            [$desde, $hasta] = [$hasta, $desde];
+        }
+
+        return [
+            'desde' => $desde,
+            'hasta' => $hasta,
+            'categoria_id' => max(0, $categoriaId),
+            'label' => date('d/m/Y', strtotime($desde)) . ' — ' . date('d/m/Y', strtotime($hasta)),
+        ];
+    }
+}
+
+if (!function_exists('utilidad_aplicar_filtro_categoria')) {
+    /**
+     * @param array{categorias: array<int, array<string, mixed>>, totales: array<string, float|int>, sin_costo: int} $reporte
+     * @return array{categorias: array<int, array<string, mixed>>, totales: array<string, float|int>, sin_costo: int}
+     */
+    function utilidad_aplicar_filtro_categoria(array $reporte, int $categoriaId): array
+    {
+        if ($categoriaId <= 0) {
+            return $reporte;
+        }
+
+        $categorias = array_values(array_filter($reporte['categorias'], static function ($cat) use ($categoriaId) {
+            return (int)$cat['categoria_id'] === $categoriaId;
+        }));
+
+        $totales = [
+            'cantidad' => 0.0,
+            'venta' => 0.0,
+            'costo' => 0.0,
+            'utilidad' => 0.0,
+            'margen_pct' => 0.0,
+            'pedidos' => 0,
+            'productos' => 0,
+        ];
+        foreach ($categorias as $cat) {
+            $totales['cantidad'] += (float)$cat['cantidad'];
+            $totales['venta'] += (float)$cat['venta'];
+            $totales['costo'] += (float)$cat['costo'];
+            $totales['utilidad'] += (float)$cat['utilidad'];
+            $totales['productos'] += count($cat['productos']);
+            $totales['pedidos'] += (int)$cat['pedidos'];
+        }
+        $totales['venta'] = round((float)$totales['venta'], 2);
+        $totales['costo'] = round((float)$totales['costo'], 2);
+        $totales['utilidad'] = round((float)$totales['utilidad'], 2);
+        $totales['margen_pct'] = $totales['venta'] > 0 ? round(($totales['utilidad'] / $totales['venta']) * 100, 1) : 0.0;
+
+        $reporte['categorias'] = $categorias;
+        $reporte['totales'] = $totales;
+        return $reporte;
+    }
+}
+
+if (!function_exists('utilidad_empresa_membrete')) {
+    /**
+     * @return array{nombre:string,logo:?string}
+     */
+    function utilidad_empresa_membrete(PDO $pdo): array
+    {
+        $nombre = 'Tucu Roller';
+        $logo = null;
+        try {
+            $row = $pdo->query("SELECT nombre, logo FROM ecommerce_empresa LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($row['nombre'])) {
+                $nombre = (string)$row['nombre'];
+            }
+            $archivo = trim((string)($row['logo'] ?? ''));
+            if ($archivo !== '') {
+                $ecommerce = dirname(__DIR__, 2);
+                $raiz = dirname($ecommerce);
+                foreach ([
+                    $ecommerce . '/uploads/' . $archivo,
+                    $raiz . '/uploads/' . $archivo,
+                ] as $path) {
+                    if (is_file($path)) {
+                        $logo = '/uploads/' . $archivo;
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // seguir con el nombre por defecto
+        }
+
+        return ['nombre' => $nombre, 'logo' => $logo];
+    }
+}
+
+if (!function_exists('utilidad_contexto_periodo')) {
+    /**
+     * Gastos y compras del rango, solo como contexto. No se restan de la utilidad por producto.
+     *
+     * @return array{
+     *   gastos: array<string, mixed>,
+     *   compras: array<string, mixed>,
+     *   decision: array<string, float>
+     * }
+     */
+    function utilidad_contexto_periodo(PDO $pdo, string $desde, string $hasta, float $utilidadProductos): array
+    {
+        $gastos = [
+            'total' => 0.0,
+            'pagado' => 0.0,
+            'pendiente' => 0.0,
+            'cantidad' => 0,
+            'tipos' => [],
+        ];
+        $compras = [
+            'total' => 0.0,
+            'cantidad' => 0,
+            'estados' => [],
+            'proveedores' => [],
+        ];
+
+        if (function_exists('admin_table_exists') && admin_table_exists($pdo, 'gastos')) {
+            $fechaCol = 'fecha';
+            if (function_exists('admin_column_exists')) {
+                if (admin_column_exists($pdo, 'gastos', 'fecha')) {
+                    $fechaCol = 'fecha';
+                } elseif (admin_column_exists($pdo, 'gastos', 'fecha_gasto')) {
+                    $fechaCol = 'fecha_gasto';
+                } elseif (admin_column_exists($pdo, 'gastos', 'created_at')) {
+                    $fechaCol = 'created_at';
+                }
+            }
+
+            $joinEstado = function_exists('admin_table_exists') && admin_table_exists($pdo, 'estados_gastos')
+                && function_exists('admin_column_exists') && admin_column_exists($pdo, 'gastos', 'estado_gasto_id');
+            $joinTipo = function_exists('admin_table_exists') && admin_table_exists($pdo, 'tipos_gastos')
+                && function_exists('admin_column_exists') && admin_column_exists($pdo, 'gastos', 'tipo_gasto_id');
+
+            try {
+                $select = [
+                    'COALESCE(SUM(g.monto), 0) AS total',
+                    'COUNT(*) AS cantidad',
+                ];
+                if ($joinEstado) {
+                    $select[] = "COALESCE(SUM(CASE WHEN LOWER(COALESCE(e.nombre, '')) = 'pagado' THEN g.monto ELSE 0 END), 0) AS pagado";
+                    $select[] = "COALESCE(SUM(CASE WHEN LOWER(COALESCE(e.nombre, '')) <> 'pagado' THEN g.monto ELSE 0 END), 0) AS pendiente";
+                } else {
+                    $select[] = '0 AS pagado';
+                    $select[] = 'COALESCE(SUM(g.monto), 0) AS pendiente';
+                }
+
+                $sql = 'SELECT ' . implode(', ', $select) . ' FROM gastos g';
+                if ($joinEstado) {
+                    $sql .= ' LEFT JOIN estados_gastos e ON e.id = g.estado_gasto_id';
+                }
+                $sql .= ' WHERE g.`' . $fechaCol . '` BETWEEN ? AND ?';
+                if ($joinEstado) {
+                    $sql .= " AND LOWER(COALESCE(e.nombre, '')) NOT IN ('cancelado', 'anulado')";
+                }
+
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$desde, $hasta]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $gastos['total'] = round((float)($row['total'] ?? 0), 2);
+                $gastos['pagado'] = round((float)($row['pagado'] ?? 0), 2);
+                $gastos['pendiente'] = round((float)($row['pendiente'] ?? 0), 2);
+                $gastos['cantidad'] = (int)($row['cantidad'] ?? 0);
+            } catch (Throwable $e) {
+                error_log('utilidad_contexto gastos: ' . $e->getMessage());
+            }
+
+            if ($joinTipo) {
+                try {
+                    $sqlTipos = '
+                        SELECT COALESCE(t.nombre, \'Sin tipo\') AS nombre, COUNT(*) AS cantidad, COALESCE(SUM(g.monto), 0) AS total
+                        FROM gastos g
+                        LEFT JOIN tipos_gastos t ON t.id = g.tipo_gasto_id
+                    ';
+                    if ($joinEstado) {
+                        $sqlTipos .= ' LEFT JOIN estados_gastos e ON e.id = g.estado_gasto_id';
+                    }
+                    $sqlTipos .= ' WHERE g.`' . $fechaCol . '` BETWEEN ? AND ?';
+                    if ($joinEstado) {
+                        $sqlTipos .= " AND LOWER(COALESCE(e.nombre, '')) NOT IN ('cancelado', 'anulado')";
+                    }
+                    $sqlTipos .= ' GROUP BY t.id, t.nombre ORDER BY total DESC';
+                    $stmt = $pdo->prepare($sqlTipos);
+                    $stmt->execute([$desde, $hasta]);
+                    $gastos['tipos'] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (Throwable $e) {
+                    $gastos['tipos'] = [];
+                }
+            }
+        }
+
+        if (function_exists('admin_table_exists') && admin_table_exists($pdo, 'ecommerce_compras')) {
+            $fechaCol = function_exists('admin_column_exists') && admin_column_exists($pdo, 'ecommerce_compras', 'fecha_compra')
+                ? 'fecha_compra'
+                : 'fecha_creacion';
+            $tieneEstado = function_exists('admin_column_exists') && admin_column_exists($pdo, 'ecommerce_compras', 'estado');
+            $tieneProveedor = function_exists('admin_table_exists') && admin_table_exists($pdo, 'ecommerce_proveedores')
+                && function_exists('admin_column_exists') && admin_column_exists($pdo, 'ecommerce_compras', 'proveedor_id');
+
+            $where = ['c.`' . $fechaCol . '` BETWEEN ? AND ?'];
+            if ($tieneEstado) {
+                $where[] = "LOWER(COALESCE(c.estado, '')) <> 'cancelada'";
+            }
+
+            try {
+                $stmt = $pdo->prepare('
+                    SELECT COALESCE(SUM(c.total), 0) AS total, COUNT(*) AS cantidad
+                    FROM ecommerce_compras c
+                    WHERE ' . implode(' AND ', $where) . '
+                ');
+                $stmt->execute([$desde, $hasta]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $compras['total'] = round((float)($row['total'] ?? 0), 2);
+                $compras['cantidad'] = (int)($row['cantidad'] ?? 0);
+            } catch (Throwable $e) {
+                error_log('utilidad_contexto compras: ' . $e->getMessage());
+            }
+
+            if ($tieneEstado) {
+                try {
+                    $stmt = $pdo->prepare('
+                        SELECT COALESCE(c.estado, \'sin estado\') AS nombre, COUNT(*) AS cantidad, COALESCE(SUM(c.total), 0) AS total
+                        FROM ecommerce_compras c
+                        WHERE ' . implode(' AND ', $where) . '
+                        GROUP BY c.estado
+                        ORDER BY total DESC
+                    ');
+                    $stmt->execute([$desde, $hasta]);
+                    $compras['estados'] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (Throwable $e) {
+                    $compras['estados'] = [];
+                }
+            }
+
+            if ($tieneProveedor) {
+                try {
+                    $stmt = $pdo->prepare('
+                        SELECT COALESCE(p.nombre, \'Sin proveedor\') AS nombre, COUNT(*) AS cantidad, COALESCE(SUM(c.total), 0) AS total
+                        FROM ecommerce_compras c
+                        LEFT JOIN ecommerce_proveedores p ON p.id = c.proveedor_id
+                        WHERE ' . implode(' AND ', $where) . '
+                        GROUP BY c.proveedor_id, p.nombre
+                        ORDER BY total DESC
+                        LIMIT 6
+                    ');
+                    $stmt->execute([$desde, $hasta]);
+                    $compras['proveedores'] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (Throwable $e) {
+                    $compras['proveedores'] = [];
+                }
+            }
+        }
+
+        $gastosTotal = (float)$gastos['total'];
+        $comprasTotal = (float)$compras['total'];
+        $decision = [
+            'utilidad_productos' => round($utilidadProductos, 2),
+            'gastos' => $gastosTotal,
+            'compras' => $comprasTotal,
+            'despues_gastos' => round($utilidadProductos - $gastosTotal, 2),
+            'salida_caja' => round($gastosTotal + $comprasTotal, 2),
+        ];
+
+        return [
+            'gastos' => $gastos,
+            'compras' => $compras,
+            'decision' => $decision,
+        ];
+    }
+}

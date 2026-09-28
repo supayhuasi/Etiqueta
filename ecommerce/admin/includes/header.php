@@ -370,6 +370,7 @@ $page_permissions = [
     'ventas_reportes.php' => 'ventas_reportes',
     'estadisticas_productos.php' => 'ventas_reportes',
     'utilidad_productos.php' => 'ventas_reportes',
+    'utilidad_productos_reporte.php' => 'ventas_reportes',
     'google_analytics.php' => 'google_analytics',
     'inventario.php' => 'inventario',
     'inventario_movimientos.php' => 'inventario',
@@ -2648,7 +2649,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                         <?php if ($can_access('ventas_reportes')): ?>
                         <a href="<?= $admin_url ?>ventas_reportes.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ventas_reportes.php' ? 'active' : '' ?>"><i class="bi bi-graph-up-arrow"></i> Reporte de Ventas</a>
                         <a href="<?= $admin_url ?>estadisticas_productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'estadisticas_productos.php' ? 'active' : '' ?>"><i class="bi bi-bar-chart-line"></i> Estadísticas de Productos</a>
-                        <a href="<?= $admin_url ?>utilidad_productos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'utilidad_productos.php' ? 'active' : '' ?>"><i class="bi bi-pie-chart"></i> Utilidad por categoría</a>
+                        <a href="<?= $admin_url ?>utilidad_productos.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['utilidad_productos.php', 'utilidad_productos_reporte.php'], true) ? 'active' : '' ?>"><i class="bi bi-pie-chart"></i> Utilidad por categoría</a>
                         <?php endif; ?>
                         <?php if ($can_access('kpis')): ?>
                         <a href="<?= $admin_url ?>kpis.php" class="<?= basename($_SERVER['PHP_SELF']) === 'kpis.php' ? 'active' : '' ?>"><i class="bi bi-speedometer2"></i> KPIs Dinámicos</a>
