@@ -342,6 +342,9 @@ $page_permissions = [
     'precios_horarios.php' => 'precios_ecommerce',
     'metodos_pago.php' => 'metodos_pago',
     'pedidos.php' => 'pedidos',
+    'cuentas_corrientes.php' => 'pedidos',
+    'cuenta_corriente_detalle.php' => 'pedidos',
+    'cuenta_corriente_recibo.php' => 'pedidos',
     'ordenes_produccion.php' => 'ordenes_produccion',
     'instalaciones.php' => 'instalaciones',
     'instalaciones_reporte_direcciones.php' => 'instalaciones',
@@ -2608,6 +2611,7 @@ if ($notificaciones_permiso_admin && $notificaciones_sin_tareas_total > 0) {
                     <div class="collapse menu-items" id="menuVentas">
                         <?php if ($can_access('pedidos')): ?>
                         <a href="<?= $admin_url ?>pedidos.php" class="<?= basename($_SERVER['PHP_SELF']) === 'pedidos.php' ? 'active' : '' ?>"><i class="bi bi-receipt"></i> Pedidos</a>
+                        <a href="<?= $admin_url ?>cuentas_corrientes.php" class="<?= in_array(basename($_SERVER['PHP_SELF']), ['cuentas_corrientes.php', 'cuenta_corriente_detalle.php', 'cuenta_corriente_recibo.php'], true) ? 'active' : '' ?>"><i class="bi bi-wallet2"></i> Cuentas corrientes</a>
                         <?php endif; ?>
                         <?php if ($can_access('ordenes_produccion')): ?>
                         <a href="<?= $admin_url ?>ordenes_produccion.php" class="<?= basename($_SERVER['PHP_SELF']) === 'ordenes_produccion.php' ? 'active' : '' ?>"><i class="bi bi-gear"></i> Órdenes de Producción</a>

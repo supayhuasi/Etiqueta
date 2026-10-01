@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/funciones_recetas.php';
 require_once __DIR__ . '/../includes/materials_helper.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
 require_once __DIR__ . '/includes/cuentas_helper.php';
+require_once __DIR__ . '/includes/cuenta_corriente_helper.php';
 
 $pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
 if (!($pdo instanceof PDO)) {
@@ -241,6 +242,12 @@ $total_pagado = (float)($stmt->fetch(PDO::FETCH_ASSOC)['total_pagado'] ?? 0);
 $total_pagado = round($total_pagado, 2);
 
 $saldo = round((float)$pedido['total'] - $total_pagado, 2);
+$clienteIdPedido = (int)($pedido['cliente_id'] ?? 0);
+$saldoCc = 0.0;
+if ($clienteIdPedido > 0) {
+    cc_asegurar_tablas($pdo);
+    $saldoCc = cc_saldo($pdo, $clienteIdPedido);
+}
 
 $error = '';
 $mensajeFacturacion = trim((string)($_GET['afip_msg'] ?? ''));
@@ -442,6 +449,23 @@ if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
 
             header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id);
             exit;
+        } elseif ($accion === 'aplicar_cuenta_corriente') {
+            admin_require_csrf_post();
+            if ($clienteIdPedido <= 0) {
+                throw new Exception('Este pedido no tiene cliente para usar cuenta corriente.');
+            }
+            $montoCc = round((float)str_replace(',', '.', (string)($_POST['monto'] ?? '0')), 2);
+            cc_asegurar_tablas($pdo);
+            cc_aplicar_a_pedido(
+                $pdo,
+                $clienteIdPedido,
+                $pedido_id,
+                $montoCc,
+                $usuario_id_actual ?: null,
+                trim((string)($_POST['notas'] ?? ''))
+            );
+            header("Location: pedidos_detalle.php?pedido_id=" . $pedido_id . "&ok_cc=1");
+            exit;
         } elseif ($accion === 'cancelar_pedido') {
             if ($pedido['estado'] === 'cancelado') {
                 throw new Exception('El pedido ya está cancelado');
@@ -468,6 +492,7 @@ if ((($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
             // Eliminar el pago
             $stmt_del = $pdo->prepare("DELETE FROM ecommerce_pedido_pagos WHERE id = ?");
             $stmt_del->execute([$pago_id]);
+            cc_revertir_aplicacion_por_pago($pdo, $pago_id);
 
             // Eliminar del flujo de caja si existe
             try {
@@ -679,6 +704,9 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<?php if (!empty($_GET['ok_cc'])): ?>
+    <div class="alert alert-success">Se aplicó el saldo de cuenta corriente a este pedido.</div>
+<?php endif; ?>
 <?php if (!empty($mensajeFacturacion)): ?>
     <div class="alert alert-success"><?= htmlspecialchars($mensajeFacturacion) ?></div>
 <?php endif; ?>
@@ -733,6 +761,37 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <button type="submit" class="btn btn-primary">Registrar Pago</button>
             </div>
         </form>
+
+        <?php if (!$es_operario && $clienteIdPedido > 0): ?>
+            <div class="border rounded p-3 mt-3 bg-light">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <div>
+                        <strong>Cuenta corriente</strong>
+                        <div class="small text-muted">Saldo a favor: <?= cc_fmt_money($saldoCc) ?></div>
+                    </div>
+                    <a class="btn btn-sm btn-outline-secondary" href="cuenta_corriente_detalle.php?id=<?= $clienteIdPedido ?>">Ver cuenta</a>
+                </div>
+                <?php if ($saldoCc > 0 && $saldo > 0): ?>
+                    <form method="POST" class="row g-2 align-items-end">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                        <input type="hidden" name="accion" value="aplicar_cuenta_corriente">
+                        <div class="col-md-4">
+                            <label class="form-label">Aplicar de CC</label>
+                            <input type="number" step="0.01" min="0.01" class="form-control" name="monto" value="<?= htmlspecialchars((string)min($saldoCc, $saldo)) ?>" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Notas</label>
+                            <input type="text" class="form-control" name="notas" placeholder="Opcional">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-success w-100">Usar saldo</button>
+                        </div>
+                    </form>
+                <?php elseif ($saldoCc <= 0): ?>
+                    <div class="small text-muted">Este cliente no tiene saldo a favor. Cargalo desde Cuentas corrientes.</div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
 
         <hr>
 
