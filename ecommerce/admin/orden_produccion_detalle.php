@@ -1,6 +1,7 @@
 <?php
 require 'includes/header.php';
 require '../includes/funciones_recetas.php';
+require_once __DIR__ . '/includes/produccion_helper.php';
 
 function registrarMovimientoInventario(PDO $pdo, array $payload): void
 {
@@ -117,9 +118,33 @@ function registrarMovimientoInventario(PDO $pdo, array $payload): void
     $stmt->execute($valores);
 }
 
-$pedido_id = $_GET['pedido_id'] ?? 0;
+$pedido_id = (int)($_GET['pedido_id'] ?? 0);
 $mensaje = '';
 $error = '';
+if (isset($pdo) && $pdo instanceof PDO) {
+    produccion_asegurar_schema($pdo);
+}
+if (!empty($_GET['ok']) && (string)$_GET['ok'] === 'creada') {
+    $mensaje = 'Orden de producción creada. Las medidas, colores y fotos quedan en el PDF.';
+}
+if (!empty($_GET['ok_items'])) {
+    $mensaje = 'Se actualizaron medidas, colores y fotos. Ya figuran en el PDF.';
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array((string)($_POST['accion'] ?? ''), ['guardar_items', 'eliminar_foto'], true)) {
+    try {
+        admin_require_csrf_post();
+        if (!empty($_POST['eliminar_foto'])) {
+            $partes = explode('|', (string)$_POST['eliminar_foto'], 2);
+            produccion_eliminar_foto_item($pdo, $pedido_id, (int)($partes[0] ?? 0), (string)($partes[1] ?? ''));
+        }
+        produccion_guardar_items_desde_post($pdo, $pedido_id, $_POST, $_FILES);
+        header('Location: orden_produccion_detalle.php?pedido_id=' . $pedido_id . '&ok_items=1');
+        exit;
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cancelar') {
     try {
@@ -368,10 +393,10 @@ if (!empty($items)) {
                 <h5 class="mb-0">Estado de Producción</h5>
             </div>
             <div class="card-body">
-                <p><strong>Estado:</strong> <?= htmlspecialchars(str_replace('_', ' ', $orden['estado'] ?? 'pendiente')) ?></p>
-                <p><strong>Entrega:</strong> <?= !empty($orden['fecha_entrega']) ? date('d/m/Y', strtotime($orden['fecha_entrega'])) : '-' ?></p>
+                <p><strong>Estado:</strong> <?= htmlspecialchars(str_replace('_', ' ', is_array($orden) ? (string)($orden['estado'] ?? 'pendiente') : 'sin orden')) ?></p>
+                <p><strong>Entrega:</strong> <?= (is_array($orden) && !empty($orden['fecha_entrega'])) ? date('d/m/Y', strtotime((string)$orden['fecha_entrega'])) : '-' ?></p>
                 
-                <?php if (isset($orden['materiales_descontados'])): ?>
+                <?php if (is_array($orden) && isset($orden['materiales_descontados'])): ?>
                     <p><strong>Materiales:</strong> 
                         <?php if ($orden['materiales_descontados']): ?>
                             <span class="badge bg-success">✓ Descontados del inventario</span>
@@ -422,6 +447,31 @@ if (!empty($items)) {
                 <p class="mb-0"><?= nl2br(htmlspecialchars(trim((string)$pedido['observaciones']))) ?></p>
             </div>
         </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (!$orden): ?>
+    <div class="alert alert-warning">
+        Este pedido todavía no tiene orden de producción.
+        <a class="btn btn-sm btn-success ms-2" href="orden_produccion_crear.php?pedido_id=<?= (int)$pedido_id ?>">Crear orden</a>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($items)): ?>
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Medidas, colores y fotos</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">Estos datos salen en el PDF de la orden. Cambiar medidas no vuelve a descontar materiales.</p>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion" value="guardar_items">
+            <?php produccion_render_editor_items($items); ?>
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+            <a class="btn btn-outline-primary" href="orden_produccion_imprimir.php?pedido_id=<?= (int)$pedido_id ?>" target="_blank">Ver PDF</a>
+        </form>
     </div>
 </div>
 <?php endif; ?>
@@ -490,6 +540,20 @@ if (!empty($items)) {
                         </td>
                         <td><?= $item['cantidad'] ?></td>
                     </tr>
+                    <?php
+                    $fotosItem = produccion_parse_fotos($item['fotos_produccion'] ?? '');
+                    if (!empty($fotosItem)):
+                    ?>
+                    <tr>
+                        <td colspan="5">
+                            <div class="d-flex flex-wrap gap-2">
+                                <?php foreach ($fotosItem as $foto): ?>
+                                    <img src="<?= htmlspecialchars(produccion_foto_url($foto)) ?>" alt="" style="width:90px;height:70px;object-fit:cover;border-radius:4px;">
+                                <?php endforeach; ?>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if (!empty($recetas)): ?>
                         <tr class="table-light">
                             <td colspan="5">
@@ -526,7 +590,7 @@ if (!empty($items)) {
                                                     <td>
                                                         <?= htmlspecialchars($r['tipo_calculo']) ?>
                                                         <?= $merma > 0 ? ' + ' . $merma . '%' : '' ?>
-                                                        <?php if ($orden['materiales_descontados'] ?? 0): ?>
+                                                        <?php if (is_array($orden) && !empty($orden['materiales_descontados'])): ?>
                                                             <br>
                                                             <a href="inventario_movimientos.php?tipo=producto&id=<?= $r['material_producto_id'] ?>" 
                                                                class="btn btn-xs btn-outline-info btn-sm mt-1" 

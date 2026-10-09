@@ -5,9 +5,14 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require '../../config.php';
 require '../../code128.php';
+require_once __DIR__ . '/includes/produccion_helper.php';
+
+if (isset($pdo) && $pdo instanceof PDO) {
+    produccion_asegurar_schema($pdo);
+}
 
 $role = $_SESSION['rol'] ?? '';
-$allowed_roles = ['admin', 'usuario', 'operario'];
+$allowed_roles = ['admin', 'usuario', 'operario', 'ventas', 'vendedor', 'sin_sueldos'];
 if (!isset($_SESSION['user']) || !in_array($role, $allowed_roles, true)) {
     die('Acceso denegado');
 }
@@ -77,26 +82,36 @@ $pdf->Code128(10, $pdf->GetY(), $codigo, 80, 16);
 $pdf->Ln(20);
 
 $pdf->SetFont('Arial','B',10);
-$pdf->Cell(80,7,utf8_decode('Producto'),1);
-$pdf->Cell(35,7,utf8_decode('Medidas'),1);
+$pdf->Cell(100,7,utf8_decode('Producto'),1);
+$pdf->Cell(50,7,utf8_decode('Medidas'),1);
 $pdf->Cell(20,7,utf8_decode('Cant.'),1,1);
 
 $pdf->SetFont('Arial','',10);
 foreach ($items as $it) {
     $medidas = '-';
-    if (!empty($it['alto_cm']) && !empty($it['ancho_cm'])) {
-        $medidas = $it['ancho_cm'] . ' x ' . $it['alto_cm'] . ' cm';
+    if (!empty($it['alto_cm']) || !empty($it['ancho_cm'])) {
+        $medidas = ($it['ancho_cm'] ?? '-') . ' x ' . ($it['alto_cm'] ?? '-') . ' cm';
     }
-    $pdf->Cell(80,6,utf8_decode($it['producto_nombre'] ?? 'Producto'),1);
-    $pdf->Cell(35,6,utf8_decode($medidas),1);
-    $pdf->Cell(20,6,utf8_decode($it['cantidad']),1,1);
+    if ($pdf->GetY() > 250) {
+        $pdf->AddPage();
+    }
+    $pdf->SetFont('Arial','B',10);
+    $pdf->Cell(100,7,utf8_decode($it['producto_nombre'] ?? 'Producto'),1);
+    $pdf->Cell(50,7,utf8_decode($medidas),1);
+    $pdf->Cell(20,7,utf8_decode((string)$it['cantidad']),1,1);
+    $pdf->SetFont('Arial','',10);
 
     $atributos = !empty($it['atributos']) ? json_decode($it['atributos'], true) : [];
     if (is_array($atributos) && count($atributos) > 0) {
         $pdf->SetFont('Arial','',9);
         foreach ($atributos as $attr) {
-            $line = ($attr['nombre'] ?? 'Attr') . ': ' . ($attr['valor'] ?? '');
-            $pdf->Cell(135,5,utf8_decode('  - ' . $line),1,1);
+            $nombreAttr = trim((string)($attr['nombre'] ?? 'Atributo'));
+            $valorAttr = trim((string)($attr['valor'] ?? ''));
+            if ($nombreAttr === '' && $valorAttr === '') {
+                continue;
+            }
+            $line = $nombreAttr . ': ' . $valorAttr;
+            $pdf->Cell(170,5,utf8_decode('  - ' . $line),1,1);
         }
         $pdf->SetFont('Arial','',10);
     }
@@ -104,7 +119,46 @@ foreach ($items as $it) {
     $descripcionItem = trim((string)($it['descripcion'] ?? ''));
     if ($descripcionItem !== '') {
         $pdf->SetFont('Arial','I',9);
-        $pdf->MultiCell(135,5,utf8_decode('  Obs: ' . $descripcionItem),1,'L');
+        $pdf->MultiCell(170,5,utf8_decode('  Obs: ' . $descripcionItem),1,'L');
+        $pdf->SetFont('Arial','',10);
+    }
+
+    $fotos = function_exists('produccion_parse_fotos')
+        ? produccion_parse_fotos($it['fotos_produccion'] ?? '')
+        : [];
+    $fotosOk = [];
+    foreach ($fotos as $foto) {
+        $path = produccion_foto_abs($foto);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (is_file($path) && in_array($ext, ['jpg', 'jpeg', 'png', 'gif'], true)) {
+            $fotosOk[] = $path;
+        }
+    }
+    if (!empty($fotosOk)) {
+        $altoFoto = 38;
+        $anchoFoto = 48;
+        $margen = 4;
+        $x0 = 12;
+        $x = $x0;
+        if ($pdf->GetY() + $altoFoto + 10 > 280) {
+            $pdf->AddPage();
+        }
+        $pdf->SetFont('Arial','B',9);
+        $pdf->Cell(170,6,utf8_decode('Fotos de referencia'),1,1);
+        $y = $pdf->GetY() + 2;
+        foreach ($fotosOk as $path) {
+            if ($x + $anchoFoto > 200) {
+                $x = $x0;
+                $y += $altoFoto + $margen;
+                if ($y + $altoFoto > 280) {
+                    $pdf->AddPage();
+                    $y = $pdf->GetY() + 2;
+                }
+            }
+            $pdf->Image($path, $x, $y, $anchoFoto, $altoFoto);
+            $x += $anchoFoto + $margen;
+        }
+        $pdf->SetY($y + $altoFoto + 4);
         $pdf->SetFont('Arial','',10);
     }
 }

@@ -103,7 +103,10 @@ function orden_esta_vencida(array $orden): bool {
         <h1>🏭 Órdenes de Producción</h1>
         <p class="text-muted">Seguimiento de producción por pedido</p>
     </div>
-    <div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="orden_produccion_crear.php" class="btn btn-primary btn-lg">
+            + Crear orden
+        </a>
         <a href="produccion_tareas_usuarios.php" class="btn btn-outline-primary btn-lg">
             👷 Dashboard por Usuario
         </a>

@@ -839,20 +839,8 @@ $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
     <div class="card-body">
         <?php if (!$orden_produccion): ?>
-            <form method="POST" class="row g-3">
-                <input type="hidden" name="accion" value="crear_orden">
-                <div class="col-md-4">
-                    <label class="form-label">Fecha de entrega</label>
-                    <input type="date" class="form-control" name="fecha_entrega">
-                </div>
-                <div class="col-md-12">
-                    <label class="form-label">Notas</label>
-                    <textarea class="form-control" name="notas" rows="3" placeholder="Instrucciones de producción..."></textarea>
-                </div>
-                <div class="col-md-12">
-                    <button type="submit" class="btn btn-success">Crear Orden de Producción</button>
-                </div>
-            </form>
+            <p class="mb-3">Antes de crear la orden podés corregir medidas, colores y subir fotos para el PDF del taller.</p>
+            <a class="btn btn-success" href="orden_produccion_crear.php?pedido_id=<?= (int)$pedido_id ?>">Crear orden de producción</a>
         <?php else: ?>
             <form method="POST" class="row g-3">
                 <input type="hidden" name="accion" value="actualizar_orden">
