@@ -2,6 +2,7 @@
 require 'includes/header.php';
 require_once __DIR__ . '/includes/contabilidad_helper.php';
 require_once __DIR__ . '/includes/audit_helper.php';
+require_once __DIR__ . '/includes/cotizacion_helper.php';
 
 $pdo = $GLOBALS['pdo'] ?? ($pdo ?? null);
 if (!($pdo instanceof PDO)) {
@@ -603,6 +604,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($nuevo_estado === 'enviada') {
                 $cotizacion['fecha_envio'] = date('Y-m-d H:i:s');
             }
+        } elseif ($accion === 'duplicar') {
+            admin_require_csrf_post();
+            $copia = cotizacion_duplicar($pdo, $id, (int)($_SESSION['user']['id'] ?? 0) ?: null);
+            header('Location: cotizacion_detalle.php?id=' . (int)$copia['id'] . '&mensaje=duplicada');
+            exit;
         }
         
     } catch (Exception $e) {
@@ -661,6 +667,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="d-flex flex-wrap gap-2">
         <a href="cotizacion_pdf.php?id=<?= $id ?>" class="btn btn-info" target="_blank">📄 Descargar PDF</a>
         <a href="cotizacion_editar.php?id=<?= $id ?>" class="btn btn-warning">✏️ Editar</a>
+        <form method="POST" class="d-inline" onsubmit="return confirm('¿Duplicar esta cotización? Se crea una copia pendiente, lista para editar.');">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+            <input type="hidden" name="accion" value="duplicar">
+            <button type="submit" class="btn btn-success">⧉ Duplicar</button>
+        </form>
         <a href="cotizaciones.php" class="btn btn-secondary">← Volver</a>
     </div>
 </div>
@@ -669,6 +680,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="alert alert-success">
         <?php if ($mensaje === 'creada'): ?>
             ✅ Cotización creada exitosamente
+        <?php elseif ($mensaje === 'duplicada'): ?>
+            ✅ Cotización duplicada. Esta es la copia, pendiente, lista para editar.
         <?php else: ?>
             <?= htmlspecialchars($mensaje) ?>
         <?php endif; ?>

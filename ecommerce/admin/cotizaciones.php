@@ -1,7 +1,29 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/includes/cotizacion_helper.php';
 
 $es_revendedor = (($role ?? '') === 'revendedor');
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['accion'] ?? '') === 'duplicar') {
+    try {
+        admin_require_csrf_post();
+        $origenId = (int)($_POST['cotizacion_id'] ?? 0);
+        if ($es_revendedor) {
+            $stmtOwn = $pdo->prepare('SELECT creado_por FROM ecommerce_cotizaciones WHERE id = ?');
+            $stmtOwn->execute([$origenId]);
+            $owner = $stmtOwn->fetch(PDO::FETCH_ASSOC);
+            if (!$owner || (int)($owner['creado_por'] ?? 0) !== (int)($_SESSION['user']['id'] ?? 0)) {
+                throw new Exception('No podés duplicar esa cotización.');
+            }
+        }
+        $copia = cotizacion_duplicar($pdo, $origenId, (int)($_SESSION['user']['id'] ?? 0) ?: null);
+        header('Location: cotizacion_detalle.php?id=' . (int)$copia['id'] . '&mensaje=duplicada');
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
+    }
+}
 
 // Filtros
 $estado_filtro = $_GET['estado'] ?? '';
@@ -74,6 +96,10 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($error): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+<?php endif; ?>
 
 <!-- Estadísticas -->
 <div class="row g-2 mb-4">
@@ -240,9 +266,17 @@ $stats = $stmt->fetch(PDO::FETCH_ASSOC);
                                     <span class="badge bg-<?= $badge ?>"><?= ucfirst($cot['estado']) ?></span>
                                 </td>
                                 <td>
-                                    <a href="cotizacion_detalle.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-primary" title="Ver detalle">👁️</a>
-                                    <a href="cotizacion_editar.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-warning" title="Editar">✏️</a>
-                                    <a href="cotizacion_pdf.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-info" title="Descargar PDF" target="_blank">📄</a>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <a href="cotizacion_detalle.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-primary" title="Ver detalle">👁️</a>
+                                        <a href="cotizacion_editar.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-warning" title="Editar">✏️</a>
+                                        <a href="cotizacion_pdf.php?id=<?= $cot['id'] ?>" class="btn btn-sm btn-info" title="Descargar PDF" target="_blank">📄</a>
+                                        <form method="POST" class="d-inline" onsubmit="return confirm('¿Duplicar esta cotización? Se crea una copia pendiente, lista para editar.');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(admin_csrf_token()) ?>">
+                                            <input type="hidden" name="accion" value="duplicar">
+                                            <input type="hidden" name="cotizacion_id" value="<?= (int)$cot['id'] ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Duplicar">⧉ Duplicar</button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

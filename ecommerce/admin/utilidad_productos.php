@@ -19,8 +19,16 @@ $totales = $reporte['totales'];
 $sinCosto = (int)$reporte['sin_costo'];
 $contexto = utilidad_contexto_periodo($pdo, $desde . ' 00:00:00', $hasta . ' 23:59:59', (float)$totales['utilidad']);
 $gastosCtx = $contexto['gastos'];
+$sueldosCtx = $contexto['sueldos'] ?? ['total' => 0.0, 'cantidad' => 0, 'empleados' => []];
 $comprasCtx = $contexto['compras'];
 $decision = $contexto['decision'];
+$rentabilidad = utilidad_rentabilidad(
+    (float)$totales['venta'],
+    (float)$totales['costo'],
+    (float)$totales['utilidad'],
+    (float)$gastosCtx['total'],
+    (float)$sueldosCtx['total']
+);
 $reporteQs = http_build_query([
     'desde' => $desde,
     'hasta' => $hasta,
@@ -94,7 +102,8 @@ $maxUtilidad = max(1.0, $maxUtilidad);
         <div class="small text-muted mt-3 mb-0">
             El costo sale de la receta de materiales o, si no hay receta, de la última compra del producto.
             Los descuentos del pedido se prorratean. El envío no entra en este cálculo.
-            Gastos y compras del período se muestran aparte, para decidir: no se restan del margen de cada producto.
+            Gastos, sueldos pagados y compras del período se muestran aparte, para decidir: no se restan del margen de cada producto.
+            La rentabilidad neta sí descuenta gastos y sueldos sobre la venta.
         </div>
     </div>
 </div>
@@ -136,7 +145,48 @@ $maxUtilidad = max(1.0, $maxUtilidad);
                 <div class="value <?= (float)$totales['margen_pct'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
                     <?= number_format((float)$totales['margen_pct'], 1, ',', '.') ?>%
                 </div>
-                <div class="small text-muted">Sobre la venta</div>
+                <div class="small text-muted">Bruta · sobre la venta</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-transparent">
+        <h5 class="mb-0">Rentabilidad del período</h5>
+        <div class="small text-muted">Resultado después de gastos y sueldos. Las compras no se restan: son reposición de stock.</div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Resultado neto</div>
+                <div class="fs-4 fw-bold <?= (float)$rentabilidad['resultado_neto'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
+                    <?= utilidad_fmt_money((float)$rentabilidad['resultado_neto']) ?>
+                </div>
+                <div class="small text-muted">Utilidad − gastos − sueldos</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Rentabilidad neta</div>
+                <div class="fs-4 fw-bold <?= (float)$rentabilidad['neta_pct'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
+                    <?= utilidad_fmt_pct((float)$rentabilidad['neta_pct']) ?>
+                </div>
+                <div class="small text-muted">Resultado neto / venta</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Rentabilidad bruta</div>
+                <div class="fs-4 fw-bold <?= (float)$rentabilidad['bruta_pct'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
+                    <?= utilidad_fmt_pct((float)$rentabilidad['bruta_pct']) ?>
+                </div>
+                <div class="small text-muted">Utilidad / venta</div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="small text-muted">Sobre el costo</div>
+                <div class="fs-4 fw-bold <?= (float)$rentabilidad['sobre_costo_pct'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
+                    <?= utilidad_fmt_pct((float)$rentabilidad['sobre_costo_pct']) ?>
+                </div>
+                <div class="small text-muted">Utilidad / costo
+                    · neta <?= utilidad_fmt_pct((float)$rentabilidad['neta_sobre_costo_pct']) ?>
+                </div>
             </div>
         </div>
     </div>
@@ -145,35 +195,40 @@ $maxUtilidad = max(1.0, $maxUtilidad);
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-transparent">
         <h5 class="mb-0">Contexto para decidir</h5>
-        <div class="small text-muted">Gastos y compras del mismo rango. No modifican la utilidad por producto.</div>
+        <div class="small text-muted">Gastos, sueldos pagados y compras del mismo rango. No modifican la utilidad por producto.</div>
     </div>
     <div class="card-body">
         <div class="row g-3 mb-3">
-            <div class="col-6 col-lg-3">
-                <div class="small text-muted">Después de gastos</div>
+            <div class="col-6 col-lg">
+                <div class="small text-muted">Después de gastos y sueldos</div>
                 <div class="fs-4 fw-bold <?= (float)$decision['despues_gastos'] >= 0 ? 'utilidad-pos' : 'utilidad-neg' ?>">
                     <?= utilidad_fmt_money((float)$decision['despues_gastos']) ?>
                 </div>
-                <div class="small text-muted">Utilidad de productos − gastos</div>
+                <div class="small text-muted">Utilidad de productos − gastos − sueldos</div>
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg">
                 <div class="small text-muted">Gastos del período</div>
                 <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$gastosCtx['total']) ?></div>
                 <div class="small text-muted"><?= (int)$gastosCtx['cantidad'] ?> gastos · pagado <?= utilidad_fmt_money((float)$gastosCtx['pagado']) ?></div>
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg">
+                <div class="small text-muted">Sueldos pagados</div>
+                <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$sueldosCtx['total']) ?></div>
+                <div class="small text-muted"><?= (int)$sueldosCtx['cantidad'] ?> pagos en el rango</div>
+            </div>
+            <div class="col-6 col-lg">
                 <div class="small text-muted">Compras del período</div>
                 <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$comprasCtx['total']) ?></div>
                 <div class="small text-muted"><?= (int)$comprasCtx['cantidad'] ?> órdenes · reposición de stock</div>
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg">
                 <div class="small text-muted">Salida de caja</div>
                 <div class="fs-4 fw-bold"><?= utilidad_fmt_money((float)$decision['salida_caja']) ?></div>
-                <div class="small text-muted">Gastos + compras (efectivo que salió)</div>
+                <div class="small text-muted">Gastos + sueldos + compras</div>
             </div>
         </div>
         <div class="row g-3">
-            <div class="col-lg-6">
+            <div class="col-lg-4">
                 <h6 class="mb-2">Gastos por tipo</h6>
                 <?php if (empty($gastosCtx['tipos'])): ?>
                     <div class="text-muted small">No hay gastos en este rango.</div>
@@ -207,7 +262,41 @@ $maxUtilidad = max(1.0, $maxUtilidad);
                     </div>
                 <?php endif; ?>
             </div>
-            <div class="col-lg-6">
+            <div class="col-lg-4">
+                <h6 class="mb-2">Sueldos pagados</h6>
+                <?php if (empty($sueldosCtx['empleados'])): ?>
+                    <div class="text-muted small">No hay pagos de sueldo en este rango.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th class="text-end">Pagos</th>
+                                    <th class="text-end">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($sueldosCtx['empleados'] as $empSueldo): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars((string)$empSueldo['nombre']) ?></td>
+                                        <td class="text-end"><?= (int)$empSueldo['cantidad'] ?></td>
+                                        <td class="text-end"><?= utilidad_fmt_money((float)$empSueldo['total']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Total sueldos</th>
+                                    <th class="text-end"><?= (int)$sueldosCtx['cantidad'] ?></th>
+                                    <th class="text-end"><?= utilidad_fmt_money((float)$sueldosCtx['total']) ?></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="col-lg-4">
                 <h6 class="mb-2">Compras por proveedor</h6>
                 <?php if (empty($comprasCtx['proveedores']) && empty($comprasCtx['estados'])): ?>
                     <div class="text-muted small">No hay compras en este rango.</div>

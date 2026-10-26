@@ -331,6 +331,46 @@ if (!function_exists('utilidad_fmt_money')) {
     }
 }
 
+if (!function_exists('utilidad_fmt_pct')) {
+    function utilidad_fmt_pct(float $valor): string
+    {
+        return number_format($valor, 1, ',', '.') . '%';
+    }
+}
+
+if (!function_exists('utilidad_pct')) {
+    function utilidad_pct(float $numerador, float $denominador): float
+    {
+        if (abs($denominador) < 0.009) {
+            return 0.0;
+        }
+        return round(($numerador / $denominador) * 100, 1);
+    }
+}
+
+if (!function_exists('utilidad_rentabilidad')) {
+    /**
+     * @return array{
+     *   resultado_neto:float,
+     *   bruta_pct:float,
+     *   neta_pct:float,
+     *   sobre_costo_pct:float,
+     *   neta_sobre_costo_pct:float
+     * }
+     */
+    function utilidad_rentabilidad(float $venta, float $costo, float $utilidad, float $gastos, float $sueldos): array
+    {
+        $resultadoNeto = round($utilidad - $gastos - $sueldos, 2);
+        return [
+            'resultado_neto' => $resultadoNeto,
+            'bruta_pct' => utilidad_pct($utilidad, $venta),
+            'neta_pct' => utilidad_pct($resultadoNeto, $venta),
+            'sobre_costo_pct' => utilidad_pct($utilidad, $costo),
+            'neta_sobre_costo_pct' => utilidad_pct($resultadoNeto, $costo),
+        ];
+    }
+}
+
 if (!function_exists('utilidad_resolver_periodo')) {
     /**
      * @param array<string, mixed> $get
@@ -460,10 +500,12 @@ if (!function_exists('utilidad_empresa_membrete')) {
 
 if (!function_exists('utilidad_contexto_periodo')) {
     /**
-     * Gastos y compras del rango, solo como contexto. No se restan de la utilidad por producto.
+     * Gastos, sueldos pagados y compras del rango, solo como contexto.
+     * No se restan de la utilidad por producto.
      *
      * @return array{
      *   gastos: array<string, mixed>,
+     *   sueldos: array<string, mixed>,
      *   compras: array<string, mixed>,
      *   decision: array<string, float>
      * }
@@ -483,6 +525,7 @@ if (!function_exists('utilidad_contexto_periodo')) {
             'estados' => [],
             'proveedores' => [],
         ];
+        $sueldos = utilidad_contexto_sueldos($pdo, $desde, $hasta);
 
         if (function_exists('admin_table_exists') && admin_table_exists($pdo, 'gastos')) {
             $fechaCol = 'fecha';
@@ -622,18 +665,97 @@ if (!function_exists('utilidad_contexto_periodo')) {
 
         $gastosTotal = (float)$gastos['total'];
         $comprasTotal = (float)$compras['total'];
+        $sueldosTotal = (float)$sueldos['total'];
         $decision = [
             'utilidad_productos' => round($utilidadProductos, 2),
             'gastos' => $gastosTotal,
+            'sueldos' => $sueldosTotal,
             'compras' => $comprasTotal,
-            'despues_gastos' => round($utilidadProductos - $gastosTotal, 2),
-            'salida_caja' => round($gastosTotal + $comprasTotal, 2),
+            'despues_gastos' => round($utilidadProductos - $gastosTotal - $sueldosTotal, 2),
+            'salida_caja' => round($gastosTotal + $comprasTotal + $sueldosTotal, 2),
         ];
 
         return [
             'gastos' => $gastos,
+            'sueldos' => $sueldos,
             'compras' => $compras,
             'decision' => $decision,
         ];
+    }
+}
+
+if (!function_exists('utilidad_contexto_sueldos')) {
+    /**
+     * Pagos de sueldo hechos en el rango (por fecha de pago).
+     *
+     * @return array{total:float,cantidad:int,empleados:list<array<string,mixed>>}
+     */
+    function utilidad_contexto_sueldos(PDO $pdo, string $desde, string $hasta): array
+    {
+        $sueldos = [
+            'total' => 0.0,
+            'cantidad' => 0,
+            'empleados' => [],
+        ];
+
+        $partes = [];
+        if (function_exists('admin_table_exists') && admin_table_exists($pdo, 'pagos_sueldos_parciales')
+            && function_exists('admin_column_exists') && admin_column_exists($pdo, 'pagos_sueldos_parciales', 'fecha_pago')
+        ) {
+            $partes[] = '
+                SELECT empleado_id, monto_pagado AS monto, fecha_pago
+                FROM pagos_sueldos_parciales
+                WHERE fecha_pago BETWEEN ? AND ?
+                  AND COALESCE(monto_pagado, 0) > 0
+            ';
+        }
+        if (function_exists('admin_table_exists') && admin_table_exists($pdo, 'pagos_sueldos')
+            && function_exists('admin_column_exists') && admin_column_exists($pdo, 'pagos_sueldos', 'fecha_pago')
+        ) {
+            $partes[] = '
+                SELECT empleado_id, monto_pagado AS monto, fecha_pago
+                FROM pagos_sueldos
+                WHERE fecha_pago BETWEEN ? AND ?
+                  AND COALESCE(monto_pagado, 0) > 0
+            ';
+        }
+        if (empty($partes)) {
+            return $sueldos;
+        }
+
+        $union = implode(' UNION ALL ', $partes);
+        $params = [];
+        foreach ($partes as $unused) {
+            $params[] = $desde;
+            $params[] = $hasta;
+        }
+
+        try {
+            $joinEmpleados = function_exists('admin_table_exists') && admin_table_exists($pdo, 'empleados');
+            $nombreExpr = $joinEmpleados ? 'COALESCE(e.nombre, \'Empleado\')' : '\'Empleado\'';
+            $joinSql = $joinEmpleados ? ' LEFT JOIN empleados e ON e.id = p.empleado_id' : '';
+
+            $stmt = $pdo->prepare("
+                SELECT {$nombreExpr} AS nombre,
+                       COUNT(*) AS cantidad,
+                       COALESCE(SUM(p.monto), 0) AS total
+                FROM ({$union}) p
+                {$joinSql}
+                GROUP BY p.empleado_id" . ($joinEmpleados ? ', e.nombre' : '') . "
+                ORDER BY total DESC
+            ");
+            $stmt->execute($params);
+            $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $sueldos['empleados'] = $empleados;
+            foreach ($empleados as $emp) {
+                $sueldos['total'] += (float)$emp['total'];
+                $sueldos['cantidad'] += (int)$emp['cantidad'];
+            }
+            $sueldos['total'] = round($sueldos['total'], 2);
+        } catch (Throwable $e) {
+            error_log('utilidad_contexto sueldos: ' . $e->getMessage());
+        }
+
+        return $sueldos;
     }
 }

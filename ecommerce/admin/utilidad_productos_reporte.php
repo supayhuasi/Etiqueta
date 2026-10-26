@@ -14,8 +14,16 @@ $totales = $reporte['totales'];
 $sinCosto = (int)$reporte['sin_costo'];
 $contexto = utilidad_contexto_periodo($pdo, $periodo['desde'] . ' 00:00:00', $periodo['hasta'] . ' 23:59:59', (float)$totales['utilidad']);
 $gastosCtx = $contexto['gastos'];
+$sueldosCtx = $contexto['sueldos'] ?? ['total' => 0.0, 'cantidad' => 0, 'empleados' => []];
 $comprasCtx = $contexto['compras'];
 $decision = $contexto['decision'];
+$rentabilidad = utilidad_rentabilidad(
+    (float)$totales['venta'],
+    (float)$totales['costo'],
+    (float)$totales['utilidad'],
+    (float)$gastosCtx['total'],
+    (float)$sueldosCtx['total']
+);
 $empresa = utilidad_empresa_membrete($pdo);
 
 $categoriaNombre = 'Todas';
@@ -103,11 +111,12 @@ body { background: #e8edf3 !important; }
 .util-doc tfoot th { background: #e5e7eb; }
 .util-ctx { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 8px; }
 .util-ctx h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
-.util-kpi-wide { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.util-kpi-wide { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.util-ctx-3 { grid-template-columns: 1fr 1fr 1fr; }
 .util-note { font-size: 11px; color: #4b5563; margin-top: 16px; }
 .util-actions { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 16px; }
 @media (max-width: 700px) {
-    .util-kpis, .util-ctx, .util-kpi-wide { grid-template-columns: 1fr 1fr; }
+    .util-kpis, .util-ctx, .util-ctx-3, .util-kpi-wide { grid-template-columns: 1fr 1fr; }
 }
 @page {
     size: A4;
@@ -169,9 +178,33 @@ body { background: #e8edf3 !important; }
             <div class="util-meta">Venta − costo</div>
         </div>
         <div class="util-kpi">
-            <div class="lbl">Margen</div>
-            <div class="val <?= (float)$totales['margen_pct'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= number_format((float)$totales['margen_pct'], 1, ',', '.') ?>%</div>
-            <div class="util-meta">Sobre la venta</div>
+            <div class="lbl">Margen bruto</div>
+            <div class="val <?= (float)$totales['margen_pct'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_pct((float)$totales['margen_pct']) ?></div>
+            <div class="util-meta">Utilidad / venta</div>
+        </div>
+    </section>
+
+    <h2 style="font-size:14px;margin:8px 0 10px;">Rentabilidad</h2>
+    <section class="util-kpis">
+        <div class="util-kpi">
+            <div class="lbl">Resultado neto</div>
+            <div class="val <?= (float)$rentabilidad['resultado_neto'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_money((float)$rentabilidad['resultado_neto']) ?></div>
+            <div class="util-meta">Utilidad − gastos − sueldos</div>
+        </div>
+        <div class="util-kpi">
+            <div class="lbl">Rentabilidad neta</div>
+            <div class="val <?= (float)$rentabilidad['neta_pct'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_pct((float)$rentabilidad['neta_pct']) ?></div>
+            <div class="util-meta">Resultado neto / venta</div>
+        </div>
+        <div class="util-kpi">
+            <div class="lbl">Rentabilidad bruta</div>
+            <div class="val <?= (float)$rentabilidad['bruta_pct'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_pct((float)$rentabilidad['bruta_pct']) ?></div>
+            <div class="util-meta">Utilidad / venta</div>
+        </div>
+        <div class="util-kpi">
+            <div class="lbl">Sobre el costo</div>
+            <div class="val <?= (float)$rentabilidad['sobre_costo_pct'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_pct((float)$rentabilidad['sobre_costo_pct']) ?></div>
+            <div class="util-meta">Utilidad / costo · neta <?= utilidad_fmt_pct((float)$rentabilidad['neta_sobre_costo_pct']) ?></div>
         </div>
     </section>
 
@@ -241,14 +274,19 @@ body { background: #e8edf3 !important; }
     <h2 style="font-size:14px;margin:22px 0 10px;">Contexto para decidir</h2>
     <section class="util-kpis util-kpi-wide">
         <div class="util-kpi">
-            <div class="lbl">Después de gastos</div>
+            <div class="lbl">Después de gastos y sueldos</div>
             <div class="val <?= (float)$decision['despues_gastos'] >= 0 ? 'util-pos' : 'util-neg' ?>"><?= utilidad_fmt_money((float)$decision['despues_gastos']) ?></div>
-            <div class="util-meta">Utilidad de productos − gastos</div>
+            <div class="util-meta">Utilidad − gastos − sueldos</div>
         </div>
         <div class="util-kpi">
             <div class="lbl">Gastos</div>
             <div class="val"><?= utilidad_fmt_money((float)$gastosCtx['total']) ?></div>
             <div class="util-meta"><?= (int)$gastosCtx['cantidad'] ?> · pagado <?= utilidad_fmt_money((float)$gastosCtx['pagado']) ?></div>
+        </div>
+        <div class="util-kpi">
+            <div class="lbl">Sueldos pagados</div>
+            <div class="val"><?= utilidad_fmt_money((float)$sueldosCtx['total']) ?></div>
+            <div class="util-meta"><?= (int)$sueldosCtx['cantidad'] ?> pagos</div>
         </div>
         <div class="util-kpi">
             <div class="lbl">Compras</div>
@@ -258,10 +296,10 @@ body { background: #e8edf3 !important; }
         <div class="util-kpi">
             <div class="lbl">Salida de caja</div>
             <div class="val"><?= utilidad_fmt_money((float)$decision['salida_caja']) ?></div>
-            <div class="util-meta">Gastos + compras</div>
+            <div class="util-meta">Gastos + sueldos + compras</div>
         </div>
     </section>
-    <div class="util-ctx">
+    <div class="util-ctx util-ctx-3">
         <div>
             <h2>Gastos por tipo</h2>
             <?php if (empty($gastosCtx['tipos'])): ?>
@@ -275,6 +313,25 @@ body { background: #e8edf3 !important; }
                                 <td><?= htmlspecialchars((string)$tipo['nombre']) ?></td>
                                 <td class="text-end"><?= (int)$tipo['cantidad'] ?></td>
                                 <td class="text-end"><?= utilidad_fmt_money((float)$tipo['total']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+        <div>
+            <h2>Sueldos pagados</h2>
+            <?php if (empty($sueldosCtx['empleados'])): ?>
+                <p class="util-meta">Sin pagos de sueldo en el período.</p>
+            <?php else: ?>
+                <table>
+                    <thead><tr><th>Empleado</th><th class="text-end">Pagos</th><th class="text-end">Monto</th></tr></thead>
+                    <tbody>
+                        <?php foreach ($sueldosCtx['empleados'] as $empSueldo): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string)$empSueldo['nombre']) ?></td>
+                                <td class="text-end"><?= (int)$empSueldo['cantidad'] ?></td>
+                                <td class="text-end"><?= utilidad_fmt_money((float)$empSueldo['total']) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -306,7 +363,8 @@ body { background: #e8edf3 !important; }
         Criterio: utilidad = venta neta (descuentos del pedido prorrateados) − costo.
         El costo proviene de la receta de materiales o, si no hay receta, de la última compra.
         El envío no se incluye.
-        Gastos y compras son informativos: no se restan del margen de cada producto. Las compras son reposición de stock / salida de caja.
+        Gastos, sueldos pagados y compras son informativos para el margen de cada producto.
+        La rentabilidad neta = (utilidad − gastos − sueldos) / venta. Las compras son reposición de stock / salida de caja. Los sueldos se toman por fecha de pago.
         <?php if ($sinCosto > 0): ?>
             Ítems sin costo cargado: <?= (int)$sinCosto ?> (en esos casos la utilidad coincide con la venta).
         <?php endif; ?>
