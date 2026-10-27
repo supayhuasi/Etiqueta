@@ -10,37 +10,44 @@ function sueldosAsegurarConceptosPorMes(PDO $pdo): void
 
     try {
         $columnas = $pdo->query('SHOW COLUMNS FROM sueldo_conceptos')->fetchAll(PDO::FETCH_COLUMN, 0);
-    } catch (Throwable $e) {
-        return;
-    }
+        if (!in_array('mes', $columnas, true)) {
+            $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN mes VARCHAR(7) NULL");
+        }
 
-    if (!in_array('mes', $columnas, true)) {
-        $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN mes VARCHAR(7) NULL");
-    }
-
-    try {
         $indexes = $pdo->query('SHOW INDEX FROM sueldo_conceptos')->fetchAll(PDO::FETCH_ASSOC);
+        $tieneVieja = false;
+        $tieneNueva = false;
+        foreach ($indexes as $idx) {
+            $nombre = (string)($idx['Key_name'] ?? '');
+            if ($nombre === 'unique_emp_concept') {
+                $tieneVieja = true;
+            }
+            if ($nombre === 'unique_emp_concept_mes') {
+                $tieneNueva = true;
+            }
+        }
+
+        if (!$tieneNueva) {
+            try {
+                $pdo->exec('ALTER TABLE sueldo_conceptos ADD UNIQUE KEY unique_emp_concept_mes (empleado_id, concepto_id, mes)');
+            } catch (Throwable $e) {
+                error_log('sueldos unique_emp_concept_mes: ' . $e->getMessage());
+            }
+        }
+        if ($tieneVieja) {
+            try {
+                $pdo->exec('ALTER TABLE sueldo_conceptos DROP INDEX unique_emp_concept');
+            } catch (Throwable $e) {
+                try {
+                    $pdo->exec('ALTER TABLE sueldo_conceptos ADD INDEX idx_sc_empleado (empleado_id)');
+                    $pdo->exec('ALTER TABLE sueldo_conceptos DROP INDEX unique_emp_concept');
+                } catch (Throwable $e2) {
+                    error_log('sueldos drop unique_emp_concept: ' . $e2->getMessage());
+                }
+            }
+        }
     } catch (Throwable $e) {
-        return;
-    }
-
-    $tieneVieja = false;
-    $tieneNueva = false;
-    foreach ($indexes as $idx) {
-        $nombre = (string)($idx['Key_name'] ?? '');
-        if ($nombre === 'unique_emp_concept') {
-            $tieneVieja = true;
-        }
-        if ($nombre === 'unique_emp_concept_mes') {
-            $tieneNueva = true;
-        }
-    }
-
-    if ($tieneVieja) {
-        $pdo->exec('ALTER TABLE sueldo_conceptos DROP INDEX unique_emp_concept');
-    }
-    if (!$tieneNueva) {
-        $pdo->exec('ALTER TABLE sueldo_conceptos ADD UNIQUE KEY unique_emp_concept_mes (empleado_id, concepto_id, mes)');
+        error_log('sueldosAsegurarConceptosPorMes: ' . $e->getMessage());
     }
 }
 
@@ -96,14 +103,25 @@ function sueldosCalcularDetalleMes(PDO $pdo, int $empleado_id, string $mes): arr
     $bonificaciones = 0.0;
     $descuentos = 0.0;
 
-    $stmt_conceptos = $pdo->prepare("
-        SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
-        FROM sueldo_conceptos sc
-        JOIN conceptos c ON sc.concepto_id = c.id
-        WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
-    ");
-    $stmt_conceptos->execute([$empleado_id, $mes]);
-    $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmt_conceptos = $pdo->prepare("
+            SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
+            FROM sueldo_conceptos sc
+            JOIN conceptos c ON sc.concepto_id = c.id
+            WHERE sc.empleado_id = ? AND (sc.mes = ? OR sc.mes IS NULL OR sc.mes = '')
+        ");
+        $stmt_conceptos->execute([$empleado_id, $mes]);
+        $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $stmt_conceptos = $pdo->prepare("
+            SELECT sc.monto, sc.formula, sc.es_porcentaje, c.tipo
+            FROM sueldo_conceptos sc
+            JOIN conceptos c ON sc.concepto_id = c.id
+            WHERE sc.empleado_id = ?
+        ");
+        $stmt_conceptos->execute([$empleado_id]);
+        $conceptos = $stmt_conceptos->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     foreach ($conceptos as $c) {
         $monto_concepto = (float)$c['monto'];
@@ -295,7 +313,7 @@ function sueldosCalcularMinutosExtrasMesPorEmpleado(PDO $pdo, string $mes, ?int 
             }
             $resultado[$empId] += $minutos;
         }
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         return [];
     }
 

@@ -2,12 +2,15 @@
 require '../includes/header.php';
 require_once '../includes/sueldos_helper.php';
 
-sueldosAsegurarConceptosPorMes($pdo);
+if (isset($pdo) && $pdo instanceof PDO) {
+    sueldosAsegurarConceptosPorMes($pdo);
+}
 
-// Verificar si existe sesión
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['user'])) {
-    header("Location: auth/login.php");
+    header('Location: ../auth/login.php');
     exit;
 }
 
@@ -128,89 +131,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'aplic
 // Obtener mes seleccionado o usar mes actual
 $mes_filtro = $_GET['mes'] ?? date('Y-m');
 $mes_actual = date('Y-m');
-
-// Obtener todos los meses disponibles con pagos
-$stmt_meses = $pdo->query("
-    SELECT DISTINCT mes_pago 
-    FROM pagos_sueldos 
-    ORDER BY mes_pago DESC
-");
-$meses_disponibles = $stmt_meses->fetchAll(PDO::FETCH_COLUMN);
-
-// Obtener lista de empleados con estado de pago del mes filtrado
-$stmt = $pdo->prepare("
-    SELECT e.id, e.nombre, e.email, e.sueldo_base, e.activo, ep.plantilla_id, pc.nombre as plantilla_nombre,
-           COALESCE(ps.monto_pagado, 0) as monto_pagado,
-           COALESCE(ps.sueldo_total, 0) as sueldo_total,
-           COALESCE(ps.id, 0) as pago_id,
-           COALESCE(
-               (SELECT SUM(monto_pagado) 
-                FROM pagos_sueldos_parciales 
-                WHERE empleado_id = e.id AND mes_pago = ?), 
-               0
-           ) as pagos_parciales
-    FROM empleados e
-    LEFT JOIN empleado_plantilla ep ON e.id = ep.empleado_id
-    LEFT JOIN plantillas_conceptos pc ON ep.plantilla_id = pc.id
-    LEFT JOIN pagos_sueldos ps ON e.id = ps.empleado_id AND ps.mes_pago = ?
-    WHERE e.activo = 1
-    ORDER BY e.nombre ASC
-");
-$stmt->execute([$mes_filtro, $mes_filtro]);
-$empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Detalle de pagos parciales por empleado para el mes seleccionado
-$stmt_det = $pdo->prepare("
-    SELECT id, empleado_id, monto_pagado, fecha_pago, observaciones
-    FROM pagos_sueldos_parciales
-    WHERE mes_pago = ?
-    ORDER BY fecha_pago ASC
-");
-$stmt_det->execute([$mes_filtro]);
+$meses_disponibles = [];
+$empleados = [];
 $parciales_detalle = [];
-foreach ($stmt_det->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $parciales_detalle[(int)$row['empleado_id']][] = $row;
-}
-
-$minutos_extras_por_empleado = sueldosCalcularMinutosExtrasMesPorEmpleado($pdo, $mes_filtro);
+$minutos_extras_por_empleado = [];
 $total_minutos_extras_mes = 0;
-foreach ($minutos_extras_por_empleado as $mins) {
-    $total_minutos_extras_mes += (int)$mins;
-}
-
-// Sueldos base especiales cargados para el mes filtrado (distintos del sueldo base global)
-$stmt_overrides = $pdo->prepare("SELECT empleado_id, sueldo_base FROM sueldo_base_mensual WHERE mes = ?");
-$stmt_overrides->execute([$mes_filtro]);
 $sueldo_base_mes_por_empleado = [];
-foreach ($stmt_overrides->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $sueldo_base_mes_por_empleado[(int)$row['empleado_id']] = (float)$row['sueldo_base'];
-}
-
-// Calcular totales del mes
 $total_sueldo = 0;
 $total_pagado = 0;
 $total_pendiente = 0;
-
 $sueldos_calculados = [];
 $sueldos_base_calculados = [];
 
-foreach ($empleados as $emp) {
-    // Calcular sueldo total si no existe pago registrado
-    if ($emp['pago_id'] == 0 || (float)$emp['sueldo_total'] <= 0) {
-        $sueldo_total_emp = sueldosCalcularTotalMes($pdo, (int)$emp['id'], $mes_filtro);
-    } else {
-        $sueldo_total_emp = (float)$emp['sueldo_total'];
+try {
+    $stmt_meses = $pdo->query("
+        SELECT DISTINCT mes_pago 
+        FROM pagos_sueldos 
+        ORDER BY mes_pago DESC
+    ");
+    $meses_disponibles = $stmt_meses->fetchAll(PDO::FETCH_COLUMN);
+
+    $stmt = $pdo->prepare("
+        SELECT e.id, e.nombre, e.email, e.sueldo_base, e.activo, ep.plantilla_id, pc.nombre as plantilla_nombre,
+               COALESCE(ps.monto_pagado, 0) as monto_pagado,
+               COALESCE(ps.sueldo_total, 0) as sueldo_total,
+               COALESCE(ps.id, 0) as pago_id,
+               COALESCE(
+                   (SELECT SUM(monto_pagado) 
+                    FROM pagos_sueldos_parciales 
+                    WHERE empleado_id = e.id AND mes_pago = ?), 
+                   0
+               ) as pagos_parciales
+        FROM empleados e
+        LEFT JOIN empleado_plantilla ep ON e.id = ep.empleado_id
+        LEFT JOIN plantillas_conceptos pc ON ep.plantilla_id = pc.id
+        LEFT JOIN pagos_sueldos ps ON e.id = ps.empleado_id AND ps.mes_pago = ?
+        WHERE e.activo = 1
+        ORDER BY e.nombre ASC
+    ");
+    $stmt->execute([$mes_filtro, $mes_filtro]);
+    $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmt_det = $pdo->prepare("
+        SELECT id, empleado_id, monto_pagado, fecha_pago, observaciones
+        FROM pagos_sueldos_parciales
+        WHERE mes_pago = ?
+        ORDER BY fecha_pago ASC
+    ");
+    $stmt_det->execute([$mes_filtro]);
+    foreach ($stmt_det->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $parciales_detalle[(int)$row['empleado_id']][] = $row;
     }
 
-    $sueldos_calculados[$emp['id']] = $sueldo_total_emp;
-    $sueldos_base_calculados[$emp['id']] = $sueldo_base_mes_por_empleado[(int)$emp['id']] ?? (float)$emp['sueldo_base'];
+    $minutos_extras_por_empleado = sueldosCalcularMinutosExtrasMesPorEmpleado($pdo, $mes_filtro);
+    foreach ($minutos_extras_por_empleado as $mins) {
+        $total_minutos_extras_mes += (int)$mins;
+    }
 
-    // Sumar pagos completos + pagos parciales
-    $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
+    $stmt_overrides = $pdo->prepare("SELECT empleado_id, sueldo_base FROM sueldo_base_mensual WHERE mes = ?");
+    $stmt_overrides->execute([$mes_filtro]);
+    foreach ($stmt_overrides->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $sueldo_base_mes_por_empleado[(int)$row['empleado_id']] = (float)$row['sueldo_base'];
+    }
 
-    $total_sueldo += $sueldo_total_emp;
-    $total_pagado += $monto_total_pagado;
-    $total_pendiente += ($sueldo_total_emp - $monto_total_pagado);
+    foreach ($empleados as $emp) {
+        if ($emp['pago_id'] == 0 || (float)$emp['sueldo_total'] <= 0) {
+            $sueldo_total_emp = sueldosCalcularTotalMes($pdo, (int)$emp['id'], $mes_filtro);
+        } else {
+            $sueldo_total_emp = (float)$emp['sueldo_total'];
+        }
+
+        $sueldos_calculados[$emp['id']] = $sueldo_total_emp;
+        $sueldos_base_calculados[$emp['id']] = $sueldo_base_mes_por_empleado[(int)$emp['id']] ?? (float)$emp['sueldo_base'];
+
+        $monto_total_pagado = $emp['monto_pagado'] + $emp['pagos_parciales'];
+
+        $total_sueldo += $sueldo_total_emp;
+        $total_pagado += $monto_total_pagado;
+        $total_pendiente += ($sueldo_total_emp - $monto_total_pagado);
+    }
+} catch (Throwable $e) {
+    $error_msg = 'No se pudo cargar el listado de sueldos: ' . $e->getMessage();
 }
 ?>
 

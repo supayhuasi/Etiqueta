@@ -2,7 +2,9 @@
 require '../includes/header.php';
 require_once '../includes/sueldos_helper.php';
 
-sueldosAsegurarConceptosPorMes($pdo);
+if (isset($pdo) && $pdo instanceof PDO) {
+    sueldosAsegurarConceptosPorMes($pdo);
+}
 
 $id = $_GET['id'] ?? 0;
 $mes = $_GET['mes'] ?? date('Y-m');
