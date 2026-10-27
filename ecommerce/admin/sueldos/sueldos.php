@@ -2,6 +2,8 @@
 require '../includes/header.php';
 require_once '../includes/sueldos_helper.php';
 
+sueldosAsegurarConceptosPorMes($pdo);
+
 // Verificar si existe sesión
 session_start();
 if (!isset($_SESSION['user'])) {

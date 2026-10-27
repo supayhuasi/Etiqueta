@@ -59,10 +59,11 @@ $pdo->exec("
         empleado_id INT NOT NULL,
         concepto_id INT NOT NULL,
         monto DECIMAL(10, 2) NOT NULL,
+        mes VARCHAR(7) NULL,
         fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE CASCADE,
         FOREIGN KEY (concepto_id) REFERENCES conceptos(id) ON DELETE RESTRICT,
-        UNIQUE KEY unique_emp_concept (empleado_id, concepto_id)
+        UNIQUE KEY unique_emp_concept_mes (empleado_id, concepto_id, mes)
     )
 ");
 

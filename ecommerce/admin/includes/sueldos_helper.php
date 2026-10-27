@@ -1,5 +1,49 @@
 <?php
 
+function sueldosAsegurarConceptosPorMes(PDO $pdo): void
+{
+    static $hecho = false;
+    if ($hecho) {
+        return;
+    }
+    $hecho = true;
+
+    try {
+        $columnas = $pdo->query('SHOW COLUMNS FROM sueldo_conceptos')->fetchAll(PDO::FETCH_COLUMN, 0);
+    } catch (Throwable $e) {
+        return;
+    }
+
+    if (!in_array('mes', $columnas, true)) {
+        $pdo->exec("ALTER TABLE sueldo_conceptos ADD COLUMN mes VARCHAR(7) NULL");
+    }
+
+    try {
+        $indexes = $pdo->query('SHOW INDEX FROM sueldo_conceptos')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return;
+    }
+
+    $tieneVieja = false;
+    $tieneNueva = false;
+    foreach ($indexes as $idx) {
+        $nombre = (string)($idx['Key_name'] ?? '');
+        if ($nombre === 'unique_emp_concept') {
+            $tieneVieja = true;
+        }
+        if ($nombre === 'unique_emp_concept_mes') {
+            $tieneNueva = true;
+        }
+    }
+
+    if ($tieneVieja) {
+        $pdo->exec('ALTER TABLE sueldo_conceptos DROP INDEX unique_emp_concept');
+    }
+    if (!$tieneNueva) {
+        $pdo->exec('ALTER TABLE sueldo_conceptos ADD UNIQUE KEY unique_emp_concept_mes (empleado_id, concepto_id, mes)');
+    }
+}
+
 function sueldosObtenerSueldoBaseMes(PDO $pdo, int $empleado_id, string $mes): float
 {
     $stmt = $pdo->prepare("SELECT sueldo_base FROM sueldo_base_mensual WHERE empleado_id = ? AND mes = ? LIMIT 1");

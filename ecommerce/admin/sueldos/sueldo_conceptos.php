@@ -1,5 +1,8 @@
 <?php
 require '../includes/header.php';
+require_once '../includes/sueldos_helper.php';
+
+sueldosAsegurarConceptosPorMes($pdo);
 
 $id = $_GET['id'] ?? 0;
 $mes = $_GET['mes'] ?? date('Y-m');
@@ -64,9 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ON DUPLICATE KEY UPDATE
                         monto = VALUES(monto),
                         formula = VALUES(formula),
-                        es_porcentaje = VALUES(es_porcentaje),
-                        mes = VALUES(mes),
-                        fecha_creacion = NOW()
+                        es_porcentaje = VALUES(es_porcentaje)
                 ");
                 $stmt->execute([
                     $id,
@@ -106,9 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ON DUPLICATE KEY UPDATE
                 monto = VALUES(monto),
                 formula = VALUES(formula),
-                es_porcentaje = VALUES(es_porcentaje),
-                mes = VALUES(mes),
-                fecha_creacion = NOW()
+                es_porcentaje = VALUES(es_porcentaje)
         ");
         $stmt->execute([
             $id,
@@ -141,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="sueldo_conceptos.php?id=<?= (int)$id ?>&mes=<?= date('Y-m') ?>" class="btn btn-secondary">Mes Actual</a>
         </div>
     </form>
-    <p class="text-muted">Editando conceptos de: <strong><?= date('F Y', strtotime($mes . '-01')) ?></strong></p>
+    <p class="text-muted">Editando conceptos de: <strong><?= date('F Y', strtotime($mes . '-01')) ?></strong>. Cada mes guarda su propia planilla; no se pisa la de otro mes.</p>
 
     <?php if (isset($_GET['success'])): ?>
         <div class="alert alert-success"><?= htmlspecialchars($_GET['success']) ?></div>

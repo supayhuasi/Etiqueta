@@ -39,9 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INSERT INTO sueldo_conceptos (empleado_id, concepto_id, mes, monto)
                 VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
-                    monto = VALUES(monto),
-                    mes = VALUES(mes),
-                    fecha_creacion = NOW()
+                    monto = VALUES(monto)
             ");
             $stmt->execute([$empleado_id, $concepto_id, $mes_actual, $monto]);
 
