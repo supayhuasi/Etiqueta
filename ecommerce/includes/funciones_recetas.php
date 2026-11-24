@@ -100,9 +100,167 @@ function evaluar_condicion($condicion_tipo, $condicion_operador, $condicion_valo
     }
 }
 
+function recetas_asegurar_condiciones(PDO $pdo): void
+{
+    static $hecho = false;
+    if ($hecho) {
+        return;
+    }
+    $hecho = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS ecommerce_producto_receta_condiciones (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                receta_id INT NOT NULL,
+                tipo ENUM('ancho','alto','area','atributo') NOT NULL,
+                operador ENUM('igual','mayor','mayor_igual','menor','menor_igual','diferente') NOT NULL DEFAULT 'igual',
+                valor VARCHAR(255) NULL,
+                atributo_id INT NULL,
+                orden INT NOT NULL DEFAULT 0,
+                INDEX idx_receta_cond_receta (receta_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } catch (Throwable $e) {
+        error_log('recetas_asegurar_condiciones create: ' . $e->getMessage());
+        return;
+    }
+
+    try {
+        $pdo->exec("
+            INSERT INTO ecommerce_producto_receta_condiciones (receta_id, tipo, operador, valor, atributo_id, orden)
+            SELECT r.id, r.condicion_tipo, r.condicion_operador, r.condicion_valor, r.condicion_atributo_id, 0
+            FROM ecommerce_producto_recetas_productos r
+            LEFT JOIN ecommerce_producto_receta_condiciones c ON c.receta_id = r.id
+            WHERE r.con_condicion = 1
+              AND r.condicion_tipo IS NOT NULL
+              AND r.condicion_tipo <> ''
+              AND r.condicion_operador IS NOT NULL
+              AND r.condicion_operador <> ''
+              AND c.id IS NULL
+        ");
+    } catch (Throwable $e) {
+        error_log('recetas_asegurar_condiciones migrate: ' . $e->getMessage());
+    }
+}
+
+function recetas_condiciones_legacy(array $material): array
+{
+    if (empty($material['con_condicion']) || empty($material['condicion_tipo'])) {
+        return [];
+    }
+
+    return [[
+        'tipo' => (string)$material['condicion_tipo'],
+        'operador' => (string)($material['condicion_operador'] ?? 'igual'),
+        'valor' => (string)($material['condicion_valor'] ?? ''),
+        'atributo_id' => (int)($material['condicion_atributo_id'] ?? 0),
+    ]];
+}
+
+function recetas_cargar_condiciones_por_receta(PDO $pdo, array $receta_ids): array
+{
+    recetas_asegurar_condiciones($pdo);
+    $mapa = [];
+    $ids = array_values(array_unique(array_filter(array_map('intval', $receta_ids))));
+    if (empty($ids)) {
+        return $mapa;
+    }
+
+    try {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("
+            SELECT receta_id, tipo, operador, valor, atributo_id
+            FROM ecommerce_producto_receta_condiciones
+            WHERE receta_id IN ($placeholders)
+            ORDER BY orden ASC, id ASC
+        ");
+        $stmt->execute($ids);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $mapa[(int)$row['receta_id']][] = [
+                'tipo' => (string)$row['tipo'],
+                'operador' => (string)$row['operador'],
+                'valor' => (string)($row['valor'] ?? ''),
+                'atributo_id' => (int)($row['atributo_id'] ?? 0),
+            ];
+        }
+    } catch (Throwable $e) {
+        error_log('recetas_cargar_condiciones_por_receta: ' . $e->getMessage());
+    }
+
+    return $mapa;
+}
+
+function recetas_guardar_condiciones(PDO $pdo, int $receta_id, array $condiciones): void
+{
+    recetas_asegurar_condiciones($pdo);
+    $pdo->prepare('DELETE FROM ecommerce_producto_receta_condiciones WHERE receta_id = ?')->execute([$receta_id]);
+
+    if ($receta_id <= 0) {
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO ecommerce_producto_receta_condiciones (receta_id, tipo, operador, valor, atributo_id, orden)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    $orden = 0;
+    foreach ($condiciones as $cond) {
+        $tipo = (string)($cond['tipo'] ?? '');
+        $operador = (string)($cond['operador'] ?? '');
+        $valor = trim((string)($cond['valor'] ?? ''));
+        $atributo_id = (int)($cond['atributo_id'] ?? 0);
+        if ($tipo === '' || $operador === '' || $valor === '') {
+            continue;
+        }
+        $stmt->execute([
+            $receta_id,
+            $tipo,
+            $operador,
+            $valor,
+            $atributo_id > 0 ? $atributo_id : null,
+            $orden,
+        ]);
+        $orden++;
+    }
+}
+
+function recetas_normalizar_condicion_post($tipo_raw, $operador, $valor): ?array
+{
+    $tipo_raw = trim((string)$tipo_raw);
+    $operador = trim((string)$operador);
+    $valor = trim((string)$valor);
+    if ($tipo_raw === '' || $operador === '' || $valor === '') {
+        return null;
+    }
+
+    $atributo_id = 0;
+    $tipo = $tipo_raw;
+    if (strpos($tipo_raw, 'atributo_') === 0) {
+        $atributo_id = (int)substr($tipo_raw, strlen('atributo_'));
+        $tipo = 'atributo';
+    }
+
+    $tipos_ok = ['ancho', 'alto', 'area', 'atributo'];
+    $ops_ok = ['igual', 'mayor', 'mayor_igual', 'menor', 'menor_igual', 'diferente'];
+    if (!in_array($tipo, $tipos_ok, true) || !in_array($operador, $ops_ok, true)) {
+        return null;
+    }
+    if ($tipo === 'atributo' && $atributo_id <= 0) {
+        return null;
+    }
+
+    return [
+        'tipo' => $tipo,
+        'operador' => $operador,
+        'valor' => $valor,
+        'atributo_id' => $atributo_id,
+    ];
+}
+
 /**
  * Obtiene el valor a evaluar según el tipo de condición
- * 
+ *
  * @param PDO $pdo Conexión a base de datos
  * @param int $producto_id ID del producto
  * @param string $condicion_tipo Tipo de condición
@@ -110,31 +268,54 @@ function evaluar_condicion($condicion_tipo, $condicion_operador, $condicion_valo
  * @param float $ancho Ancho en cm
  * @param float $alto Alto en cm
  * @param array $atributos_seleccionados Atributos del pedido
+ * @param array $nombres_atributos id => nombre, para matchear cotizaciones sin id
  * @return float|string Valor a comparar
  */
-function obtener_valor_condicion($pdo, $producto_id, $condicion_tipo, $condicion_atributo_id, $ancho, $alto, $atributos_seleccionados = []) {
+function obtener_valor_condicion($pdo, $producto_id, $condicion_tipo, $condicion_atributo_id, $ancho, $alto, $atributos_seleccionados = [], array $nombres_atributos = []) {
     switch ($condicion_tipo) {
         case 'ancho':
             return $ancho;
-            
+
         case 'alto':
             return $alto;
-            
+
         case 'area':
-            // Convertir cm a metros y calcular área
             return ($ancho / 100) * ($alto / 100);
-            
+
         case 'atributo':
-            // Buscar el valor del atributo seleccionado (texto, ej. color)
-            if (is_array($atributos_seleccionados) && !empty($atributos_seleccionados)) {
-                foreach ($atributos_seleccionados as $attr) {
-                    if ((int)($attr['id'] ?? 0) === (int)$condicion_atributo_id) {
-                        return trim((string)($attr['valor'] ?? ''));
-                    }
+            if (!is_array($atributos_seleccionados) || empty($atributos_seleccionados)) {
+                return '';
+            }
+
+            $attr_id = (int)$condicion_atributo_id;
+            foreach ($atributos_seleccionados as $attr) {
+                if ($attr_id > 0 && (int)($attr['id'] ?? 0) === $attr_id) {
+                    return trim((string)($attr['valor'] ?? ''));
+                }
+            }
+
+            $nombre = trim((string)($nombres_atributos[$attr_id] ?? ''));
+            if ($nombre === '' && $attr_id > 0) {
+                try {
+                    $stmt = $pdo->prepare('SELECT nombre FROM ecommerce_producto_atributos WHERE id = ? LIMIT 1');
+                    $stmt->execute([$attr_id]);
+                    $nombre = trim((string)($stmt->fetchColumn() ?: ''));
+                } catch (Throwable $e) {
+                    $nombre = '';
+                }
+            }
+            if ($nombre === '') {
+                return '';
+            }
+
+            $needle = mb_strtolower($nombre);
+            foreach ($atributos_seleccionados as $attr) {
+                if (mb_strtolower(trim((string)($attr['nombre'] ?? ''))) === $needle) {
+                    return trim((string)($attr['valor'] ?? ''));
                 }
             }
             return '';
-            
+
         default:
             return 0;
     }
@@ -151,12 +332,11 @@ function obtener_valor_condicion($pdo, $producto_id, $condicion_tipo, $condicion
  * @return array Array con materiales que cumplen las condiciones
  */
 function obtener_receta_con_condiciones($pdo, $producto_id, $ancho, $alto, $atributos_seleccionados = []) {
+    recetas_asegurar_condiciones($pdo);
+
     $stmt = $pdo->prepare("
         SELECT r.*, m.nombre as material_nombre,
-               CASE 
-                   WHEN EXISTS(SELECT 1 FROM ecommerce_materiales WHERE id = r.material_producto_id) THEN 'material'
-                   ELSE 'producto'
-               END as tipo_item
+               CASE WHEN m.es_material = 1 THEN 'material' ELSE 'producto' END as tipo_item
         FROM ecommerce_producto_recetas_productos r
         JOIN ecommerce_productos m ON r.material_producto_id = m.id
         WHERE r.producto_id = ?
@@ -164,37 +344,75 @@ function obtener_receta_con_condiciones($pdo, $producto_id, $ancho, $alto, $atri
     ");
     $stmt->execute([$producto_id]);
     $materiales_receta = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $materiales_filtrados = [];
-    
+
+    $condiciones_por_receta = recetas_cargar_condiciones_por_receta(
+        $pdo,
+        array_column($materiales_receta, 'id')
+    );
+
+    $attr_ids = [];
+    foreach ($condiciones_por_receta as $lista) {
+        foreach ($lista as $cond) {
+            if ((int)$cond['atributo_id'] > 0) {
+                $attr_ids[] = (int)$cond['atributo_id'];
+            }
+        }
+    }
     foreach ($materiales_receta as $material) {
-        // Evaluar condición si existe
-        if ($material['con_condicion']) {
+        if ((int)($material['condicion_atributo_id'] ?? 0) > 0) {
+            $attr_ids[] = (int)$material['condicion_atributo_id'];
+        }
+    }
+
+    $nombres_atributos = [];
+    $attr_ids = array_values(array_unique($attr_ids));
+    if (!empty($attr_ids)) {
+        try {
+            $placeholders = implode(',', array_fill(0, count($attr_ids), '?'));
+            $stmt_nombres = $pdo->prepare("SELECT id, nombre FROM ecommerce_producto_atributos WHERE id IN ($placeholders)");
+            $stmt_nombres->execute($attr_ids);
+            foreach ($stmt_nombres->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $nombres_atributos[(int)$row['id']] = (string)$row['nombre'];
+            }
+        } catch (Throwable $e) {
+            $nombres_atributos = [];
+        }
+    }
+
+    $materiales_filtrados = [];
+
+    foreach ($materiales_receta as $material) {
+        $lista = $condiciones_por_receta[(int)($material['id'] ?? 0)] ?? [];
+        if (empty($lista)) {
+            $lista = recetas_condiciones_legacy($material);
+        }
+
+        $cumple = true;
+        foreach ($lista as $cond) {
             $valor_actual = obtener_valor_condicion(
                 $pdo,
                 $producto_id,
-                $material['condicion_tipo'],
-                $material['condicion_atributo_id'],
+                $cond['tipo'],
+                $cond['atributo_id'],
                 $ancho,
                 $alto,
-                $atributos_seleccionados
+                $atributos_seleccionados,
+                $nombres_atributos
             );
-            
-            $cumple_condicion = evaluar_condicion(
-                $material['condicion_tipo'],
-                $material['condicion_operador'],
-                $material['condicion_valor'],
-                $valor_actual
-            );
-            
-            if (!$cumple_condicion) {
-                continue; // Saltar este material si no cumple la condición
+            if (!evaluar_condicion($cond['tipo'], $cond['operador'], $cond['valor'], $valor_actual)) {
+                $cumple = false;
+                break;
             }
         }
-        
+
+        if (!$cumple) {
+            continue;
+        }
+
+        $material['condiciones'] = $lista;
         $materiales_filtrados[] = $material;
     }
-    
+
     return $materiales_filtrados;
 }
 

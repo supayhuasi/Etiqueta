@@ -45,6 +45,24 @@ try {
     } catch (Exception $e) {
         echo "<br>ℹ Columnas de condición ya existen";
     }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS ecommerce_producto_receta_condiciones (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                receta_id INT NOT NULL,
+                tipo ENUM('ancho','alto','area','atributo') NOT NULL,
+                operador ENUM('igual','mayor','mayor_igual','menor','menor_igual','diferente') NOT NULL DEFAULT 'igual',
+                valor VARCHAR(255) NULL,
+                atributo_id INT NULL,
+                orden INT NOT NULL DEFAULT 0,
+                INDEX idx_receta_cond_receta (receta_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        echo "<br>✓ Tabla ecommerce_producto_receta_condiciones creada/actualizada";
+    } catch (Exception $e) {
+        echo "<br>ℹ Tabla de condiciones múltiples: " . $e->getMessage();
+    }
 } catch (Exception $e) {
     echo "Error: " . $e->getMessage();
 }

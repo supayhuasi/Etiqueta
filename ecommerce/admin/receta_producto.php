@@ -1,10 +1,13 @@
 <?php
 require 'includes/header.php';
+require_once __DIR__ . '/../includes/funciones_recetas.php';
 
 $producto_id = intval($_GET['producto_id'] ?? 0);
 if ($producto_id <= 0) {
     die("Producto no especificado");
 }
+
+recetas_asegurar_condiciones($pdo);
 
 $stmt = $pdo->prepare("SELECT * FROM ecommerce_productos WHERE id = ?");
 $stmt->execute([$producto_id]);
@@ -14,7 +17,9 @@ if (!$producto) {
     die("Producto no encontrado");
 }
 
-// Guardar receta
+$mensaje = '';
+$error = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $material_ids = $_POST['material_producto_id'] ?? [];
@@ -23,47 +28,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $factores = $_POST['factor'] ?? [];
         $mermas = $_POST['merma_pct'] ?? [];
         $notas = $_POST['notas'] ?? [];
-        $con_condicion = $_POST['con_condicion'] ?? [];
-        $condicion_tipo = $_POST['condicion_tipo'] ?? [];
-        $condicion_operador = $_POST['condicion_operador'] ?? [];
-        $condicion_valor = $_POST['condicion_valor'] ?? [];
+        $condiciones_post = $_POST['condiciones'] ?? [];
 
+        $ids_validos = [];
         foreach ($material_ids as $material_id) {
             $material_id = intval($material_id);
-            if ($material_id <= 0) continue;
+            if ($material_id <= 0) {
+                continue;
+            }
             if (empty($usar[$material_id])) {
                 continue;
             }
+
             $tipo = $tipos[$material_id] ?? 'fijo';
             $factor = floatval($factores[$material_id] ?? 0);
             $merma = floatval($mermas[$material_id] ?? 0);
             $nota = trim($notas[$material_id] ?? '');
-            
-            // Procesar condición
-            $tiene_condicion = isset($con_condicion[$material_id]) ? 1 : 0;
-            $cond_tipo = null;
-            $cond_operador = null;
-            $cond_valor = null;
-            $cond_atributo_id = null;
-            
-            if ($tiene_condicion) {
-                $cond_tipo = $condicion_tipo[$material_id] ?? null;
-                $cond_operador = $condicion_operador[$material_id] ?? null;
-                $cond_valor = !empty($condicion_valor[$material_id]) ? trim($condicion_valor[$material_id]) : null;
-                if (!empty($cond_tipo) && str_starts_with($cond_tipo, 'atributo_')) {
-                    $cond_atributo_id = intval(str_replace('atributo_', '', $cond_tipo));
-                    $cond_tipo = 'atributo';
+
+            $condiciones = [];
+            foreach (($condiciones_post[$material_id] ?? []) as $fila) {
+                $normalizada = recetas_normalizar_condicion_post(
+                    $fila['tipo'] ?? '',
+                    $fila['operador'] ?? '',
+                    $fila['valor'] ?? ''
+                );
+                if ($normalizada) {
+                    $condiciones[] = $normalizada;
                 }
             }
 
+            $primera = $condiciones[0] ?? null;
+            $tiene_condicion = $primera ? 1 : 0;
+
             $stmt = $pdo->prepare("
-                INSERT INTO ecommerce_producto_recetas_productos 
+                INSERT INTO ecommerce_producto_recetas_productos
                 (producto_id, material_producto_id, tipo_calculo, factor, merma_pct, notas, con_condicion, condicion_tipo, condicion_operador, condicion_valor, condicion_atributo_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                    tipo_calculo = VALUES(tipo_calculo), 
-                    factor = VALUES(factor), 
-                    merma_pct = VALUES(merma_pct), 
+                ON DUPLICATE KEY UPDATE
+                    tipo_calculo = VALUES(tipo_calculo),
+                    factor = VALUES(factor),
+                    merma_pct = VALUES(merma_pct),
                     notas = VALUES(notas),
                     con_condicion = VALUES(con_condicion),
                     condicion_tipo = VALUES(condicion_tipo),
@@ -71,16 +75,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     condicion_valor = VALUES(condicion_valor),
                     condicion_atributo_id = VALUES(condicion_atributo_id)
             ");
-            $stmt->execute([$producto_id, $material_id, $tipo, $factor, $merma, $nota ?: null, $tiene_condicion, $cond_tipo, $cond_operador, $cond_valor, $cond_atributo_id]);
+            $stmt->execute([
+                $producto_id,
+                $material_id,
+                $tipo,
+                $factor,
+                $merma,
+                $nota !== '' ? $nota : null,
+                $tiene_condicion,
+                $primera['tipo'] ?? null,
+                $primera['operador'] ?? null,
+                $primera['valor'] ?? null,
+                !empty($primera['atributo_id']) ? $primera['atributo_id'] : null,
+            ]);
+
+            $stmt_id = $pdo->prepare("SELECT id FROM ecommerce_producto_recetas_productos WHERE producto_id = ? AND material_producto_id = ? LIMIT 1");
+            $stmt_id->execute([$producto_id, $material_id]);
+            $receta_id = (int)$stmt_id->fetchColumn();
+            recetas_guardar_condiciones($pdo, $receta_id, $condiciones);
+
+            $ids_validos[] = $material_id;
         }
 
-        // Eliminar materiales no enviados
-        $ids_validos = [];
-        foreach ($material_ids as $material_id) {
-            if (!empty($usar[$material_id])) {
-                $ids_validos[] = intval($material_id);
-            }
-        }
         if (!empty($ids_validos)) {
             $placeholders = implode(',', array_fill(0, count($ids_validos), '?'));
             $params = array_merge([$producto_id], $ids_validos);
@@ -100,14 +116,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->query("SELECT id, nombre FROM ecommerce_productos WHERE activo = 1 AND es_material = 1 ORDER BY nombre");
 $materiales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener atributos del producto (para usar en condiciones)
 $stmt = $pdo->prepare("
-    SELECT id, nombre, tipo FROM ecommerce_producto_atributos 
-    WHERE producto_id = ? 
-    ORDER BY nombre
+    SELECT id, nombre, tipo FROM ecommerce_producto_atributos
+    WHERE producto_id = ?
+    ORDER BY orden, nombre
 ");
 $stmt->execute([$producto_id]);
 $atributos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$opciones_por_atributo = [];
+if (!empty($atributos)) {
+    try {
+        $ids = array_column($atributos, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("
+            SELECT atributo_id, nombre
+            FROM ecommerce_atributo_opciones
+            WHERE atributo_id IN ($placeholders)
+            ORDER BY orden, nombre
+        ");
+        $stmt->execute($ids);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $op) {
+            $opciones_por_atributo[(int)$op['atributo_id']][] = (string)$op['nombre'];
+        }
+    } catch (Exception $e) {
+        $opciones_por_atributo = [];
+    }
+}
 
 $stmt = $pdo->prepare("
     SELECT r.*, m.nombre
@@ -122,12 +157,70 @@ $receta_map = [];
 foreach ($receta as $r) {
     $receta_map[$r['material_producto_id']] = $r;
 }
+
+$condiciones_por_material = [];
+$condiciones_db = recetas_cargar_condiciones_por_receta($pdo, array_column($receta, 'id'));
+foreach ($receta as $r) {
+    $lista = $condiciones_db[(int)$r['id']] ?? [];
+    if (empty($lista)) {
+        $lista = recetas_condiciones_legacy($r);
+    }
+    $condiciones_por_material[(int)$r['material_producto_id']] = $lista;
+}
+
+if (!function_exists('receta_opciones_tipo')) {
+function receta_opciones_tipo(array $atributos, array $cond = []): string
+{
+    $tipo_actual = '';
+    if (!empty($cond['tipo'])) {
+        $tipo_actual = $cond['tipo'] === 'atributo'
+            ? 'atributo_' . (int)($cond['atributo_id'] ?? 0)
+            : (string)$cond['tipo'];
+    }
+
+    $html = '<option value="">--</option>';
+    $html .= '<option value="ancho"' . ($tipo_actual === 'ancho' ? ' selected' : '') . '>Ancho (cm)</option>';
+    $html .= '<option value="alto"' . ($tipo_actual === 'alto' ? ' selected' : '') . '>Alto (cm)</option>';
+    $html .= '<option value="area"' . ($tipo_actual === 'area' ? ' selected' : '') . '>Área (m²)</option>';
+    if (!empty($atributos)) {
+        $html .= '<optgroup label="Atributos">';
+        foreach ($atributos as $attr) {
+            $val = 'atributo_' . (int)$attr['id'];
+            $sel = $tipo_actual === $val ? ' selected' : '';
+            $html .= '<option value="' . htmlspecialchars($val) . '"' . $sel . '>' . htmlspecialchars($attr['nombre']) . '</option>';
+        }
+        $html .= '</optgroup>';
+    }
+    return $html;
+}
+}
+
+if (!function_exists('receta_opciones_operador')) {
+function receta_opciones_operador(array $cond = []): string
+{
+    $actual = (string)($cond['operador'] ?? 'igual');
+    $ops = [
+        'igual' => '=',
+        'mayor' => '>',
+        'mayor_igual' => '≥',
+        'menor' => '<',
+        'menor_igual' => '≤',
+        'diferente' => '≠',
+    ];
+    $html = '';
+    foreach ($ops as $val => $label) {
+        $sel = $actual === $val ? ' selected' : '';
+        $html .= '<option value="' . $val . '"' . $sel . '>' . htmlspecialchars($label) . '</option>';
+    }
+    return $html;
+}
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1>🧪 Receta de Materiales</h1>
-        <p class="text-muted">Producto: <?= htmlspecialchars($producto['nombre']) ?></p>
+        <h1>Receta de materiales</h1>
+        <p class="text-muted mb-0">Producto: <?= htmlspecialchars($producto['nombre']) ?></p>
     </div>
     <a href="productos.php" class="btn btn-secondary">← Volver</a>
 </div>
@@ -145,32 +238,34 @@ foreach ($receta as $r) {
             <?php if (empty($materiales)): ?>
                 <div class="alert alert-info">No hay productos marcados como material. Marcá productos con “Es material”.</div>
             <?php else: ?>
-                <p class="small text-muted mb-2">
-                    En <strong>Valor</strong> podés indicar varios valores separados por coma (ej: <code>Blanco, Negro</code>).
-                    Con operador <code>=</code> el material se usa si el atributo coincide con <em>cualquiera</em> de esos valores.
+                <p class="small text-muted mb-3">
+                    Marcá cada tela (u otro material) y agregá condiciones. Si el cliente elige esos valores, esa línea entra.
+                    Varias condiciones se cumplen <strong>todas juntas</strong> (Tela = Screen <em>y</em> Color = Blanco).
+                    En valor podés poner varios separados por coma: <code>Blanco, Negro</code>.
                 </p>
+                <?php foreach ($atributos as $attr): ?>
+                    <datalist id="opciones-attr-<?= (int)$attr['id'] ?>">
+                        <?php foreach ($opciones_por_atributo[(int)$attr['id']] ?? [] as $nombre_op): ?>
+                            <option value="<?= htmlspecialchars($nombre_op) ?>"></option>
+                        <?php endforeach; ?>
+                    </datalist>
+                <?php endforeach; ?>
                 <div class="table-responsive">
-                    <table class="table table-sm">
+                    <table class="table table-sm align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th>Usar</th>
-                                <th>Material (Producto)</th>
+                                <th>Material</th>
                                 <th>Tipo cálculo</th>
                                 <th>Factor</th>
                                 <th>Merma %</th>
                                 <th>Notas</th>
-                                <th colspan="3">Condición (Opcional)</th>
-                            </tr>
-                            <tr style="background-color: #f8f9fa; font-size: 0.85em;">
-                                <th colspan="6"></th>
-                                <th>Tipo</th>
-                                <th>Operador</th>
-                                <th>Valor</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($materiales as $m):
                                 $r = $receta_map[$m['id']] ?? null;
+                                $conds = $condiciones_por_material[$m['id']] ?? [];
                             ?>
                                 <tr>
                                     <td>
@@ -188,43 +283,34 @@ foreach ($receta as $r) {
                                             <option value="por_alto" <?= ($r['tipo_calculo'] ?? '') === 'por_alto' ? 'selected' : '' ?>>Por alto (m)</option>
                                         </select>
                                     </td>
-                                    <td><input type="number" step="0.0001" class="form-control form-control-sm" name="factor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['factor'] ?? 0) ?>"></td>
-                                    <td><input type="number" step="0.01" class="form-control form-control-sm" name="merma_pct[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['merma_pct'] ?? 0) ?>"></td>
-                                    <td><input type="text" class="form-control form-control-sm" name="notas[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['notas'] ?? '') ?>"></td>
-                                    <td>
-                                        <input type="checkbox" name="con_condicion[<?= $m['id'] ?>]" value="1" <?= ($r['con_condicion'] ?? 0) ? 'checked' : '' ?> class="condicion-toggle">
-                                        <span class="small text-muted">Usar</span>
-                                    </td>
-                                    <td>
-                                        <select name="condicion_tipo[<?= $m['id'] ?>]" class="form-select form-select-sm condicion-select" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
-                                            <option value="">--</option>
-                                            <option value="ancho" <?= ($r['condicion_tipo'] ?? '') === 'ancho' ? 'selected' : '' ?>>Ancho (cm)</option>
-                                            <option value="alto" <?= ($r['condicion_tipo'] ?? '') === 'alto' ? 'selected' : '' ?>>Alto (cm)</option>
-                                            <option value="area" <?= ($r['condicion_tipo'] ?? '') === 'area' ? 'selected' : '' ?>>Área (m²)</option>
-                                            <?php if (!empty($atributos)): ?>
-                                                <optgroup label="Atributos">
-                                                    <?php foreach ($atributos as $attr): ?>
-                                                        <option value="atributo_<?= $attr['id'] ?>" <?= (($r['condicion_tipo'] ?? '') === 'atributo' && (int)($r['condicion_atributo_id'] ?? 0) === (int)$attr['id']) ? 'selected' : '' ?>>
-                                                            <?= htmlspecialchars($attr['nombre']) ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </optgroup>
-                                            <?php endif; ?>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select name="condicion_operador[<?= $m['id'] ?>]" class="form-select form-select-sm" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
-                                            <option value="">--</option>
-                                            <option value="igual" <?= ($r['condicion_operador'] ?? '') === 'igual' ? 'selected' : '' ?>>=</option>
-                                            <option value="mayor" <?= ($r['condicion_operador'] ?? '') === 'mayor' ? 'selected' : '' ?>>&gt;</option>
-                                            <option value="mayor_igual" <?= ($r['condicion_operador'] ?? '') === 'mayor_igual' ? 'selected' : '' ?>>&gt;=</option>
-                                            <option value="menor" <?= ($r['condicion_operador'] ?? '') === 'menor' ? 'selected' : '' ?>>&lt;</option>
-                                            <option value="menor_igual" <?= ($r['condicion_operador'] ?? '') === 'menor_igual' ? 'selected' : '' ?>>&lt;=</option>
-                                            <option value="diferente" <?= ($r['condicion_operador'] ?? '') === 'diferente' ? 'selected' : '' ?>>&ne;</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input type="text" class="form-control form-control-sm" name="condicion_valor[<?= $m['id'] ?>]" value="<?= htmlspecialchars($r['condicion_valor'] ?? '') ?>" placeholder="ej: Blanco, Negro" title="Podés poner varios valores separados por coma" <?= ($r['con_condicion'] ?? 0) ? '' : 'disabled' ?>>
+                                    <td><input type="number" step="0.0001" class="form-control form-control-sm" name="factor[<?= $m['id'] ?>]" value="<?= htmlspecialchars((string)($r['factor'] ?? 0)) ?>"></td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" name="merma_pct[<?= $m['id'] ?>]" value="<?= htmlspecialchars((string)($r['merma_pct'] ?? 0)) ?>"></td>
+                                    <td><input type="text" class="form-control form-control-sm" name="notas[<?= $m['id'] ?>]" value="<?= htmlspecialchars((string)($r['notas'] ?? '')) ?>"></td>
+                                </tr>
+                                <tr class="receta-cond-block" data-material="<?= (int)$m['id'] ?>">
+                                    <td></td>
+                                    <td colspan="5">
+                                        <div class="small text-muted mb-1">Condiciones (todas deben cumplirse)</div>
+                                        <div class="receta-cond-list">
+                                            <?php foreach ($conds as $idx => $cond):
+                                                $tipo_key = (($cond['tipo'] ?? '') === 'atributo')
+                                                    ? 'atributo_' . (int)($cond['atributo_id'] ?? 0)
+                                                    : (string)($cond['tipo'] ?? '');
+                                                $list_id = strpos($tipo_key, 'atributo_') === 0 ? 'opciones-attr-' . substr($tipo_key, 9) : '';
+                                            ?>
+                                                <div class="d-flex flex-wrap gap-1 mb-1 receta-cond-row">
+                                                    <select name="condiciones[<?= $m['id'] ?>][<?= $idx ?>][tipo]" class="form-select form-select-sm receta-cond-tipo" style="min-width: 140px;">
+                                                        <?= receta_opciones_tipo($atributos, $cond) ?>
+                                                    </select>
+                                                    <select name="condiciones[<?= $m['id'] ?>][<?= $idx ?>][operador]" class="form-select form-select-sm" style="min-width: 70px;">
+                                                        <?= receta_opciones_operador($cond) ?>
+                                                    </select>
+                                                    <input type="text" class="form-control form-control-sm receta-cond-valor" name="condiciones[<?= $m['id'] ?>][<?= $idx ?>][valor]" value="<?= htmlspecialchars((string)($cond['valor'] ?? '')) ?>" placeholder="ej: Screen" <?= $list_id !== '' ? 'list="' . htmlspecialchars($list_id) . '"' : '' ?> style="min-width: 140px;">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger receta-cond-del" title="Quitar condición">×</button>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary receta-cond-add">+ Condición</button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -239,20 +325,84 @@ foreach ($receta as $r) {
     </div>
 </form>
 
-<script>
-document.querySelectorAll('.condicion-toggle').forEach(toggle => {
-    toggle.addEventListener('change', function() {
-        const row = this.closest('tr');
-        const isChecked = this.checked;
-        if (!row) return;
+<template id="tpl-receta-condicion">
+    <div class="d-flex flex-wrap gap-1 mb-1 receta-cond-row">
+        <select name="condiciones[__MID__][__IDX__][tipo]" class="form-select form-select-sm receta-cond-tipo" style="min-width: 140px;">
+            <?= receta_opciones_tipo($atributos) ?>
+        </select>
+        <select name="condiciones[__MID__][__IDX__][operador]" class="form-select form-select-sm" style="min-width: 70px;">
+            <?= receta_opciones_operador(['operador' => 'igual']) ?>
+        </select>
+        <input type="text" class="form-control form-control-sm receta-cond-valor" name="condiciones[__MID__][__IDX__][valor]" placeholder="ej: Screen" style="min-width: 140px;">
+        <button type="button" class="btn btn-sm btn-outline-danger receta-cond-del" title="Quitar condición">×</button>
+    </div>
+</template>
 
-        row.querySelectorAll('select, input[type="text"]').forEach(field => {
-            if (field.name && (field.name.includes('condicion_tipo') || field.name.includes('condicion_operador') || field.name.includes('condicion_valor'))) {
-                field.disabled = !isChecked;
+<script>
+(function () {
+    const tpl = document.getElementById('tpl-receta-condicion');
+
+    function syncDatalist(select) {
+        const row = select.closest('.receta-cond-row');
+        if (!row) return;
+        const input = row.querySelector('.receta-cond-valor');
+        if (!input) return;
+        const v = select.value || '';
+        if (v.indexOf('atributo_') === 0) {
+            input.setAttribute('list', 'opciones-attr-' + v.replace('atributo_', ''));
+        } else {
+            input.removeAttribute('list');
+        }
+    }
+
+    function nextIndex(list) {
+        let max = -1;
+        list.querySelectorAll('.receta-cond-tipo').forEach(function (el) {
+            const m = (el.name || '').match(/\[(\d+)\]\[tipo\]$/);
+            if (m) {
+                max = Math.max(max, parseInt(m[1], 10));
             }
         });
+        return max + 1;
+    }
+
+    document.querySelectorAll('.receta-cond-block').forEach(function (block) {
+        const materialId = block.getAttribute('data-material');
+        const list = block.querySelector('.receta-cond-list');
+
+        block.querySelectorAll('.receta-cond-tipo').forEach(syncDatalist);
+
+        block.addEventListener('change', function (e) {
+            if (e.target && e.target.classList.contains('receta-cond-tipo')) {
+                syncDatalist(e.target);
+            }
+        });
+
+        block.addEventListener('click', function (e) {
+            const del = e.target.closest('.receta-cond-del');
+            if (del) {
+                const row = del.closest('.receta-cond-row');
+                if (row) row.remove();
+            }
+        });
+
+        const addBtn = block.querySelector('.receta-cond-add');
+        if (addBtn && tpl && list) {
+            addBtn.addEventListener('click', function () {
+                const idx = nextIndex(list);
+                const html = tpl.innerHTML
+                    .replace(/__MID__/g, materialId)
+                    .replace(/__IDX__/g, String(idx));
+                const wrap = document.createElement('div');
+                wrap.innerHTML = html.trim();
+                const row = wrap.firstElementChild;
+                list.appendChild(row);
+                const tipo = row.querySelector('.receta-cond-tipo');
+                if (tipo) syncDatalist(tipo);
+            });
+        }
     });
-});
+})();
 </script>
 
 <?php require 'includes/footer.php'; ?>

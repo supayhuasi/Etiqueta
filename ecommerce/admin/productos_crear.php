@@ -224,6 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" class="btn btn-primary">Guardar</button>
                 <?php if ($id > 0): ?>
                     <a href="productos_atributos.php?producto_id=<?= $id ?>" class="btn btn-info">⚙️ Atributos</a>
+                    <a href="receta_producto.php?producto_id=<?= $id ?>" class="btn btn-secondary">Receta</a>
                 <?php endif; ?>
             </div>
         </form>

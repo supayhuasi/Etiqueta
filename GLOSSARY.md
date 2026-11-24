@@ -13,7 +13,7 @@ Cada cortina física que se fabrica dentro de una orden de producción. El plan 
 _Avoid_: producto, ítem
 
 **Producto**:
-El artículo del catálogo que se vende, como Blackout o Screen.
+El artículo del catálogo que se vende, por ejemplo una cortina roller. Puede tener atributos de tela y color.
 _Avoid_: usarlo para la cortina física en fabricación
 
 **Plan de producción**:
@@ -33,5 +33,9 @@ La lista de materiales que un Producto consume para fabricar una Unidad.
 _Avoid_: fórmula, BOM
 
 **Condición**:
-El filtro de una línea de receta. Si coincide con la Unidad (medidas o atributos elegidos), ese material se usa.
+El filtro de una línea de receta. Si coincide con la Unidad (medidas o atributos elegidos), ese material se usa. Varias condiciones de una línea se cumplen todas juntas.
 _Avoid_: regla
+
+**Tela**:
+El material de tela que consume una Unidad. En la receta se elige con una Condición sobre el atributo de tela (y color, si cada combinación es un material distinto).
+_Avoid_: usarlo como el Producto vendido
