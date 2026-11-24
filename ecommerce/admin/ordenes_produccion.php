@@ -1,7 +1,11 @@
 <?php
 require 'includes/header.php';
 
-$estado = $_GET['estado'] ?? '';
+$estado = trim((string)($_GET['estado'] ?? ''));
+$estados_validos = ['', 'pendiente', 'en_produccion', 'terminado', 'entregado', 'cancelado', 'no_entregadas'];
+if (!in_array($estado, $estados_validos, true)) {
+    $estado = '';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'cancelar') {
     try {
@@ -66,11 +70,12 @@ $sql = "
 ";
 $params = [];
 
-if ($estado) {
+if ($estado === 'no_entregadas') {
+    $sql .= " AND op.estado IN ('pendiente','en_produccion','terminado')";
+} elseif ($estado !== '') {
     $sql .= " AND op.estado = ?";
     $params[] = $estado;
 } else {
-    // Por defecto, excluir canceladas
     $sql .= " AND op.estado != 'cancelado'";
 }
 
@@ -145,6 +150,7 @@ function orden_esta_vencida(array $orden): bool {
                 <label class="form-label">Estado</label>
                 <select name="estado" class="form-select">
                     <option value="">Todos (sin canceladas)</option>
+                    <option value="no_entregadas" <?= $estado === 'no_entregadas' ? 'selected' : '' ?>>No entregadas</option>
                     <option value="pendiente" <?= $estado === 'pendiente' ? 'selected' : '' ?>>Pendiente</option>
                     <option value="en_produccion" <?= $estado === 'en_produccion' ? 'selected' : '' ?>>En producción</option>
                     <option value="terminado" <?= $estado === 'terminado' ? 'selected' : '' ?>>Terminado</option>
@@ -161,43 +167,62 @@ function orden_esta_vencida(array $orden): bool {
 </div>
 
 <?php
-// Mini dashboard: contar entregadas y no entregadas
-$total_ordenes = count($ordenes);
 $entregadas = 0;
 $no_entregadas = 0;
-foreach ($ordenes as $op) {
-    if ($op['estado'] === 'entregado') {
-        $entregadas++;
-    } else if ($op['estado'] !== 'cancelado') {
-        $no_entregadas++;
+$total_ordenes = 0;
+try {
+    $stmt_counts = $pdo->query("
+        SELECT estado, COUNT(*) AS c
+        FROM ecommerce_ordenes_produccion
+        GROUP BY estado
+    ");
+    foreach ($stmt_counts->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $cant = (int)$row['c'];
+        $est = (string)$row['estado'];
+        if ($est === 'entregado') {
+            $entregadas = $cant;
+        } elseif ($est !== 'cancelado') {
+            $no_entregadas += $cant;
+        }
+        if ($est !== 'cancelado') {
+            $total_ordenes += $cant;
+        }
     }
+} catch (Exception $e) {
+    $total_ordenes = count($ordenes);
 }
 ?>
 
 <div class="row mb-3">
     <div class="col-md-4">
-        <div class="card bg-light border-success mb-2">
-            <div class="card-body text-success">
-                <h6 class="card-title mb-1">Órdenes Entregadas</h6>
-                <h3 class="fw-bold mb-0"><?= $entregadas ?></h3>
+        <a href="ordenes_produccion.php?estado=entregado" class="text-decoration-none">
+            <div class="card bg-light border-success mb-2 <?= $estado === 'entregado' ? 'border-3' : '' ?>">
+                <div class="card-body text-success">
+                    <h6 class="card-title mb-1">Órdenes Entregadas</h6>
+                    <h3 class="fw-bold mb-0"><?= $entregadas ?></h3>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-md-4">
-        <div class="card bg-light border-warning mb-2">
-            <div class="card-body text-warning">
-                <h6 class="card-title mb-1">Órdenes No Entregadas</h6>
-                <h3 class="fw-bold mb-0"><?= $no_entregadas ?></h3>
+        <a href="ordenes_produccion.php?estado=no_entregadas" class="text-decoration-none">
+            <div class="card bg-light border-warning mb-2 <?= $estado === 'no_entregadas' ? 'border-3' : '' ?>">
+                <div class="card-body text-warning">
+                    <h6 class="card-title mb-1">Órdenes No Entregadas</h6>
+                    <h3 class="fw-bold mb-0"><?= $no_entregadas ?></h3>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-md-4">
-        <div class="card bg-light border-secondary mb-2">
-            <div class="card-body text-secondary">
-                <h6 class="card-title mb-1">Total Órdenes</h6>
-                <h3 class="fw-bold mb-0"><?= $total_ordenes ?></h3>
+        <a href="ordenes_produccion.php" class="text-decoration-none">
+            <div class="card bg-light border-secondary mb-2 <?= $estado === '' ? 'border-3' : '' ?>">
+                <div class="card-body text-secondary">
+                    <h6 class="card-title mb-1">Total Órdenes</h6>
+                    <h3 class="fw-bold mb-0"><?= $total_ordenes ?></h3>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
